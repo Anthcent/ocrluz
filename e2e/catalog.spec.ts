@@ -2,60 +2,60 @@ import fs from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { createScans, expectToast, signUp } from './helpers';
 
-test.describe('Catálogo y manejo de lo escaneado', () => {
-  test('crear, editar, filtrar y borrar grupos', async ({ page }) => {
+test.describe('Archivo y manejo de lo escaneado', () => {
+  test('crear, editar, filtrar y borrar carpetas', async ({ page }) => {
     await signUp(page);
-    await page.goto('/catalogo');
-    await expect(page.getByText('Aún no tienes grupos')).toBeVisible();
+    await page.goto('/archivo');
+    await expect(page.getByText('Aún no tienes carpetas')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Nuevo grupo' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Nuevo grupo' });
-    await dialog.getByLabel('Nombre del grupo').fill('Historia de Roma');
-    await dialog.getByLabel('Autor').fill('Tito Livio');
-    await dialog.getByRole('group', { name: 'Categoría' }).getByRole('button', { name: /Historia/ }).click();
-    await dialog.getByLabel('Páginas del libro').fill('250');
-    await dialog.getByLabel('Descripción').fill('Apuntes del curso');
+    await page.getByRole('button', { name: 'Nueva carpeta' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Nueva carpeta' });
+    await dialog.getByLabel('Nombre de la carpeta').fill('Actas del consejo');
+    await dialog.getByLabel('Responsable').fill('Secretaría');
+    await dialog.getByRole('group', { name: 'Categoría' }).getByRole('button', { name: /^Acta$/ }).click();
+    await dialog.getByLabel('Hojas esperadas').fill('250');
+    await dialog.getByLabel('Descripción').fill('Período 2024-2025');
     await dialog.getByRole('button', { name: 'Color purple' }).click();
-    await dialog.getByRole('button', { name: 'Crear grupo' }).click();
-    await expect(page.getByRole('heading', { name: 'Historia de Roma' })).toBeVisible();
-    await expect(page.getByText('Apuntes del curso')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Crear carpeta' }).click();
+    await expect(page.getByRole('heading', { name: 'Actas del consejo' })).toBeVisible();
+    await expect(page.getByText('Período 2024-2025')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Editar grupo' }).click();
-    const edit = page.getByRole('dialog', { name: 'Editar grupo' });
-    await expect(edit.getByLabel('Nombre del grupo')).toHaveValue('Historia de Roma');
-    await expect(edit.getByLabel('Autor')).toHaveValue('Tito Livio');
-    await expect(edit.getByRole('group', { name: 'Categoría' }).getByRole('button', { name: /Historia/ })).toHaveAttribute('aria-pressed', 'true');
-    await edit.getByLabel('Nombre del grupo').fill('Historia de Roma antigua');
+    await page.getByRole('button', { name: 'Editar carpeta' }).click();
+    const edit = page.getByRole('dialog', { name: 'Editar carpeta' });
+    await expect(edit.getByLabel('Nombre de la carpeta')).toHaveValue('Actas del consejo');
+    await expect(edit.getByLabel('Responsable')).toHaveValue('Secretaría');
+    await expect(edit.getByRole('group', { name: 'Categoría' }).getByRole('button', { name: /^Acta$/ })).toHaveAttribute('aria-pressed', 'true');
+    await edit.getByLabel('Nombre de la carpeta').fill('Actas del consejo 2025');
     await edit.getByRole('button', { name: 'Guardar cambios' }).click();
-    await expect(page.getByRole('heading', { name: 'Historia de Roma antigua' })).toBeVisible();
-    await expect(page.getByText('Apuntes del curso')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Actas del consejo 2025' })).toBeVisible();
+    await expect(page.getByText('Período 2024-2025')).toBeVisible();
 
-    await createScans(page, { newGroup: { title: 'Poesía' }, items: [{ text: 'Verde que te quiero verde', engine: 'manual' }] });
-    await page.goto('/catalogo');
-    await page.getByLabel('Filtrar', { exact: true }).fill('poesia');
-    await expect(page.getByRole('link', { name: 'Poesía', exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Historia de Roma antigua', exact: true })).toBeHidden();
+    await createScans(page, { newGroup: { title: 'Nómina' }, items: [{ text: 'Listado de estudiantes de tercer año', engine: 'manual' }] });
+    await page.goto('/archivo');
+    await page.getByLabel('Filtrar', { exact: true }).fill('nomina');
+    await expect(page.getByRole('link', { name: 'Nómina', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Actas del consejo 2025', exact: true })).toBeHidden();
     await page.getByLabel('Filtrar', { exact: true }).fill('');
 
-    await page.getByRole('link', { name: 'Historia de Roma antigua', exact: true }).click();
-    await page.getByRole('button', { name: 'Borrar grupo' }).click();
+    await page.getByRole('link', { name: 'Actas del consejo 2025', exact: true }).click();
+    await page.getByRole('button', { name: 'Borrar carpeta' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Borrar todo' }).click();
-    await expect(page).toHaveURL(/\/catalogo$/);
-    await expectToast(page, 'Grupo borrado');
-    await expect(page.getByRole('link', { name: 'Historia de Roma antigua', exact: true })).toBeHidden();
+    await expect(page).toHaveURL(/\/archivo$/);
+    await expectToast(page, 'Carpeta borrada');
+    await expect(page.getByRole('link', { name: 'Actas del consejo 2025', exact: true })).toBeHidden();
   });
 
-  test('ficha de grupo: reordenar, texto completo, exportar, copiar y borrar páginas', async ({ page }) => {
+  test('ficha de carpeta: reordenar, texto completo, exportar, copiar y borrar hojas', async ({ page }) => {
     await signUp(page);
     const { groupId } = await createScans(page, {
-      newGroup: { title: 'Libro de prueba' },
+      newGroup: { title: 'Carpeta de prueba' },
       items: [
         { text: 'Contenido de la primera', engine: 'manual' },
         { text: 'Contenido de la segunda', engine: 'manual' },
         { text: 'Contenido de la tercera', engine: 'manual' },
       ],
     });
-    await page.goto(`/catalogo/grupo/${groupId}`);
+    await page.goto(`/archivo/carpeta/${groupId}`);
     await expect(page.locator('a[href^="/escaneo/"]')).toHaveCount(3);
 
     // Bajar la primera: el nuevo orden persiste al recargar.
@@ -64,15 +64,15 @@ test.describe('Catálogo y manejo de lo escaneado', () => {
     await saved;
     await page.reload();
     const titles = page.locator('a[href^="/escaneo/"] .truncate');
-    await expect(titles).toHaveText(['Página 2', 'Página 1', 'Página 3']);
+    await expect(titles).toHaveText(['Hoja 2', 'Hoja 1', 'Hoja 3']);
 
-    // Modo lectura: página a página, con barra de progreso y botones grandes.
-    await page.getByRole('button', { name: 'Leer', exact: true }).click();
+    // Texto: hoja a hoja, con barra de progreso y botones grandes.
+    await page.getByRole('button', { name: 'Texto', exact: true }).click();
     const article = page.locator('article');
-    await expect(page.getByText('Página 1 de 3')).toBeVisible();
+    await expect(page.getByText('Hoja 1 de 3')).toBeVisible();
     await expect(article).toContainText('Contenido de la segunda');
     await page.getByRole('button', { name: 'Siguiente' }).click();
-    await expect(page.getByText('Página 2 de 3')).toBeVisible();
+    await expect(page.getByText('Hoja 2 de 3')).toBeVisible();
     await expect(article).toContainText('Contenido de la primera');
     await page.getByRole('button', { name: 'Todo seguido' }).click();
     const text = await article.innerText();
@@ -84,72 +84,72 @@ test.describe('Catálogo y manejo de lo escaneado', () => {
     const file = await (await download).path();
     const exported = fs.readFileSync(file, 'utf8');
     expect(exported).toBe('Contenido de la segunda\n\nContenido de la primera\n\nContenido de la tercera');
-    expect((await download).suggestedFilename()).toBe('Libro de prueba.txt');
+    expect((await download).suggestedFilename()).toBe('Carpeta de prueba.txt');
 
     await page.getByRole('button', { name: 'Copiar' }).click();
     await expectToast(page, 'Texto copiado');
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(exported);
 
-    await page.getByRole('button', { name: 'Páginas', exact: true }).click();
-    await page.getByRole('button', { name: 'Borrar página' }).last().click();
+    await page.getByRole('button', { name: 'Hojas', exact: true }).click();
+    await page.getByRole('button', { name: 'Borrar hoja' }).last().click();
     await page.getByRole('dialog').getByRole('button', { name: 'Borrar' }).click();
-    await expectToast(page, 'Página borrada');
+    await expectToast(page, 'Hoja borrada');
     await expect(titles).toHaveCount(2);
   });
 
-  test('ficha de escaneo: editar, navegar entre páginas, mover de grupo y borrar', async ({ page }) => {
+  test('ficha de escaneo: editar, navegar entre hojas, mover de carpeta y borrar', async ({ page }) => {
     await signUp(page);
-    const book = await createScans(page, {
-      newGroup: { title: 'Novela' },
+    const folder = await createScans(page, {
+      newGroup: { title: 'Revisiones' },
       items: [
-        { text: 'Capítulo uno', engine: 'manual' },
-        { text: 'Capítulo dos', engine: 'manual' },
+        { text: 'Revisión de matemática', engine: 'manual' },
+        { text: 'Revisión de física', engine: 'manual' },
       ],
     });
-    await createScans(page, { newGroup: { title: 'Otro libro' }, items: [{ text: 'Algo', engine: 'manual' }] });
+    await createScans(page, { newGroup: { title: 'Otra carpeta' }, items: [{ text: 'Algo', engine: 'manual' }] });
 
-    await page.goto(`/escaneo/${book.ids[0]}`);
+    await page.goto(`/escaneo/${folder.ids[0]}`);
     await expect(page.getByText('1 / 2')).toBeVisible();
     await page.getByRole('button', { name: 'Página siguiente' }).click();
-    await expect(page).toHaveURL(new RegExp(`/escaneo/${book.ids[1]}$`));
-    await expect(page.getByLabel('Texto escaneado')).toHaveText('Capítulo dos');
+    await expect(page).toHaveURL(new RegExp(`/escaneo/${folder.ids[1]}$`));
+    await expect(page.getByLabel('Texto escaneado')).toHaveText('Revisión de física');
     await page.getByRole('button', { name: 'Página anterior' }).click();
-    await expect(page.getByLabel('Texto escaneado')).toHaveText('Capítulo uno');
+    await expect(page.getByLabel('Texto escaneado')).toHaveText('Revisión de matemática');
 
     // Editar título y texto (el texto se lee por defecto; «Editar» abre el editor).
     await page.getByRole('button', { name: 'Editar', exact: true }).first().click();
     const save = page.getByRole('button', { name: 'Guardar', exact: true });
     await expect(save).toBeDisabled();
-    await page.getByLabel('Título').fill('Capítulo I');
+    await page.getByLabel('Título').fill('Revisión I');
     await page.getByLabel('Texto escaneado').fill('Érase una vez un texto corregido con cinco palabras más');
     await save.click();
     await expectToast(page, 'Cambios guardados');
     await expect(page.getByText('10 palabras')).toBeVisible();
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Capítulo I' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Revisión I' })).toBeVisible();
     await expect(page.getByLabel('Texto escaneado')).toContainText('Érase una vez');
 
-    // Mover a otro grupo y luego dejarlo como individual.
+    // Mover a otra carpeta y luego dejarlo como documento suelto.
     await page.getByRole('button', { name: 'Mover', exact: true }).first().click();
-    await page.getByRole('dialog', { name: 'Mover a…' }).getByRole('button', { name: 'Otro libro' }).click();
-    await expectToast(page, 'Movido a «Otro libro»');
-    await expect(page.getByRole('main').getByRole('link', { name: 'Otro libro' })).toBeVisible();
+    await page.getByRole('dialog', { name: 'Mover a…' }).getByRole('button', { name: 'Otra carpeta' }).click();
+    await expectToast(page, 'Movido a «Otra carpeta»');
+    await expect(page.getByRole('main').getByRole('link', { name: 'Otra carpeta' })).toBeVisible();
     await page.getByRole('button', { name: 'Mover', exact: true }).first().click();
-    await page.getByRole('dialog', { name: 'Mover a…' }).getByRole('button', { name: 'Ninguno (individual)' }).click();
-    await expectToast(page, 'Ahora es un escaneo individual');
+    await page.getByRole('dialog', { name: 'Mover a…' }).getByRole('button', { name: 'Ninguna (documento suelto)' }).click();
+    await expectToast(page, 'Ahora es un documento suelto');
 
     await page.getByRole('button', { name: 'Borrar', exact: true }).first().click();
     await page.getByRole('dialog').getByRole('button', { name: 'Borrar' }).click();
-    await expect(page).toHaveURL(/\/catalogo\?vista=individuales$/);
-    await expect(page.getByText('Sin escaneos individuales')).toBeVisible();
+    await expect(page).toHaveURL(/\/archivo\?vista=individuales$/);
+    await expect(page.getByText('Sin documentos sueltos')).toBeVisible();
   });
 
-  test('lista de individuales con paginación', async ({ page }) => {
+  test('lista de documentos sueltos con paginación', async ({ page }) => {
     await signUp(page);
     await createScans(page, {
       items: Array.from({ length: 35 }, (_, i) => ({ text: `Nota número ${i + 1}`, engine: 'manual' })),
     });
-    await page.goto('/catalogo?vista=individuales');
+    await page.goto('/archivo?vista=individuales');
     const items = page.locator('a[href^="/escaneo/"]');
     await expect(items).toHaveCount(30);
     await page.getByRole('button', { name: 'Cargar más' }).click();
@@ -170,14 +170,14 @@ test.describe('Búsqueda', () => {
     await page.goto('/buscar');
     await page.getByLabel('Buscar').fill('buendia');
     await expect(page.locator('mark.hit')).toHaveText('Buendía');
-    await expect(page.getByText(/1 resultado en 1 libro/)).toBeVisible();
+    await expect(page.getByText(/1 resultado en 1 carpeta/)).toBeVisible();
 
     await page.getByLabel('Buscar').fill('hari');
     await expect(page.locator('mark.hit')).toHaveText('harina');
-    await expect(page.getByRole('heading', { name: 'Escaneos sueltos' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Documentos sueltos' })).toBeVisible();
 
-    // Filtros: solo libros / solo sueltos.
-    await page.getByRole('button', { name: 'Libros', exact: true }).click();
+    // Filtros: solo carpetas / solo sueltos.
+    await page.getByRole('button', { name: 'Carpetas', exact: true }).click();
     await expect(page.getByText('Sin resultados')).toBeVisible();
     await page.getByRole('button', { name: 'Sueltos', exact: true }).click();
     await expect(page.locator('mark.hit')).toHaveText('harina');
@@ -199,64 +199,68 @@ test.describe('Búsqueda', () => {
   });
 });
 
-test.describe('Modo libro', () => {
-  test('abre el libro, pasa páginas con animación y muestra el número de página impreso', async ({ page }) => {
+test.describe('Visor de documentos', () => {
+  test('abre el visor, pasa de hoja y muestra el número de página impreso', async ({ page }) => {
     await signUp(page);
     const { groupId } = await createScans(page, {
-      newGroup: { title: 'El Principito', author: 'Antoine de Saint-Exupéry', category: 'Cuento', totalPages: 10 },
+      newGroup: { title: 'Actas 2024-2025', author: 'Secretaría', category: 'Acta', totalPages: 10 },
       items: [1, 2, 3].map((n) => ({ text: `Texto de la hoja ${n}\n\n— ${n + 40} —`, engine: 'manual', pageLabel: String(n + 40) })),
     });
 
-    // Desde el catálogo: la tarjeta tiene acceso directo al modo libro.
-    await page.goto('/catalogo');
+    // Desde el archivo: la tarjeta tiene acceso directo al visor.
+    await page.goto('/archivo');
     await expect(page.getByText('3/10')).toBeVisible();
-    await page.getByRole('link', { name: 'Leer «El Principito» en modo libro' }).click();
-    const book = page.getByRole('dialog', { name: 'Modo libro: El Principito' });
-    await expect(book).toBeVisible();
-    await expect(book.getByRole('heading', { name: 'El Principito' })).toBeVisible(); // portada
-    await expect(book.getByText('Antoine de Saint-Exupéry').first()).toBeVisible();
-
-    // En móvil hay botón «Siguiente»; en escritorio, flechas redondas a los lados del libro.
-    await book.getByRole('button', { name: /^(Siguiente|Página siguiente)$/ }).click();
-    await expect(book.getByTestId('flipping-leaf')).toBeVisible();
-    await expect(book.getByTestId('flipping-leaf')).toHaveCount(0);
-    await expect(book.getByText('Texto de la hoja 1')).toBeVisible();
+    await expect(page.getByRole('main').getByText('Responsable: Secretaría')).toBeVisible();
+    await page.getByRole('link', { name: 'Abrir visor de «Actas 2024-2025»' }).click();
+    const viewer = page.getByRole('dialog', { name: 'Visor: Actas 2024-2025' });
+    await expect(viewer).toBeVisible();
+    // Sin portada: se abre directamente en la primera hoja.
+    await expect(viewer.getByText('Texto de la hoja 1')).toBeVisible();
+    await expect(viewer.getByText('Hoja 1 de 3')).toBeVisible();
     // El número impreso va al pie y no se repite dentro del texto.
-    await expect(book.getByText('— 41 —')).toHaveCount(1);
+    await expect(viewer.getByText('pág. 41')).toHaveCount(1);
+    await expect(viewer.getByText('— 41 —')).toHaveCount(0);
 
+    // En móvil hay botón «Siguiente»; en escritorio, flechas redondas a los lados.
+    await viewer.getByRole('button', { name: /^(Siguiente|Hoja siguiente)$/ }).click();
+    await expect(viewer.getByText('Texto de la hoja 2')).toBeVisible();
     await page.keyboard.press('ArrowRight');
-    await expect(book.getByTestId('flipping-leaf')).toHaveCount(0);
-    await expect(book.getByText(/Texto de la hoja (2|3)/).first()).toBeVisible();
+    await expect(viewer.getByText('Texto de la hoja 3')).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(book).toBeHidden();
-    await expect(page).toHaveURL(new RegExp(`/catalogo/grupo/${groupId}$`));
+    await expect(viewer).toBeHidden();
+    await expect(page).toHaveURL(new RegExp(`/archivo/carpeta/${groupId}$`));
 
-    // Desde la ficha del grupo; se pasa la página arrastrándola con el dedo o el ratón.
-    await page.getByRole('button', { name: 'Abrir en modo libro' }).click();
-    const opened = page.getByRole('dialog', { name: 'Modo libro: El Principito' });
-    const box = (await opened.getByTestId('book').boundingBox())!;
+    // Desde la ficha de la carpeta; se pasa de hoja deslizando con el dedo o el ratón.
+    await page.getByRole('button', { name: 'Abrir visor' }).click();
+    const opened = page.getByRole('dialog', { name: 'Visor: Actas 2024-2025' });
+    const box = (await opened.getByTestId('viewer-stage').boundingBox())!;
     const y = box.y + box.height / 2;
     await page.mouse.move(box.x + box.width * 0.9, y);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.6, y, { steps: 6 });
-    await expect(opened.getByTestId('flipping-leaf')).toBeVisible();
-    await page.mouse.move(box.x + box.width * 0.2, y, { steps: 6 });
+    await page.mouse.move(box.x + box.width * 0.2, y, { steps: 8 });
     await page.mouse.up();
-    await expect(opened.getByTestId('flipping-leaf')).toHaveCount(0);
-    await expect(opened.getByText('Texto de la hoja 1')).toBeVisible();
+    await expect(opened.getByText('Texto de la hoja 2')).toBeVisible();
 
-    // Un arrastre corto se cancela y la página no cambia.
+    // Un deslizamiento corto no cambia de hoja.
     await page.mouse.move(box.x + box.width * 0.9, y);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.85, y, { steps: 3 });
+    await page.mouse.move(box.x + box.width * 0.88, y, { steps: 3 });
     await page.mouse.up();
-    await expect(opened.getByTestId('flipping-leaf')).toHaveCount(0);
-    await expect(opened.getByText('Texto de la hoja 1')).toBeVisible();
-    await page.keyboard.press('Escape');
+    await expect(opened.getByText('Texto de la hoja 2')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Abrir en modo libro' }).click();
-    await expect(page.getByRole('dialog', { name: 'Modo libro: El Principito' })).toBeVisible();
-    await page.getByRole('slider', { name: 'Ir a la página' }).fill('2');
-    await expect(page.getByText(/Texto de la hoja (2|3)/).first()).toBeVisible();
+    await page.getByRole('slider', { name: 'Ir a la hoja' }).fill('2');
+    await expect(opened.getByText('Texto de la hoja 3')).toBeVisible();
+    await page.getByRole('button', { name: 'Cerrar visor' }).click();
+    await expect(opened).toBeHidden();
+  });
+
+  test('las rutas antiguas del catálogo redirigen al archivo', async ({ page }) => {
+    await signUp(page);
+    const { groupId } = await createScans(page, { newGroup: { title: 'Fichas' }, items: [{ text: 'Ficha de inscripción', engine: 'manual' }] });
+    await page.goto(`/catalogo/grupo/${groupId}?libro=1`);
+    await expect(page).toHaveURL(new RegExp(`/archivo/carpeta/${groupId}\\?visor=1$`));
+    await expect(page.getByRole('dialog', { name: 'Visor: Fichas' })).toBeVisible();
+    await page.goto('/catalogo?vista=individuales');
+    await expect(page).toHaveURL(/\/archivo\?vista=individuales$/);
   });
 });

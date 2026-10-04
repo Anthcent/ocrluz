@@ -1,18 +1,20 @@
 # Ocryon
 
-Sistema para **escanear libros y documentos** con la cámara del móvil o del PC y convertirlos en texto buscable, usando OCR (OCR.space, Gemini o Tesseract) y con un análisis final del contenido.
+Sistema para **escanear documentos** con la cámara del móvil o del PC y convertirlos en texto buscable, usando OCR (OCR.space, Gemini o Tesseract) y con un análisis final del contenido.
+
+Documentos habituales: resúmenes finales, revisiones, materias vistas, actas, cédulas de estudiante y de representante, informes médicos, sábanas de notas, partidas de nacimiento, fichas de inscripción y nóminas.
 
 ## Funcionalidades (v0.1)
 
 | Módulo | Qué hace |
 | --- | --- |
-| **Escáner** | Pasos guiados (dónde guardar y cómo escanear), cámara en ráfaga con tira de fotos numeradas, subida múltiple o arrastrando, galería numerada para quitar y reordenar, visor a pantalla completa (girar, reescanear, corregir texto). Buscador de grupos por título, autor, categoría, descripción o una frase del texto ya escaneado, con filtros y orden. |
+| **Escáner** | Pasos guiados (dónde guardar y cómo escanear), cámara en ráfaga con tira de fotos numeradas, subida múltiple o arrastrando, galería numerada para quitar y reordenar, visor a pantalla completa (girar, reescanear, corregir texto). Buscador de carpetas por título, responsable, categoría, descripción o una frase del texto ya escaneado, con filtros y orden. |
 | **Motores OCR** | **OCR.space** y **Gemini** (vía servidor, con la API key del usuario) y **Tesseract** (en el propio dispositivo, sin internet). |
 | **Modo de escaneo** | Automático (escanea al tomar la foto) o manual (acumula fotos y escaneas cuando quieras). Por página o todas a la vez. |
-| **Catálogo** | **Grupos** (libros con autor, categoría y páginas totales) y **escaneos individuales**. Solo se guarda el texto, nunca la imagen. **Modo libro** a doble página con animación de pasar página. Se detecta el número de página impreso en cada hoja. |
-| **Documentos** | Escanea facturas, boletas, DNI, contratos, cartas o tipos propios con sus campos: los datos se detectan y llenan un formulario (con IA de Gemini o con reglas en el dispositivo, sin internet). Se revisan, se editan, se buscan por cualquier dato y se exportan a CSV/JSON. |
-| **Búsqueda** | Texto completo (PostgreSQL `tsvector`) sin distinguir acentos ni mayúsculas, con resaltado, filtros (libros, sueltos, categoría), resultados agrupados por libro y búsquedas recientes. |
-| **Análisis** | *Rápido (offline)*: estadísticas, legibilidad Fernández Huerta, palabras clave y frases principales. *Con IA (Gemini)*: resumen, temas, ideas clave, entidades, vocabulario y preguntas de repaso. |
+| **Archivo** | **Carpetas** (con responsable, categoría por tipo de documento y hojas esperadas) y **documentos sueltos**. Solo se guarda el texto, nunca la imagen. **Visor** hoja a hoja con transición suave. Se detecta el número de página impreso en cada hoja. |
+| **Documentos** | Escanea actas, cédulas, partidas de nacimiento, fichas de inscripción, informes médicos, sábanas de notas, nóminas y más (o tipos propios) con sus campos: los datos se detectan y llenan un formulario (con IA de Gemini o con reglas en el dispositivo, sin internet). Se revisan, se editan, se buscan por cualquier dato y se exportan a CSV/JSON. |
+| **Búsqueda** | Texto completo (PostgreSQL `tsvector`) sin distinguir acentos ni mayúsculas, con resaltado, filtros (carpetas, sueltos, categoría), resultados agrupados por carpeta y búsquedas recientes. |
+| **Análisis** | *Rápido (offline)*: estadísticas, datos detectados (fechas, cédulas, correos, teléfonos), legibilidad, palabras clave y frases principales. *Con IA (Gemini)*: resumen, tipo de documento detectado, datos clave, personas/instituciones/fechas y observaciones. |
 | **Ajustes** | API keys cifradas (AES-256-GCM), prueba de conexión, motor/idioma predeterminado, modelo de Gemini, cambio de contraseña. |
 | **Seguridad** | Contraseñas con bcrypt, sesión JWT en cookie `httpOnly` + `SameSite=Lax`, protección CSRF por cabecera, rate limiting, CSP con Helmet, aislamiento de datos por usuario. |
 
@@ -29,7 +31,7 @@ apps/
     services/    ocr/ (ocrspace, gemini), gemini, analysis, settings
     db/          conexión y migraciones (PRAGMA user_version)
   web/src/
-    pages/       Home, Scanner, Catalog, GroupDetail, ScanDetail, Search, Settings, Auth
+    pages/       Home, Scanner, Catalog (Archivo), GroupDetail (carpeta), ScanDetail, Search, Settings, Auth
     scan/        sesión de escaneo (cola OCR + IndexedDB), cámara, tarjetas de página
     lib/         cliente API, compresión de imagen, Tesseract, análisis offline
 ```
@@ -121,5 +123,5 @@ Se configuran por usuario en **Ajustes** o globalmente con `OCRSPACE_API_KEY` / 
 
 - Modo offline completo (PWA con *service worker*, guardado local y sincronización).
 - Recorte y enderezado automático de páginas antes del OCR.
-- Exportar a PDF/DOCX, etiquetas y carpetas en el catálogo.
+- Exportar a PDF/DOCX y etiquetas en el archivo.
 - Tema oscuro.

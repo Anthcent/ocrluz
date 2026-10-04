@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { FeedbackProvider } from './components/feedback';
 import { Layout } from './components/Layout';
@@ -28,6 +28,20 @@ function SessionWithDefaults({ children }: { children: ReactNode }) {
   );
 }
 
+/** Redirige las rutas antiguas del catálogo («/catalogo…») a «/archivo…», conservando el id y la consulta. */
+function LegacyArchiveRedirect() {
+  const { id } = useParams();
+  const { search } = useLocation();
+  const query = new URLSearchParams(search);
+  // El antiguo «?libro=1» abría el visor.
+  if (query.get('libro')) {
+    query.delete('libro');
+    query.set('visor', '1');
+  }
+  const qs = query.toString();
+  return <Navigate to={`${id ? `/archivo/carpeta/${id}` : '/archivo'}${qs ? `?${qs}` : ''}`} replace />;
+}
+
 function PrivateApp() {
   return (
     <SettingsProvider>
@@ -36,8 +50,10 @@ function PrivateApp() {
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="escanear" element={<ScannerPage />} />
-            <Route path="catalogo" element={<CatalogPage />} />
-            <Route path="catalogo/grupo/:id" element={<GroupDetailPage />} />
+            <Route path="archivo" element={<CatalogPage />} />
+            <Route path="archivo/carpeta/:id" element={<GroupDetailPage />} />
+            <Route path="catalogo" element={<LegacyArchiveRedirect />} />
+            <Route path="catalogo/grupo/:id" element={<LegacyArchiveRedirect />} />
             <Route path="escaneo/:id" element={<ScanDetailPage />} />
             <Route path="documentos" element={<DocumentsPage />} />
             <Route path="documentos/nuevo" element={<DocumentNewPage />} />

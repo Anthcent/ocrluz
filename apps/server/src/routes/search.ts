@@ -7,7 +7,7 @@ import { currentUser } from '../middleware/auth.js';
 const querySchema = z.object({
   q: z.string().trim().max(200).default(''),
   groupId: z.coerce.number().int().positive().optional(),
-  /** «group»: solo páginas de libros; «individual»: solo escaneos sueltos. */
+  /** «group»: solo hojas de carpetas; «individual»: solo escaneos sueltos. */
   type: z.enum(['all', 'group', 'individual']).default('all'),
   category: z.string().trim().max(60).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(60),

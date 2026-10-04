@@ -6,11 +6,11 @@ product
 
 ## Users
 
-People who digitize books, notes, and administrative documents from phones or desktop computers. They work through repeated capture, review, organization, search, and reading tasks, often handling many pages in one session.
+People who digitize administrative documents from phones or desktop computers: final summaries, reviews, completed-subject records, minutes, student and guardian ID cards, medical reports, grade sheets, birth certificates, enrollment forms, and rosters. They work through repeated capture, review, organization, and search tasks, often handling many sheets in one session.
 
 ## Product Purpose
 
-Ocryon turns photographed pages into searchable, organized text. Success means users can capture material quickly, understand processing state immediately, recover pending work safely, and find or read saved information without learning OCR terminology.
+Ocryon turns photographed pages into searchable, organized text. Success means users can capture material quickly, understand processing state immediately, recover pending work safely, and find saved information without learning OCR terminology.
 
 ## Brand Personality
 

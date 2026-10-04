@@ -160,7 +160,7 @@ export function TemplateModal({ open, onClose, onCreated }: { open: boolean; onC
     <Modal open={open} onClose={onClose} title="Nuevo tipo de documento" wide>
       <form onSubmit={submit} className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Orden de compra" aria-label="Nombre del tipo" maxLength={60} autoFocus />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Constancia de estudios" aria-label="Nombre del tipo" maxLength={60} autoFocus />
           <div className="flex flex-wrap gap-1">
             {DOC_EMOJIS.map((em) => (
               <button
@@ -184,7 +184,7 @@ export function TemplateModal({ open, onClose, onCreated }: { open: boolean; onC
                 <Input
                   value={f.label}
                   onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
-                  placeholder={`Campo ${i + 1} (ej. Proveedor)`}
+                  placeholder={`Campo ${i + 1} (ej. Nombre del estudiante)`}
                   aria-label={`Nombre del campo ${i + 1}`}
                   maxLength={60}
                   className="col-span-2 flex-1 sm:col-span-1"

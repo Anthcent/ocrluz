@@ -102,7 +102,8 @@ export function documentsRouter(ctx: AppContext) {
       const prompt = [
         `Extrae los datos de este ${documentType} a partir de su texto obtenido por OCR.`,
         'Devuelve cada campo tal como aparece en el documento. Si un dato no aparece, devuelve una cadena vacía.',
-        'Formatos: fechas como AAAA-MM-DD; importes solo con números y punto decimal (sin símbolo de moneda).',
+        'Formatos: fechas (date) como AAAA-MM-DD; números de documento o cédula (id) tal como aparecen;',
+        'cantidades (number) e importes (money) solo con números y punto decimal, sin símbolo de moneda.',
         'Campos:',
         ...fields.map((f) => `- ${f.key}: ${f.label} (${f.type})`),
         '',

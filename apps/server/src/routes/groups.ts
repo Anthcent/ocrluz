@@ -6,7 +6,7 @@ import { currentUser } from '../middleware/auth.js';
 
 export const GROUP_COLORS = ['green', 'blue', 'purple', 'orange', 'red', 'yellow'] as const;
 
-/** Campos de un grupo (libro). Se reutilizan al crear un grupo nuevo desde el escáner. */
+/** Campos de un grupo (carpeta). Se reutilizan al crear un grupo nuevo desde el escáner. */
 export const groupFields = {
   title: z.string().trim().min(1, 'El grupo necesita un nombre').max(160),
   description: z.string().trim().max(2000),

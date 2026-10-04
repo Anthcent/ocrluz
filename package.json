@@ -2,7 +2,7 @@
   "name": "ocryon",
   "private": true,
   "version": "0.1.0",
-  "description": "Escaneo de libros con OCR (OCR.space, Gemini, Tesseract) para móvil y PC",
+  "description": "Escaneo de documentos con OCR (OCR.space, Gemini, Tesseract) para móvil y PC: actas, cédulas, partidas de nacimiento, fichas de inscripción, informes médicos, nóminas y más",
   "workspaces": [
     "apps/*"
   ],

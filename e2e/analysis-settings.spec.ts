@@ -2,14 +2,14 @@ import { expect, test } from '@playwright/test';
 import { createScans, expectToast, signUp, updateSettings } from './helpers';
 
 const LONG_TEXT =
-  'En un lugar de la Mancha vivía un hidalgo. El hidalgo leía libros de caballerías. ' +
-  'Tanto leía el hidalgo que perdió el juicio. Decidió hacerse caballero andante y salir por los caminos.';
+  'Acta de reunión del 15/03/2025. Los docentes revisaron las calificaciones del lapso. ' +
+  'Los docentes acordaron entregar las notas el viernes. La representante con cédula V-12.345.678 firmó el acta de los docentes.';
 
 test.describe('Análisis', () => {
   test('análisis rápido sin conexión y análisis con IA, con historial', async ({ page }) => {
     await signUp(page);
-    const { groupId } = await createScans(page, { newGroup: { title: 'Quijote' }, items: [{ text: LONG_TEXT, engine: 'manual' }] });
-    await page.goto(`/catalogo/grupo/${groupId}`);
+    const { groupId } = await createScans(page, { newGroup: { title: 'Actas 2024-2025' }, items: [{ text: LONG_TEXT, engine: 'manual' }] });
+    await page.goto(`/archivo/carpeta/${groupId}`);
     await page.getByRole('button', { name: 'Análisis' }).click();
 
     // Sin clave de Gemini, el análisis con IA está deshabilitado.
@@ -17,23 +17,26 @@ test.describe('Análisis', () => {
 
     await page.getByRole('button', { name: 'Rápido (sin conexión)' }).click();
     await expect(page.getByText('Legibilidad')).toBeVisible();
-    await expect(page.getByText('hidalgo ×3')).toBeVisible();
+    await expect(page.getByText('docentes ×3')).toBeVisible();
+    await expect(page.getByText('Datos detectados')).toBeVisible();
+    await expect(page.getByText('V-12.345.678', { exact: true })).toBeVisible();
     await expect(page.getByText('Oraciones')).toBeVisible();
 
     await updateSettings(page, { geminiKey: 'clave-de-prueba-123' });
     await page.reload();
     await page.getByRole('button', { name: 'Análisis' }).click();
     await page.getByRole('button', { name: 'Con IA (Gemini)' }).click();
-    await expect(page.getByText('Un hidalgo de la Mancha pierde el juicio')).toBeVisible();
-    await expect(page.getByText('Ideas clave')).toBeVisible();
-    await expect(page.getByText('¿Dónde vive el protagonista?')).toBeVisible();
+    await expect(page.getByText('Acta de reunión de docentes para revisar')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tipo de documento' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Datos clave' })).toBeVisible();
+    await expect(page.getByText('No se menciona la firma del director.')).toBeVisible();
 
     // Historial: se puede volver al análisis anterior.
     await page.getByRole('button', { name: /^Rápido ·/ }).click();
     await expect(page.getByText('Legibilidad')).toBeVisible();
     await page.getByRole('button', { name: 'Borrar análisis' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Borrar' }).click();
-    await expect(page.getByText('Un hidalgo de la Mancha pierde el juicio')).toBeVisible();
+    await expect(page.getByText('Acta de reunión de docentes para revisar')).toBeVisible();
     await expect(page.getByRole('button', { name: /^Rápido ·/ })).toHaveCount(0);
   });
 
@@ -45,6 +48,7 @@ test.describe('Análisis', () => {
     await page.getByRole('button', { name: 'Rápido (sin conexión)' }).click();
     await expect(page.getByText('Frases principales')).toBeVisible();
   });
+
 });
 
 test.describe('Ajustes', () => {
@@ -132,10 +136,10 @@ test.describe('Ajustes', () => {
 });
 
 test.describe('Inicio', () => {
-  test('muestra totales, actividad de la semana, libro en curso y grupos recientes', async ({ page }) => {
+  test('muestra totales, actividad de la semana y carpetas recientes', async ({ page }) => {
     await signUp(page, 'Carmen');
     await createScans(page, {
-      newGroup: { title: 'Cuentos' },
+      newGroup: { title: 'Actas' },
       items: [
         { text: 'uno dos tres', engine: 'manual' },
         { text: 'cuatro cinco', engine: 'manual' },
@@ -146,16 +150,16 @@ test.describe('Inicio', () => {
     await expect(page.getByRole('heading', { name: '¡Hola, Carmen!' })).toBeVisible();
     await expect(page.getByText('3 hojas escaneadas')).toBeVisible();
     await expect(page.getByText(/racha/i)).toHaveCount(0);
-    // En escritorio, el menú lateral ofrece seguir con el último libro.
+    // En escritorio, el menú lateral ofrece seguir con la última carpeta.
     if ((page.viewportSize()?.width ?? 0) >= 1024) {
-      await expect(page.getByTestId('continue-card')).toContainText('Cuentos');
+      await expect(page.getByTestId('continue-card')).toContainText('Actas');
     }
     const tile = (label: string) => page.locator('main .grid > div').filter({ has: page.getByText(label, { exact: true }) }).locator('.text-2xl');
     await expect(tile('Escaneos')).toHaveText('3');
     await expect(tile('Grupos')).toHaveText('1');
     await expect(tile('Individuales')).toHaveText('1');
     await expect(tile('Palabras')).toHaveText('6');
-    await page.getByRole('main').getByRole('link', { name: /Cuentos/ }).click();
-    await expect(page.getByRole('heading', { name: 'Cuentos' })).toBeVisible();
+    await page.getByRole('main').getByRole('link', { name: /Actas/ }).click();
+    await expect(page.getByRole('heading', { name: 'Actas' })).toBeVisible();
   });
 });

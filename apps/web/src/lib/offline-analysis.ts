@@ -1,7 +1,9 @@
 /**
  * Análisis de texto que se ejecuta por completo en el dispositivo, sin conexión.
- * Estadísticas, legibilidad (Fernández Huerta), palabras clave y un resumen extractivo.
+ * Estadísticas, datos detectados (fechas, cédulas, correos, teléfonos), legibilidad
+ * (Fernández Huerta), palabras clave y un resumen extractivo.
  */
+import { findDate } from './extract';
 
 const STOPWORDS = new Set(
   `a al algo algunas algunos ante antes aquel aquella aquellas aquellos aqui aquí asi así aun aún bien cada casi como cómo con contra cual cuales cuando cuándo de del desde donde dónde dos el él ella ellas ellos en entre era eran es esa esas ese eso esos esta está estaba estaban estan están estar este esto estos fue fueron ha había habían hace hacia han hasta hay la las le les lo los mas más me mi mis mismo mucho muy nada ni no nos nosotros o otra otras otro otros para pero poco por porque pues que qué quien quién se sea ser si sí sido sin sino sobre su sus tal también tambien tan tanto te tenía tiene tienen todo todos tu tus un una uno unos usted ya yo
@@ -10,15 +12,24 @@ const STOPWORDS = new Set(
   ),
 );
 
+/** Datos sueltos que aparecen en el texto, útiles para identificar el documento. */
+export interface DetectedData {
+  fechas: string[];
+  cedulas: string[];
+  correos: string[];
+  telefonos: string[];
+}
+
 export interface OfflineAnalysis {
-  version: 1;
+  version: 2;
   palabras: number;
   palabrasUnicas: number;
   caracteres: number;
   oraciones: number;
   parrafos: number;
   promedioPalabrasPorOracion: number;
-  minutosLectura: number;
+  /** Ausente en los análisis guardados con la versión 1. */
+  datos?: DetectedData;
   legibilidad: { puntaje: number; nivel: string };
   diversidadLexica: number;
   palabrasClave: { palabra: string; veces: number }[];
@@ -89,17 +100,36 @@ export function analyzeOffline(text: string): OfflineAnalysis {
     .map((s) => s.sentence);
 
   return {
-    version: 1,
+    version: 2,
     palabras: words.length,
     palabrasUnicas: new Set(lower).size,
     caracteres: text.length,
     oraciones: sentences.length,
     parrafos: paragraphs,
     promedioPalabrasPorOracion: Math.round((words.length / sentenceCount) * 10) / 10,
-    minutosLectura: Math.max(1, Math.round(words.length / 200)),
+    datos: detectData(text),
     legibilidad: { puntaje: score, nivel: readabilityLevel(score) },
     diversidadLexica: Math.round((new Set(lower).size / totalWords) * 100),
     palabrasClave: keywords,
     resumen: summary,
   };
+}
+
+const MAX_ITEMS = 12;
+const unique = (items: string[]) => [...new Set(items.map((i) => i.trim()).filter(Boolean))].slice(0, MAX_ITEMS);
+
+/** Fechas, números de cédula, correos y teléfonos que aparecen en el texto. */
+export function detectData(text: string): DetectedData {
+  const fechas = text
+    .split('\n')
+    .map((line) => findDate(line))
+    .filter(Boolean);
+  // «V-12.345.678», «E 8345678», «C.I. 12.345.678» o «cédula: 12345678».
+  const cedulas = [
+    ...[...text.matchAll(/\b([VE])\s?[-.]?\s?(\d{1,2}\.?\d{3}\.?\d{3})\b/gi)].map((m) => `${m[1].toUpperCase()}-${m[2]}`),
+    ...[...text.matchAll(/(?:C\.\s?I\.?|c[ée]dula(?:\s+de\s+identidad)?)\s*(?:N[°ºo.]*\s*)?:?\s*(\d{1,2}\.?\d{3}\.?\d{3})\b/gi)].map((m) => m[1]),
+  ];
+  const correos = text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) ?? [];
+  const telefonos = text.match(/(?:\+\d{1,3}[\s-]?)?\(?0?\d{3}\)?[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}\b/g) ?? [];
+  return { fechas: unique(fechas), cedulas: unique(cedulas), correos: unique(correos), telefonos: unique(telefonos) };
 }

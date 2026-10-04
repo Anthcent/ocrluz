@@ -1,10 +1,10 @@
 import clsx from 'clsx';
-import { BookOpen, BookOpenText, FileText, Library, Plus, ScanLine } from 'lucide-react';
+import { Archive, Eye, FileText, Folder, FolderOpen, Plus, ScanLine } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
-import { LessonProgress } from '../components/ActionTile';
-import { BookCover } from '../components/BookCover';
+import { LabeledProgress } from '../components/ActionTile';
+import { FolderCard } from '../components/FolderCard';
 import { EMPTY_GROUP, GroupFields } from '../components/GroupFields';
 import { Badge, Button, Card, EmptyState, Input, Modal, PageLoader, Segmented } from '../components/ui';
 import { api } from '../lib/api';
@@ -23,17 +23,17 @@ export function CatalogPage() {
 
   return (
     <div>
-      <LibraryHero onCreate={() => setCreating(true)} />
+      <ArchiveHero onCreate={() => setCreating(true)} />
       <div className="mb-4 grid gap-3 sm:grid-cols-[320px_1fr]">
         <Segmented<View>
           value={view}
           onChange={(v) => setParams(v === 'grupos' ? {} : { vista: v }, { replace: true })}
           options={[
-            { value: 'grupos', label: 'Grupos', icon: <BookOpen className="size-4" /> },
-            { value: 'individuales', label: 'Individuales', icon: <FileText className="size-4" /> },
+            { value: 'grupos', label: 'Carpetas', icon: <Folder className="size-4" /> },
+            { value: 'individuales', label: 'Sueltos', icon: <FileText className="size-4" /> },
           ]}
         />
-        <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filtrar por título…" aria-label="Filtrar" />
+        <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filtrar por título o responsable…" aria-label="Filtrar" />
       </div>
       {view === 'grupos' ? <GroupsList filter={filter} /> : <IndividualList filter={filter} />}
       <GroupFormModal open={creating} onClose={() => setCreating(false)} />
@@ -58,15 +58,15 @@ function GroupsList({ filter }: { filter: string }) {
     return (
       <Card>
         <EmptyState
-          icon={<BookOpen className="size-10" />}
-          title="Aún no tienes grupos"
+          icon={<FolderOpen className="size-10" />}
+          title="Aún no tienes carpetas"
           action={
             <Link to="/escanear">
-              <Button icon={<ScanLine className="size-5" />}>Escanear un libro</Button>
+              <Button icon={<ScanLine className="size-5" />}>Escanear documentos</Button>
             </Link>
           }
         >
-          Un grupo reúne varias páginas en orden, por ejemplo un libro o un capítulo.
+          Una carpeta reúne varias hojas en orden, por ejemplo las actas de un año o las fichas de inscripción de una sección.
         </EmptyState>
       </Card>
     );
@@ -87,10 +87,10 @@ function GroupsList({ filter }: { filter: string }) {
       )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
         {visible.map((g) => (
-          <BookCard key={g.id} group={g} />
+          <FolderItem key={g.id} group={g} />
         ))}
       </div>
-      {visible.length === 0 && <p className="text-wolf">Ningún grupo coincide con el filtro.</p>}
+      {visible.length === 0 && <p className="text-wolf">Ninguna carpeta coincide con el filtro.</p>}
     </div>
   );
 }
@@ -112,13 +112,13 @@ function CategoryChip({ selected, onClick, label, emoji }: { selected: boolean; 
   );
 }
 
-/** Tarjeta de un libro con datos, avance y accesos directos. */
-function BookCard({ group: g }: { group: Group }) {
+/** Tarjeta de una carpeta con datos, avance y accesos directos. */
+function FolderItem({ group: g }: { group: Group }) {
   const pages = g.scanCount ?? 0;
   return (
     <div className="group relative flex gap-4 rounded-2xl bg-white p-4 shadow-[0_1px_2px_rgba(41,36,68,0.06)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(41,36,68,0.10)]">
-      <Link to={`/catalogo/grupo/${g.id}`} aria-hidden tabIndex={-1}>
-        <BookCover group={g} size="md" />
+      <Link to={`/archivo/carpeta/${g.id}`} aria-hidden tabIndex={-1}>
+        <FolderCard group={g} size="md" />
       </Link>
       <div className="relative flex min-w-0 flex-1 flex-col">
         {g.category && (
@@ -126,13 +126,13 @@ function BookCard({ group: g }: { group: Group }) {
             {categoryEmoji(g.category)} {g.category}
           </span>
         )}
-        <Link to={`/catalogo/grupo/${g.id}`} className="line-clamp-2 text-lg font-bold leading-tight text-eel hover:text-macaw-dark">
+        <Link to={`/archivo/carpeta/${g.id}`} className="line-clamp-2 text-lg font-bold leading-tight text-eel hover:text-macaw-dark">
           {g.title}
         </Link>
-        {g.author && <div className="truncate text-sm font-semibold text-wolf">{g.author}</div>}
+        {g.author && <div className="truncate text-sm font-semibold text-wolf">Responsable: {g.author}</div>}
         <div className="mt-2 space-y-1.5">
           {g.totalPages ? (
-            <LessonProgress value={(pages / g.totalPages) * 100} label={`${pages}/${g.totalPages}`} />
+            <LabeledProgress value={(pages / g.totalPages) * 100} label={`${pages}/${g.totalPages}`} />
           ) : (
             <div className="text-sm font-semibold text-wolf">
               📄 {pages} {pages === 1 ? 'hoja escaneada' : 'hojas escaneadas'}
@@ -144,18 +144,18 @@ function BookCard({ group: g }: { group: Group }) {
         </div>
         <div className="mt-auto flex gap-2 pt-3">
           <Link
-            to={`/catalogo/grupo/${g.id}`}
+            to={`/archivo/carpeta/${g.id}`}
             className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-polar px-3 py-2 text-xs font-bold text-wolf transition hover:bg-swan active:scale-[0.98]"
           >
             Abrir
           </Link>
           {pages > 0 && (
             <Link
-              to={`/catalogo/grupo/${g.id}?libro=1`}
-              aria-label={`Leer «${g.title}» en modo libro`}
+              to={`/archivo/carpeta/${g.id}?visor=1`}
+              aria-label={`Abrir visor de «${g.title}»`}
               className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-eel px-3 py-2 text-xs font-bold text-white transition hover:bg-[#303138] active:scale-[0.98]"
             >
-              <BookOpenText className="size-4" /> Leer
+              <Eye className="size-4" /> Ver
             </Link>
           )}
         </div>
@@ -164,14 +164,14 @@ function BookCard({ group: g }: { group: Group }) {
   );
 }
 
-/** Cabecera del catálogo con el resumen de la biblioteca. */
-function LibraryHero({ onCreate }: { onCreate: () => void }) {
+/** Cabecera del archivo con el resumen de carpetas y documentos sueltos. */
+function ArchiveHero({ onCreate }: { onCreate: () => void }) {
   const [stats, setStats] = useState<Stats | null>(null);
   useEffect(() => {
     api.stats().then(setStats).catch(() => {});
   }, []);
   const tiles = [
-    { label: 'libros', value: stats?.totals.groups ?? 0 },
+    { label: 'carpetas', value: stats?.totals.groups ?? 0 },
     { label: 'sueltos', value: stats?.totals.individual ?? 0 },
     { label: 'palabras', value: formatNumber(stats?.totals.words ?? 0) },
   ];
@@ -186,11 +186,11 @@ function LibraryHero({ onCreate }: { onCreate: () => void }) {
     <div className="relative mb-5 rounded-[24px] bg-white px-4 py-4 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:px-6 sm:py-5">
       <div className="relative flex items-center gap-3 sm:gap-5">
         <span className="hidden size-12 shrink-0 items-center justify-center rounded-2xl bg-macaw-light text-macaw-dark sm:flex">
-          <Library className="size-6" />
+          <Archive className="size-6" />
         </span>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold leading-tight text-eel sm:text-3xl">Tu biblioteca</h1>
-          <p className="hidden text-sm text-wolf sm:block">Tus libros y documentos, listos para leer.</p>
+          <h1 className="text-2xl font-bold leading-tight text-eel sm:text-3xl">Tu archivo</h1>
+          <p className="hidden text-sm text-wolf sm:block">Tus documentos escaneados, organizados en carpetas.</p>
         </div>
         <div className="hidden flex-wrap gap-2 md:flex">{chips}</div>
         <button
@@ -198,7 +198,7 @@ function LibraryHero({ onCreate }: { onCreate: () => void }) {
           onClick={onCreate}
           className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-eel px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#303138] active:scale-[0.98] sm:px-5 sm:text-sm"
         >
-          <Plus className="size-5" strokeWidth={3} /> Nuevo grupo
+          <Plus className="size-5" strokeWidth={3} /> Nueva carpeta
         </button>
       </div>
       {/* En pantallas pequeñas el resumen va en una segunda fila */}
@@ -236,14 +236,14 @@ function IndividualList({ filter }: { filter: string }) {
       <Card>
         <EmptyState
           icon={<FileText className="size-10" />}
-          title="Sin escaneos individuales"
+          title="Sin documentos sueltos"
           action={
             <Link to="/escanear">
               <Button icon={<ScanLine className="size-5" />}>Escanear</Button>
             </Link>
           }
         >
-          Los escaneos individuales son páginas sueltas: una receta, un apunte, un documento.
+          Los documentos sueltos son hojas que no pertenecen a ninguna carpeta: una cédula, un informe médico, una partida de nacimiento.
         </EmptyState>
       </Card>
     );
@@ -284,7 +284,7 @@ function IndividualList({ filter }: { filter: string }) {
   );
 }
 
-/** Crear o editar un grupo. */
+/** Crear o editar una carpeta. */
 export function GroupFormModal({ open, onClose, group, onSaved }: { open: boolean; onClose: () => void; group?: Group; onSaved?: (g: Group) => void }) {
   const navigate = useNavigate();
   const { toast } = useFeedback();
@@ -302,13 +302,13 @@ export function GroupFormModal({ open, onClose, group, onSaved }: { open: boolea
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!data.title.trim()) return toast('Ponle un nombre al grupo', 'error');
+    if (!data.title.trim()) return toast('Ponle un nombre a la carpeta', 'error');
     setSaving(true);
     try {
       const result = group ? await api.groups.update(group.id, data) : await api.groups.create(data);
       onClose();
       if (onSaved) onSaved(result.group);
-      else navigate(`/catalogo/grupo/${result.group.id}`);
+      else navigate(`/archivo/carpeta/${result.group.id}`);
     } catch (err) {
       toast(errorMessage(err), 'error');
     } finally {
@@ -317,11 +317,11 @@ export function GroupFormModal({ open, onClose, group, onSaved }: { open: boolea
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={group ? 'Editar grupo' : 'Nuevo grupo'} wide>
+    <Modal open={open} onClose={onClose} title={group ? 'Editar carpeta' : 'Nueva carpeta'} wide>
       <form onSubmit={submit} className="space-y-5">
         <GroupFields value={data} onChange={setData} withDescription autoFocus />
         <Button type="submit" block loading={saving}>
-          {group ? 'Guardar cambios' : 'Crear grupo'}
+          {group ? 'Guardar cambios' : 'Crear carpeta'}
         </Button>
       </form>
     </Modal>

@@ -97,7 +97,7 @@ describe('escaneos, grupos y búsqueda', () => {
   it('guarda un grupo nuevo con páginas en orden y busca sin acentos', async () => {
     const { agent, post } = await registered();
     const saved = await post('/api/scans', {
-      newGroup: { title: 'Cien años de soledad' },
+      newGroup: { title: 'Actas 2024-2025' },
       items: [
         { text: 'Muchos años después, frente al pelotón de fusilamiento', engine: 'ocrspace' },
         { text: 'el coronel Aureliano Buendía había de recordar', engine: 'gemini' },
@@ -106,7 +106,7 @@ describe('escaneos, grupos y búsqueda', () => {
     expect(saved.body.ids).toHaveLength(2);
 
     const group = await agent.get(`/api/groups/${saved.body.groupId}`).expect(200);
-    expect(group.body.scans.map((s: any) => s.title)).toEqual(['Página 1', 'Página 2']);
+    expect(group.body.scans.map((s: any) => s.title)).toEqual(['Hoja 1', 'Hoja 2']);
     expect(group.body.scans[0].wordCount).toBe(8);
 
     const search = await agent.get('/api/search').query({ q: 'aureliano buendia' }).expect(200);
@@ -119,9 +119,9 @@ describe('escaneos, grupos y búsqueda', () => {
 
   it('la edición parcial de un grupo conserva los campos no enviados', async () => {
     const { agent, post } = await registered();
-    const { body } = await post('/api/groups', { title: 'Libro', description: 'Notas', color: 'purple' }).expect(201);
-    const res = await agent.patch(`/api/groups/${body.group.id}`).set('X-Requested-With', 'ocryon').send({ title: 'Libro 2' }).expect(200);
-    expect(res.body.group).toMatchObject({ title: 'Libro 2', description: 'Notas', color: 'purple' });
+    const { body } = await post('/api/groups', { title: 'Carpeta', description: 'Notas', color: 'purple' }).expect(201);
+    const res = await agent.patch(`/api/groups/${body.group.id}`).set('X-Requested-With', 'ocryon').send({ title: 'Carpeta 2' }).expect(200);
+    expect(res.body.group).toMatchObject({ title: 'Carpeta 2', description: 'Notas', color: 'purple' });
   });
 
   it('login con correo inexistente responde 401 (no 500)', async () => {
@@ -164,30 +164,30 @@ describe('escaneos, grupos y búsqueda', () => {
 });
 
 describe('grupos con más datos y búsqueda filtrada', () => {
-  it('guarda autor, categoría, total de páginas y número de página detectado', async () => {
+  it('guarda responsable, categoría, total de hojas y número de página detectado', async () => {
     const { agent, post } = await registered();
     const saved = await post('/api/scans', {
-      newGroup: { title: 'Rayuela', author: 'Julio Cortázar', category: 'Novela', totalPages: 600, color: 'blue' },
-      items: [{ text: 'Encontraría a la Maga', engine: 'manual', pageLabel: '15' }],
+      newGroup: { title: 'Fichas 1er año', author: 'Secretaría', category: 'Ficha de inscripción', totalPages: 600, color: 'blue' },
+      items: [{ text: 'Ficha de inscripción del estudiante', engine: 'manual', pageLabel: '15' }],
     }).expect(201);
     const { body } = await agent.get(`/api/groups/${saved.body.groupId}`).expect(200);
-    expect(body.group).toMatchObject({ author: 'Julio Cortázar', category: 'Novela', totalPages: 600 });
+    expect(body.group).toMatchObject({ author: 'Secretaría', category: 'Ficha de inscripción', totalPages: 600 });
     expect(body.scans[0].pageLabel).toBe('15');
     const cats = await agent.get('/api/groups/categories').expect(200);
-    expect(cats.body.categories).toEqual([{ category: 'Novela', count: 1 }]);
+    expect(cats.body.categories).toEqual([{ category: 'Ficha de inscripción', count: 1 }]);
   });
 
   it('filtra la búsqueda por tipo y categoría', async () => {
     const { agent, post } = await registered();
-    await post('/api/scans', { newGroup: { title: 'Libro A', category: 'Historia' }, items: [{ text: 'la batalla de Ayacucho', engine: 'manual' }] });
-    await post('/api/scans', { newGroup: { title: 'Libro B', category: 'Novela' }, items: [{ text: 'otra batalla imaginaria', engine: 'manual' }] });
+    await post('/api/scans', { newGroup: { title: 'Carpeta A', category: 'Acta' }, items: [{ text: 'la batalla de Ayacucho', engine: 'manual' }] });
+    await post('/api/scans', { newGroup: { title: 'Carpeta B', category: 'Nómina' }, items: [{ text: 'otra batalla imaginaria', engine: 'manual' }] });
     await post('/api/scans', { items: [{ text: 'apunte sobre una batalla', engine: 'manual' }] });
     const all = await agent.get('/api/search').query({ q: 'batalla' });
     expect(all.body.total).toBe(3);
     expect((await agent.get('/api/search').query({ q: 'batalla', type: 'individual' })).body.total).toBe(1);
     expect((await agent.get('/api/search').query({ q: 'batalla', type: 'group' })).body.total).toBe(2);
-    const hist = await agent.get('/api/search').query({ q: 'batalla', category: 'Historia' });
-    expect(hist.body.results.map((r: any) => r.groupTitle)).toEqual(['Libro A']);
+    const hist = await agent.get('/api/search').query({ q: 'batalla', category: 'Acta' });
+    expect(hist.body.results.map((r: any) => r.groupTitle)).toEqual(['Carpeta A']);
   });
 
   it('aplica las migraciones una sola vez y conserva los datos al reabrir', async () => {
@@ -227,39 +227,39 @@ describe('grupos con más datos y búsqueda filtrada', () => {
 });
 
 describe('documentos', () => {
-  const invoice = {
-    templateKey: 'factura',
-    templateName: 'Factura',
-    title: 'Factura F001-123',
+  const record = {
+    templateKey: 'acta',
+    templateName: 'Acta',
+    title: 'Acta ACT001-123',
     fields: [
-      { key: 'numero', label: 'Número', type: 'id', value: 'F001-123' },
+      { key: 'numero', label: 'Número', type: 'id', value: 'ACT001-123' },
       { key: 'total', label: 'Total', type: 'money', value: '118.00' },
     ],
-    text: 'FACTURA F001-123 TOTAL S/ 118.00',
+    text: 'ACTA ACT001-123 TOTAL 118.00',
     engine: 'tesseract',
     method: 'rules',
   };
 
   it('guarda, busca, filtra, edita y borra documentos', async () => {
     const { agent, post } = await registered();
-    const created = await post('/api/documents', invoice).expect(201);
+    const created = await post('/api/documents', record).expect(201);
     const id = created.body.document.id;
     expect(created.body.document.fields[1]).toMatchObject({ key: 'total', value: '118.00' });
-    await post('/api/documents', { ...invoice, templateKey: 'recibo', templateName: 'Recibo', title: 'Recibo luz' }).expect(201);
+    await post('/api/documents', { ...record, templateKey: 'informe_medico', templateName: 'Informe médico', title: 'Informe reposo' }).expect(201);
 
     const all = await agent.get('/api/documents').expect(200);
     expect(all.body.documents).toHaveLength(2);
-    expect(all.body.counts).toEqual(expect.arrayContaining([{ templateKey: 'factura', count: 1 }]));
-    expect((await agent.get('/api/documents').query({ template: 'recibo' })).body.documents).toHaveLength(1);
-    expect((await agent.get('/api/documents').query({ q: 'F001' })).body.documents).toHaveLength(2);
-    expect((await agent.get('/api/documents').query({ q: 'luz' })).body.documents).toHaveLength(1);
+    expect(all.body.counts).toEqual(expect.arrayContaining([{ templateKey: 'acta', count: 1 }]));
+    expect((await agent.get('/api/documents').query({ template: 'informe_medico' })).body.documents).toHaveLength(1);
+    expect((await agent.get('/api/documents').query({ q: 'ACT001' })).body.documents).toHaveLength(2);
+    expect((await agent.get('/api/documents').query({ q: 'reposo' })).body.documents).toHaveLength(1);
     // Sin acentos ni mayúsculas, y con comodines de LIKE tratados como texto.
-    await post('/api/documents', { ...invoice, title: 'Factura de María Pérez' }).expect(201);
+    await post('/api/documents', { ...record, title: 'Acta de María Pérez' }).expect(201);
     expect((await agent.get('/api/documents').query({ q: 'maria PEREZ' })).body.documents).toHaveLength(1);
     expect((await agent.get('/api/documents').query({ q: '100%' })).body.documents).toHaveLength(0);
     await agent.delete(`/api/documents/${(await agent.get('/api/documents').query({ q: 'maria' })).body.documents[0].id}`).set('X-Requested-With', 'ocryon').expect(204);
 
-    const fields = [...invoice.fields];
+    const fields = [...record.fields];
     fields[1] = { ...fields[1], value: '120.00' };
     const patched = await agent.patch(`/api/documents/${id}`).set('X-Requested-With', 'ocryon').send({ fields }).expect(200);
     expect(patched.body.document.fields[1].value).toBe('120.00');
@@ -284,7 +284,7 @@ describe('documentos', () => {
 
   it('aísla los documentos entre usuarios', async () => {
     const a = await registered('doc-a@example.com');
-    const created = await a.post('/api/documents', invoice);
+    const created = await a.post('/api/documents', record);
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const { body } = created;
     const b = request.agent(a.app);

@@ -31,7 +31,7 @@ export function detectPageLabel(text: string): string {
   return '';
 }
 
-/** Quita del texto la línea con el número de página (para no mostrarlo dos veces en el modo libro). */
+/** Quita del texto la línea con el número de página (para no mostrarlo dos veces en el visor). */
 export function stripPageLabel(text: string, label: string): string {
   if (!label) return text;
   const lines = text.split('\n');

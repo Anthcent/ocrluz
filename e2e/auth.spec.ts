@@ -3,7 +3,7 @@ import { isMobile, signUp } from './helpers';
 
 test.describe('Autenticación', () => {
   test('redirige al login sin sesión', async ({ page }) => {
-    await page.goto('/catalogo');
+    await page.goto('/archivo');
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole('heading', { name: '¡Hola de nuevo!' })).toBeVisible();
   });
@@ -61,14 +61,14 @@ test.describe('Autenticación', () => {
       // Ajustes pasa a la barra superior en móvil.
       await page.getByRole('banner').getByRole('link', { name: 'Ajustes' }).click();
       await expect(page).toHaveURL(/\/ajustes$/);
-      await bottomNav.getByRole('link', { name: 'Catálogo' }).click();
+      await bottomNav.getByRole('link', { name: 'Archivo' }).click();
     } else {
       await sidebar.getByRole('link', { name: 'Documentos' }).click();
       await expect(page.getByRole('heading', { name: 'Tus documentos' })).toBeVisible();
       await expect(sidebar).toBeVisible();
       await expect(bottomNav).toBeHidden();
-      await sidebar.getByRole('link', { name: 'Catálogo' }).click();
+      await sidebar.getByRole('link', { name: 'Archivo' }).click();
     }
-    await expect(page.getByRole('heading', { name: 'Tu biblioteca' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tu archivo' })).toBeVisible();
   });
 });

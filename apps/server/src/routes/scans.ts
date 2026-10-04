@@ -118,7 +118,7 @@ export function scansRouter(ctx: AppContext) {
 
       const ids: number[] = [];
       for (const [i, item] of data.items.entries()) {
-        const title = item.title || (groupId ? `Página ${position + i + 1}` : defaultTitle(item.text));
+        const title = item.title || (groupId ? `Hoja ${position + i + 1}` : defaultTitle(item.text));
         const row = await tx.one<{ id: number }>(
           `INSERT INTO scans (user_id, group_id, position, title, text, engine, language, word_count, page_label)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,

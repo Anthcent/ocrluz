@@ -141,7 +141,7 @@ export function DocumentsPage() {
           >
             {debounced || template
               ? 'Prueba con otra palabra o quita el filtro.'
-              : 'Escanea facturas, recibos, DNI o contratos: Ocryon detecta los datos y los guarda en un formulario.'}
+              : 'Escanea actas, cédulas, partidas de nacimiento, fichas de inscripción, informes médicos o nóminas: Ocryon detecta los datos y los guarda en un formulario.'}
           </EmptyState>
         </Card>
       ) : (

@@ -1,7 +1,7 @@
 import clsx from 'clsx';
-import { ArrowLeft, ArrowRight, BookOpenText, Rows3 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileText, Rows3 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { LessonProgress } from './ActionTile';
+import { LabeledProgress } from './ActionTile';
 import { Button, Card } from './ui';
 
 interface ReaderPage {
@@ -10,8 +10,8 @@ interface ReaderPage {
 }
 
 /**
- * Modo lectura de un grupo: una página a la vez con barra de progreso arriba y botones grandes
- * abajo (como una lección), o todo el texto seguido.
+ * Texto de una carpeta: una hoja a la vez con barra de progreso arriba y botones grandes
+ * abajo, o todo el texto seguido.
  */
 export function Reader({ pages }: { pages: ReaderPage[] }) {
   const [index, setIndex] = useState(0);
@@ -37,14 +37,14 @@ export function Reader({ pages }: { pages: ReaderPage[] }) {
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           {continuous ? (
-            <p className="font-semibold text-wolf">{total} páginas, todo seguido</p>
+            <p className="font-semibold text-wolf">{total} {total === 1 ? 'hoja' : 'hojas'}, todo seguido</p>
           ) : (
-            <LessonProgress value={((index + 1) / total) * 100} label={`Página ${index + 1} de ${total}`} />
+            <LabeledProgress value={((index + 1) / total) * 100} label={`Hoja ${index + 1} de ${total}`} />
           )}
         </div>
         <div className="flex rounded-xl bg-polar p-1">
           {[
-            { value: false, label: 'Por página', icon: <BookOpenText className="size-4" /> },
+            { value: false, label: 'Por hoja', icon: <FileText className="size-4" /> },
             { value: true, label: 'Todo seguido', icon: <Rows3 className="size-4" /> },
           ].map((o) => (
             <button
@@ -65,18 +65,18 @@ export function Reader({ pages }: { pages: ReaderPage[] }) {
       </div>
 
       <Card className="px-5 py-7 sm:px-10 sm:py-12">
-        <article className="mx-auto max-w-[68ch] font-serif text-lg leading-[1.75] text-eel sm:text-xl">
+        <article className="mx-auto max-w-[72ch] text-base leading-relaxed text-eel sm:text-lg">
           {continuous ? (
             <div className="space-y-10">
               {pages.map((p, i) => (
                 <section key={p.id}>
-                  <div className="mb-3 font-sans text-xs font-semibold text-wolf">Página {i + 1}</div>
+                  <div className="mb-3 text-xs font-semibold text-wolf">Hoja {i + 1}</div>
                   <p className="whitespace-pre-line">{p.text}</p>
                 </section>
               ))}
             </div>
           ) : (
-            <p className="min-h-[40vh] whitespace-pre-line">{page.text || <span className="font-sans text-hare">Esta página no tiene texto.</span>}</p>
+            <p className="min-h-[40vh] whitespace-pre-line">{page.text || <span className="text-hare">Esta hoja no tiene texto.</span>}</p>
           )}
         </article>
       </Card>

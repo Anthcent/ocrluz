@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { BookOpen, ChevronRight, Clock, FileText, Layers, Search as SearchIcon, X } from 'lucide-react';
+import { ChevronRight, Clock, FileText, Folder, Layers, Search as SearchIcon, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Snippet } from '../components/Snippet';
@@ -27,7 +27,7 @@ function saveRecent(list: string[]) {
   }
 }
 
-interface BookHits {
+interface FolderHits {
   groupId: number;
   title: string;
   author: string;
@@ -86,17 +86,17 @@ export function SearchPage() {
     return () => clearTimeout(timer);
   }, [query, type, category, setParams]);
 
-  // Resultados agrupados por libro, en el orden de relevancia del primer resultado.
-  const { books, singles } = useMemo(() => {
-    const byBook = new Map<number, BookHits>();
+  // Resultados agrupados por carpeta, en el orden de relevancia del primer resultado.
+  const { folders, singles } = useMemo(() => {
+    const byFolder = new Map<number, FolderHits>();
     const singles: SearchResult[] = [];
     for (const r of results ?? []) {
       if (r.groupId === null) {
         singles.push(r);
         continue;
       }
-      if (!byBook.has(r.groupId)) {
-        byBook.set(r.groupId, {
+      if (!byFolder.has(r.groupId)) {
+        byFolder.set(r.groupId, {
           groupId: r.groupId,
           title: r.groupTitle ?? '',
           author: r.groupAuthor ?? '',
@@ -105,9 +105,9 @@ export function SearchPage() {
           hits: [],
         });
       }
-      byBook.get(r.groupId)!.hits.push(r);
+      byFolder.get(r.groupId)!.hits.push(r);
     }
-    return { books: [...byBook.values()], singles };
+    return { folders: [...byFolder.values()], singles };
   }, [results]);
 
   const clearRecent = () => {
@@ -120,7 +120,7 @@ export function SearchPage() {
       <div className="rounded-[24px] bg-white p-5 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:p-7">
         <div>
           <h1 className="text-3xl font-bold leading-tight text-eel sm:text-4xl">¿Qué quieres encontrar?</h1>
-          <p className="mt-2 text-wolf">Busca cualquier palabra en todos tus libros y escaneos.</p>
+          <p className="mt-2 text-wolf">Busca cualquier palabra, nombre o número en todas tus carpetas y documentos.</p>
         </div>
         <div className="relative mt-5">
           <SearchIcon className="absolute left-4 top-1/2 size-6 -translate-y-1/2 text-macaw-dark" />
@@ -157,8 +157,8 @@ export function SearchPage() {
         <FilterChip selected={type === 'all'} onClick={() => setType('all')} icon={<Layers className="size-4" />} tone="blue">
           Todo
         </FilterChip>
-        <FilterChip selected={type === 'group'} onClick={() => setType('group')} icon={<BookOpen className="size-4" />} tone="green">
-          Libros
+        <FilterChip selected={type === 'group'} onClick={() => setType('group')} icon={<Folder className="size-4" />} tone="green">
+          Carpetas
         </FilterChip>
         <FilterChip selected={type === 'individual'} onClick={() => setType('individual')} icon={<FileText className="size-4" />} tone="purple">
           Sueltos
@@ -202,16 +202,16 @@ export function SearchPage() {
           </section>
           <section className="rounded-2xl bg-white p-5 shadow-[0_1px_2px_rgba(41,36,68,0.06)]">
             <h2 className="mb-3 flex items-center gap-2 font-bold">
-              <BookOpen className="size-5 text-feather-dark" /> Tus libros
+              <Folder className="size-5 text-feather-dark" /> Tus carpetas
             </h2>
             {groups.length === 0 ? (
-              <p className="text-sm text-wolf">Cuando guardes libros aparecerán aquí.</p>
+              <p className="text-sm text-wolf">Cuando crees carpetas aparecerán aquí.</p>
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 {groups.slice(0, 6).map((g) => (
                   <Link
                     key={g.id}
-                    to={`/catalogo/grupo/${g.id}`}
+                    to={`/archivo/carpeta/${g.id}`}
                     className="truncate rounded-xl bg-polar px-3 py-2.5 text-sm font-semibold text-eel transition hover:bg-macaw-light hover:text-macaw-dark"
                   >
                     {g.title}
@@ -233,23 +233,23 @@ export function SearchPage() {
         <div className="space-y-5">
           <p className="font-semibold text-wolf">
             <span className="text-eel">{total}</span> {total === 1 ? 'resultado' : 'resultados'}
-            {books.length > 0 && (
+            {folders.length > 0 && (
               <>
-                {' '}en <span className="text-eel">{books.length}</span> {books.length === 1 ? 'libro' : 'libros'}
+                {' '}en <span className="text-eel">{folders.length}</span> {folders.length === 1 ? 'carpeta' : 'carpetas'}
               </>
             )}
             {singles.length > 0 && (
               <>
-                {books.length > 0 ? ' y ' : ' en '}
-                <span className="text-eel">{singles.length}</span> {singles.length === 1 ? 'escaneo suelto' : 'escaneos sueltos'}
+                {folders.length > 0 ? ' y ' : ' en '}
+                <span className="text-eel">{singles.length}</span> {singles.length === 1 ? 'documento suelto' : 'documentos sueltos'}
               </>
             )}
             {total > (results?.length ?? 0) && <span className="text-hare"> (mostrando {results?.length})</span>}
           </p>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {books.map((b) => (
-              <BookResults key={b.groupId} book={b} />
+            {folders.map((b) => (
+              <FolderResults key={b.groupId} folder={b} />
             ))}
           </div>
 
@@ -259,7 +259,7 @@ export function SearchPage() {
                 <span className="flex size-8 items-center justify-center rounded-xl bg-beetle-light text-beetle-dark">
                   <FileText className="size-5" />
                 </span>
-                Escaneos sueltos
+                Documentos sueltos
               </h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {singles.map((r) => (
@@ -283,26 +283,26 @@ export function SearchPage() {
   );
 }
 
-function BookResults({ book }: { book: BookHits }) {
-  const style = GROUP_STYLES[book.color];
+function FolderResults({ folder }: { folder: FolderHits }) {
+  const style = GROUP_STYLES[folder.color];
   return (
     <section className="min-w-0 overflow-hidden rounded-2xl bg-white shadow-[0_1px_2px_rgba(41,36,68,0.06)]">
-      <Link to={`/catalogo/grupo/${book.groupId}`} className="flex items-center gap-3 bg-macaw-light p-4 text-eel transition hover:bg-[#e6e0fd]">
+      <Link to={`/archivo/carpeta/${folder.groupId}`} className="flex items-center gap-3 bg-macaw-light p-4 text-eel transition hover:bg-[#e6e0fd]">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white text-macaw-dark">
-          <BookOpen className="size-6" />
+          <Folder className="size-6" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-lg font-bold leading-tight">{book.title}</span>
+          <span className="block truncate text-lg font-bold leading-tight">{folder.title}</span>
           <span className="block truncate text-sm font-semibold text-wolf">
-            {[book.author, book.category && `${categoryEmoji(book.category)} ${book.category}`].filter(Boolean).join(' · ') || 'Libro'}
+            {[folder.author && `Responsable: ${folder.author}`, folder.category && `${categoryEmoji(folder.category)} ${folder.category}`].filter(Boolean).join(' · ') || 'Carpeta'}
           </span>
         </span>
         <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-sm font-bold text-macaw-dark">
-          {book.hits.length} {book.hits.length === 1 ? 'coincidencia' : 'coincidencias'}
+          {folder.hits.length} {folder.hits.length === 1 ? 'coincidencia' : 'coincidencias'}
         </span>
       </Link>
       <ul className="divide-y divide-swan">
-        {book.hits.map((r) => (
+        {folder.hits.map((r) => (
           <li key={r.id}>
             <Link to={`/escaneo/${r.id}`} className="flex gap-3 p-4 transition hover:bg-polar">
               <span className={clsx('flex h-12 w-11 shrink-0 flex-col items-center justify-center rounded-xl leading-none', style.soft, style.text)}>

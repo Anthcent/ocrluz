@@ -8,8 +8,8 @@ import { Field, Input, Textarea } from './ui';
 export const EMPTY_GROUP: GroupInput = { title: '', description: '', author: '', category: '', color: 'green', totalPages: null };
 
 /**
- * Datos de un libro o grupo: nombre, autor, categoría, páginas totales, color y (opcional) descripción.
- * Se usa al crear un grupo desde el escáner y al editarlo desde el catálogo.
+ * Datos de una carpeta: nombre, responsable, categoría, hojas esperadas, color y (opcional) descripción.
+ * Se usa al crear una carpeta desde el escáner y al editarla desde el archivo.
  */
 export function GroupFields({
   value,
@@ -42,14 +42,14 @@ export function GroupFields({
           <Input
             value={value.title}
             onChange={(e) => set('title', e.target.value)}
-            placeholder="Ej. Cien años de soledad"
+            placeholder="Ej. Actas 2024-2025"
             maxLength={160}
-            aria-label="Nombre del grupo"
+            aria-label="Nombre de la carpeta"
             autoFocus={autoFocus}
           />
         </Field>
-        <Field label="Autor (opcional)">
-          <Input value={value.author} onChange={(e) => set('author', e.target.value)} placeholder="Ej. Gabriel García Márquez" maxLength={160} aria-label="Autor" />
+        <Field label="Responsable (opcional)">
+          <Input value={value.author} onChange={(e) => set('author', e.target.value)} placeholder="Ej. Secretaría" maxLength={160} aria-label="Responsable" />
         </Field>
       </div>
 
@@ -83,7 +83,7 @@ export function GroupFields({
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[200px_1fr] md:items-end">
-        <Field label="Páginas del libro (opcional)" hint="Para ver cuánto te falta.">
+        <Field label="Hojas esperadas (opcional)" hint="Para ver cuántas faltan por escanear.">
           <Input
             type="number"
             inputMode="numeric"
@@ -91,8 +91,8 @@ export function GroupFields({
             max={20000}
             value={value.totalPages ?? ''}
             onChange={(e) => set('totalPages', e.target.value ? Math.max(1, Math.min(20000, Number(e.target.value))) : null)}
-            placeholder="Ej. 320"
-            aria-label="Páginas del libro"
+            placeholder="Ej. 40"
+            aria-label="Hojas esperadas"
           />
         </Field>
         <div>

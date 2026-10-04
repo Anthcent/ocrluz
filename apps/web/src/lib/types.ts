@@ -26,10 +26,11 @@ export interface Group {
   id: number;
   title: string;
   description: string;
+  /** Responsable de la carpeta (la columna conserva el nombre «author»). */
   author: string;
   category: string;
   color: GroupColor;
-  /** Páginas que tiene el libro en total (opcional), para mostrar el avance. */
+  /** Hojas esperadas en la carpeta (opcional), para mostrar el avance. */
   totalPages: number | null;
   createdAt: string;
   updatedAt: string;
@@ -84,19 +85,27 @@ export interface Analysis<T = unknown> {
   createdAt: string;
 }
 
+/**
+ * Análisis con IA de un documento. Los análisis guardados con el formato anterior
+ * (temas, ideasClave, vocabulario, preguntas, tono) se siguen mostrando: todo es opcional.
+ */
 export interface OnlineAnalysisContent {
-  resumen: string;
-  temas: string[];
-  ideasClave: string[];
-  entidades: { nombre: string; tipo: string }[];
-  vocabulario: { termino: string; definicion: string }[];
-  preguntas: string[];
-  tono: string;
-  calidadOcr: string;
+  resumen?: string;
+  tipoDocumento?: string;
+  datosClave?: { dato: string; valor: string }[];
+  entidades?: { nombre: string; tipo: string }[];
+  observaciones?: string[];
+  calidadOcr?: string;
   truncated?: boolean;
+  /** Formato anterior. */
+  temas?: string[];
+  ideasClave?: string[];
+  vocabulario?: { termino: string; definicion: string }[];
+  preguntas?: string[];
+  tono?: string;
 }
 
-/** Datos editables de un grupo (libro). */
+/** Datos editables de un grupo (carpeta). */
 export type GroupInput = Pick<Group, 'title' | 'description' | 'author' | 'category' | 'color' | 'totalPages'>;
 
 export interface DocField {

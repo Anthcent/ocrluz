@@ -59,8 +59,8 @@ export function ActionTile({
   );
 }
 
-/** Progreso de lectura con estado visible también sin movimiento. */
-export function LessonProgress({ value, label }: { value: number; label?: string }) {
+/** Barra de progreso con estado visible también sin movimiento. */
+export function LabeledProgress({ value, label }: { value: number; label?: string }) {
   return (
     <div className="flex items-center gap-3">
       <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-swan/80">

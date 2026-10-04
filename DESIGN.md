@@ -1,6 +1,6 @@
 ---
 name: Ocryon
-description: Calm mobile-first workspace for scanning, organizing, and reading documents.
+description: Calm mobile-first workspace for scanning, organizing, and finding documents.
 colors:
   ink: "#18191d"
   canvas: "#eceef0"
@@ -78,9 +78,9 @@ components:
 
 ## 1. Overview
 
-**Creative North Star: "The Focused Reading Desk"**
+**Creative North Star: "The Organized Document Desk"**
 
-Ocryon feels like a clear work surface prepared for scanning and reading: soft neutral canvas, crisp white sheets, dark controls, and a few pastel markers that communicate state. Composition is mobile-first and information-rich, but never crowded or game-like.
+Ocryon feels like a clear records desk prepared for scanning and filing: soft neutral canvas, crisp white sheets, labeled folders, dark controls, and a few pastel markers that communicate state. Composition is mobile-first and information-rich, but never crowded or game-like.
 
 Desktop layouts expand into editorial columns and floating work areas. Motion is short and functional, limited to state changes, overlays, and tactile press feedback.
 
@@ -93,7 +93,7 @@ Desktop layouts expand into editorial columns and floating work areas. Motion is
 
 ## 2. Colors
 
-Pastel markers sit on a neutral reading surface; ink carries hierarchy and contrast.
+Pastel markers sit on a neutral work surface; ink carries hierarchy and contrast.
 
 ### Primary
 - **Violet Marker:** selection, active filters, focus, and secondary actions.
@@ -105,7 +105,7 @@ Pastel markers sit on a neutral reading surface; ink carries hierarchy and contr
 
 ### Neutral
 - **Cool Canvas:** application background and recessed controls.
-- **White Sheet:** cards, dialogs, and document reading surfaces.
+- **White Sheet:** cards, dialogs, and document viewing surfaces.
 - **Graphite Muted:** secondary copy and metadata.
 - **Soft Line:** separators where spacing alone cannot communicate grouping.
 

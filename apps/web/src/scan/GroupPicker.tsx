@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import { Check, FileSearch, Plus, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { BookCover } from '../components/BookCover';
+import { FolderCard } from '../components/FolderCard';
 import { Snippet } from '../components/Snippet';
 import { Modal, Segmented, Spinner } from '../components/ui';
 import { api } from '../lib/api';
@@ -25,8 +25,8 @@ interface TextHits {
 }
 
 /**
- * Buscador de grupos para el escáner. Pensado para cuando no recuerdas el nombre:
- * busca por título, autor, categoría o descripción, e incluso por una frase del texto
+ * Buscador de carpetas para el escáner. Pensado para cuando no recuerdas el nombre:
+ * busca por título, responsable, categoría o descripción, e incluso por una frase del texto
  * ya escaneado; además filtra por categoría y color, y ordena.
  */
 export function GroupPicker({
@@ -105,7 +105,7 @@ export function GroupPicker({
         if (words.length) {
           const fields: [string, string][] = [
             ['Título', g.title],
-            ['Autor', g.author],
+            ['Responsable', g.author],
             ['Categoría', g.category],
             ['Descripción', g.description],
           ];
@@ -121,7 +121,7 @@ export function GroupPicker({
 
     const byName = (a: Group, b: Group) => a.title.localeCompare(b.title, 'es', { sensitivity: 'base' });
     list.sort((a, b) => {
-      // Primero lo que coincide en los datos del grupo, luego lo encontrado solo en el texto.
+      // Primero lo que coincide en los datos de la carpeta, luego lo encontrado solo en el texto.
       if (words.length && !!a.where.length !== !!b.where.length) return a.where.length ? -1 : 1;
       if (sort === 'nombre') return byName(a.group, b.group);
       if (sort === 'hojas') return (b.group.scanCount ?? 0) - (a.group.scanCount ?? 0);
@@ -138,14 +138,14 @@ export function GroupPicker({
   const filtersActive = !!(q || category || color);
 
   return (
-    <Modal open={open} onClose={onClose} title="Buscar grupo" wide>
+    <Modal open={open} onClose={onClose} title="Buscar carpeta" wide>
       <div className="space-y-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-hare" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Título, autor, categoría o una frase del libro…"
+            placeholder="Título, responsable, categoría o una frase del documento…"
             aria-label="Texto a buscar"
             autoFocus
             className="w-full rounded-xl border border-transparent bg-polar py-3 pl-12 pr-11 text-base font-semibold outline-none transition-[background-color,box-shadow] placeholder:text-wolf focus:bg-white focus:shadow-[0_0_0_3px_rgba(163,142,249,0.35)]"
@@ -178,7 +178,7 @@ export function GroupPicker({
         </button>
 
         {(categories.length > 0 || colors.length > 1) && (
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filtrar grupos">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filtrar carpetas">
             {categories.map(([c, n]) => (
               <FilterChip key={c} selected={category === c} onClick={() => setCategory(category === c ? null : c)}>
                 <span aria-hidden>{categoryEmoji(c)}</span> {c} <span className="text-xs opacity-70">{n}</span>
@@ -210,7 +210,7 @@ export function GroupPicker({
 
         <div className="flex items-center justify-between text-sm font-semibold text-wolf">
           <span data-testid="group-picker-count">
-            {results.length} de {groups.length} {groups.length === 1 ? 'grupo' : 'grupos'}
+            {results.length} de {groups.length} {groups.length === 1 ? 'carpeta' : 'carpetas'}
           </span>
           {filtersActive && (
             <button
@@ -227,7 +227,7 @@ export function GroupPicker({
           )}
         </div>
 
-        <ul className="space-y-2" aria-label="Grupos encontrados">
+        <ul className="space-y-2" aria-label="Carpetas encontradas">
           {results.map(({ group: g, where, hits }) => {
             const selected = selectedId === String(g.id);
             const style = GROUP_STYLES[g.color];
@@ -242,11 +242,11 @@ export function GroupPicker({
                     selected ? 'bg-macaw-light shadow-[0_0_0_2px_#a38ef9]' : 'bg-white shadow-[0_1px_2px_rgba(41,36,68,0.06)] hover:bg-[#f7f7f8]',
                   )}
                 >
-                  <BookCover group={g} size="sm" />
+                  <FolderCard group={g} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-bold">{g.title}</div>
                     <div className="flex flex-wrap items-center gap-x-2 text-xs font-semibold text-wolf">
-                      {g.author && <span className={clsx('font-bold', style.text)}>{g.author}</span>}
+                      {g.author && <span className={clsx('font-bold', style.text)}>Responsable: {g.author}</span>}
                       {g.category && (
                         <span>
                           {categoryEmoji(g.category)} {g.category}
@@ -273,7 +273,7 @@ export function GroupPicker({
                       </div>
                     )}
                     {hits && (
-                      <p className="mt-1 line-clamp-2 font-serif text-xs leading-relaxed text-wolf">
+                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-wolf">
                         <Snippet value={hits.snippet} />
                       </p>
                     )}
@@ -290,7 +290,7 @@ export function GroupPicker({
             <div className="text-3xl" aria-hidden>
               🔎
             </div>
-            <div className="mt-1 font-bold">Ningún grupo coincide</div>
+            <div className="mt-1 font-bold">Ninguna carpeta coincide</div>
             <p className="text-sm font-semibold text-wolf">
               {inText ? 'Prueba con otra palabra o quita algún filtro.' : 'Activa «Buscar también dentro del texto» y escribe una frase que recuerdes.'}
             </p>
@@ -302,7 +302,7 @@ export function GroupPicker({
           onClick={() => pick('new')}
           className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-feather-light py-3 font-bold text-feather-dark transition-[transform,background-color] hover:bg-feather active:scale-[0.99]"
         >
-          <Plus className="size-5" strokeWidth={3} /> Crear un grupo nuevo
+          <Plus className="size-5" strokeWidth={3} /> Crear una carpeta nueva
         </button>
       </div>
     </Modal>

@@ -1,7 +1,7 @@
 {
   "name": "Ocryon",
   "short_name": "Ocryon",
-  "description": "Escanea libros con la cámara y conviértelos en texto buscable.",
+  "description": "Escanea documentos con la cámara (actas, cédulas, partidas de nacimiento, fichas de inscripción, informes médicos, sábanas de notas, nóminas y más) y conviértelos en texto buscable.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ECEEF0",

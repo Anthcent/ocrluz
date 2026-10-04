@@ -1,8 +1,8 @@
 import clsx from 'clsx';
-import { BookOpen, Check, ChevronDown, Cpu, FileText, Files, KeyRound, Plus, Search, Sparkles, Zap } from 'lucide-react';
+import { Check, ChevronDown, Cpu, FileText, Files, FolderOpen, KeyRound, Plus, Search, Sparkles, Zap } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { LessonProgress } from '../components/ActionTile';
+import { LabeledProgress } from '../components/ActionTile';
 import { GroupFields } from '../components/GroupFields';
 import { Toggle } from '../components/ui';
 import { ENGINES, GROUP_STYLES, LANGUAGES } from '../lib/constants';
@@ -150,9 +150,9 @@ export interface DestinationProps {
 }
 
 export function destinationSummary({ mode, groups, groupId, newGroup }: DestinationProps) {
-  if (mode === 'individual') return 'Páginas sueltas';
-  if (groupId === NEW_GROUP) return newGroup.title ? `Grupo nuevo: ${newGroup.title}` : 'Grupo nuevo';
-  return `Grupo: ${groups.find((g) => String(g.id) === groupId)?.title ?? ''}`;
+  if (mode === 'individual') return 'Documentos sueltos';
+  if (groupId === NEW_GROUP) return newGroup.title ? `Carpeta nueva: ${newGroup.title}` : 'Carpeta nueva';
+  return `Carpeta: ${groups.find((g) => String(g.id) === groupId)?.title ?? ''}`;
 }
 
 const QUICK_GROUPS = 4;
@@ -165,7 +165,7 @@ export function DestinationPanel(props: DestinationProps) {
   const totalPages = isNew ? props.newGroup.totalPages : (selectedGroup?.totalPages ?? null);
   const afterSave = saved + sheets.count;
   const [picking, setPicking] = useState(false);
-  // Accesos rápidos: los grupos más recientes y, si no está entre ellos, el elegido.
+  // Accesos rápidos: las carpetas más recientes y, si no está entre ellas, la elegida.
   const recent = groups.slice(0, QUICK_GROUPS);
   const quickGroups = selectedGroup && !recent.includes(selectedGroup) ? [selectedGroup, ...recent.slice(0, QUICK_GROUPS - 1)] : recent;
 
@@ -177,26 +177,26 @@ export function DestinationPanel(props: DestinationProps) {
           onSelect={() => props.setMode('individual')}
           icon={<FileText />}
           iconClass="bg-beetle-light text-beetle-dark"
-          title="Páginas sueltas"
-          description="Cada foto se guarda como un escaneo individual."
+          title="Documentos sueltos"
+          description="Cada foto se guarda como un documento independiente."
         />
         <ChoiceCard
           selected={mode === 'group'}
           onSelect={() => props.setMode('group')}
-          icon={<BookOpen />}
+          icon={<FolderOpen />}
           iconClass="bg-feather-light text-feather-dark"
-          title="Libro o grupo"
-          description="Las fotos se guardan juntas y en orden."
+          title="Carpeta"
+          description="Las fotos se guardan juntas y en orden, como un expediente."
         />
       </div>
 
       {mode === 'group' && (
         <div className="space-y-5 rounded-2xl bg-polar p-3 sm:p-5">
           <div>
-            <div className="mb-2 text-sm font-bold">Elige el grupo</div>
-            <div className="-mx-1 flex flex-wrap gap-2 px-1" role="group" aria-label="Grupo">
+            <div className="mb-2 text-sm font-bold">Elige la carpeta</div>
+            <div className="-mx-1 flex flex-wrap gap-2 px-1" role="group" aria-label="Carpeta">
               <Chip selected={isNew} onClick={() => props.setGroupId(NEW_GROUP)}>
-                <Plus className="size-4" /> Nuevo
+                <Plus className="size-4" /> Nueva
               </Chip>
               {quickGroups.map((g) => (
                 <Chip key={g.id} selected={groupId === String(g.id)} onClick={() => props.setGroupId(String(g.id))}>
@@ -212,8 +212,8 @@ export function DestinationPanel(props: DestinationProps) {
                 className="mt-3 flex min-h-11 w-full items-center gap-3 rounded-xl bg-macaw px-4 py-2.5 text-left font-bold text-eel transition-[transform,background-color] duration-200 hover:bg-[#b09eff] active:scale-[0.99]"
               >
                 <Search className="size-5 shrink-0" strokeWidth={3} />
-                <span className="flex-1">Buscar entre tus {groups.length} grupos</span>
-                <span className="hidden text-xs font-semibold text-eel/70 sm:inline">por nombre, autor o texto</span>
+                <span className="flex-1">Buscar entre tus {groups.length} carpetas</span>
+                <span className="hidden text-xs font-semibold text-eel/70 sm:inline">por nombre, responsable o texto</span>
               </button>
             )}
             <GroupPicker open={picking} onClose={() => setPicking(false)} groups={groups} selectedId={groupId} onSelect={props.setGroupId} />
@@ -226,12 +226,12 @@ export function DestinationPanel(props: DestinationProps) {
           ) : (
             selectedGroup && (
               <p className="text-sm text-wolf">
-                Las páginas se añadirán al final de «{selectedGroup.title}» ({selectedGroup.scanCount ?? 0} ya guardadas).
+                Las hojas se añadirán al final de «{selectedGroup.title}» ({selectedGroup.scanCount ?? 0} ya guardadas).
               </p>
             )
           )}
 
-          {/* Hojas detectadas en el escáner y avance del libro */}
+          {/* Hojas detectadas en el escáner y avance de la carpeta */}
           <div className="flex items-start gap-3 rounded-2xl bg-feather-light p-3 sm:p-4">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-feather-light text-feather-dark">
               <Files className="size-6" />
@@ -246,9 +246,9 @@ export function DestinationPanel(props: DestinationProps) {
                 </div>
               )}
               {totalPages ? (
-                <LessonProgress value={(afterSave / totalPages) * 100} label={`${afterSave} de ${totalPages} páginas`} />
+                <LabeledProgress value={(afterSave / totalPages) * 100} label={`${afterSave} de ${totalPages} hojas`} />
               ) : (
-                sheets.count > 0 && !isNew && <div className="text-sm text-wolf">Al guardar el grupo tendrá {afterSave} páginas.</div>
+                sheets.count > 0 && !isNew && <div className="text-sm text-wolf">Al guardar, la carpeta tendrá {afterSave} hojas.</div>
               )}
             </div>
           </div>
@@ -358,5 +358,5 @@ export function EnginePanel(props: EngineProps) {
   );
 }
 
-export const destinationIcon = (mode: Mode) => (mode === 'group' ? <BookOpen /> : <FileText />);
+export const destinationIcon = (mode: Mode) => (mode === 'group' ? <FolderOpen /> : <FileText />);
 export const engineIcon = (engine: Engine) => ENGINE_ICON[engine].icon;

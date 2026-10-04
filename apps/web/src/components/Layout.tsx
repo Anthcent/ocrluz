@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { BookOpen, BookOpenText, FileScan, FileText, House, Library, LogOut, Plus, ScanLine, Search, Settings, Type } from 'lucide-react';
+import { Archive, Eye, FileScan, FileText, Folder, House, LogOut, Plus, ScanLine, Search, Settings, Type } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
@@ -8,20 +8,20 @@ import { GROUP_STYLES } from '../lib/constants';
 import { formatNumber } from '../lib/format';
 import type { Stats } from '../lib/types';
 import { useScanSession } from '../scan/ScanSession';
-import { LessonProgress } from './ActionTile';
-import { BookCover } from './BookCover';
+import { LabeledProgress } from './ActionTile';
+import { FolderCard } from './FolderCard';
 import { Logo } from './Logo';
 
 const NAV = [
   { to: '/', label: 'Inicio', icon: House, end: true },
   { to: '/escanear', label: 'Escanear', icon: ScanLine },
-  { to: '/catalogo', label: 'Catálogo', icon: Library },
+  { to: '/archivo', label: 'Archivo', icon: Archive },
   { to: '/documentos', label: 'Documentos', icon: FileScan },
   { to: '/buscar', label: 'Buscar', icon: Search },
   { to: '/ajustes', label: 'Ajustes', icon: Settings },
 ];
 
-const MOBILE_NAV = ['/', '/catalogo', '/escanear', '/documentos', '/buscar'].map((to) => NAV.find((item) => item.to === to)!);
+const MOBILE_NAV = ['/', '/archivo', '/escanear', '/documentos', '/buscar'].map((to) => NAV.find((item) => item.to === to)!);
 
 function useStats() {
   const location = useLocation();
@@ -108,7 +108,7 @@ export function Layout() {
               </Link>
             )}
             <StatChip icon={<FileText className="size-4" />} value={formatNumber(stats?.totals.scans ?? 0)} label="Escaneos" />
-            <StatChip icon={<BookOpen className="size-4" />} value={formatNumber(stats?.totals.groups ?? 0)} label="Libros" from="sm" />
+            <StatChip icon={<Folder className="size-4" />} value={formatNumber(stats?.totals.groups ?? 0)} label="Carpetas" from="sm" />
             <StatChip icon={<Type className="size-4" />} value={formatNumber(stats?.totals.words ?? 0)} label="Palabras" from="md" />
             <NavLink to="/ajustes" aria-label="Ajustes" className={({ isActive }) => clsx('flex size-10 items-center justify-center rounded-full transition lg:hidden', isActive ? 'bg-eel text-white' : 'bg-white text-wolf')}>
               <Settings className="size-5" strokeWidth={2} />
@@ -140,40 +140,40 @@ export function Layout() {
 }
 
 function ContinueCard({ stats }: { stats: Stats | null }) {
-  const book = stats?.recentGroups[0];
+  const folder = stats?.recentGroups[0];
   if (!stats) return null;
-  if (!book) {
+  if (!folder) {
     return (
       <div className="mt-5 rounded-2xl bg-white/8 p-4">
-        <div className="font-semibold text-white">Empieza tu biblioteca</div>
-        <p className="mt-1 text-sm text-white/55">Escanea páginas y mantenlas juntas.</p>
+        <div className="font-semibold text-white">Empieza tu archivo</div>
+        <p className="mt-1 text-sm text-white/55">Escanea documentos y guárdalos en carpetas.</p>
         <Link to="/escanear" className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-macaw py-2 text-xs font-semibold text-eel transition active:scale-[0.98]">
-          <ScanLine className="size-4" /> Escanear libro
+          <ScanLine className="size-4" /> Escanear documentos
         </Link>
       </div>
     );
   }
-  const style = GROUP_STYLES[book.color];
+  const style = GROUP_STYLES[folder.color];
   return (
     <div className="mt-5 rounded-2xl bg-white p-3 text-eel" data-testid="continue-card">
-      <div className="mb-2 text-xs font-semibold text-wolf">Seguir leyendo</div>
-      <Link to={`/catalogo/grupo/${book.id}`} className="flex items-center gap-3">
-        <BookCover group={book} size="sm" />
+      <div className="mb-2 text-xs font-semibold text-wolf">Carpeta reciente</div>
+      <Link to={`/archivo/carpeta/${folder.id}`} className="flex items-center gap-3">
+        <FolderCard group={folder} size="sm" />
         <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 text-sm font-bold leading-tight">{book.title}</div>
-          {book.author && <div className={clsx('truncate text-xs font-semibold', style.text)}>{book.author}</div>}
+          <div className="line-clamp-2 text-sm font-bold leading-tight">{folder.title}</div>
+          {folder.author && <div className={clsx('truncate text-xs font-semibold', style.text)}>Responsable: {folder.author}</div>}
           <div className="mt-1 text-xs text-wolf">
-            {book.scanCount} {book.scanCount === 1 ? 'hoja' : 'hojas'}
-            {book.totalPages ? ` de ${book.totalPages}` : ''}
+            {folder.scanCount} {folder.scanCount === 1 ? 'hoja' : 'hojas'}
+            {folder.totalPages ? ` de ${folder.totalPages}` : ''}
           </div>
         </div>
       </Link>
-      {book.totalPages ? <div className="mt-3"><LessonProgress value={(book.scanCount / book.totalPages) * 100} /></div> : null}
+      {folder.totalPages ? <div className="mt-3"><LabeledProgress value={(folder.scanCount / folder.totalPages) * 100} /></div> : null}
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <Link to={`/catalogo/grupo/${book.id}?libro=1`} className="flex items-center justify-center gap-1 rounded-full bg-eel py-2 text-xs font-semibold text-white transition active:scale-[0.98]">
-          <BookOpenText className="size-3.5" /> Leer
+        <Link to={`/archivo/carpeta/${folder.id}?visor=1`} className="flex items-center justify-center gap-1 rounded-full bg-eel py-2 text-xs font-semibold text-white transition active:scale-[0.98]">
+          <Eye className="size-3.5" /> Ver
         </Link>
-        <Link to={`/escanear?grupo=${book.id}`} className="flex items-center justify-center gap-1 rounded-full bg-polar py-2 text-xs font-semibold text-eel transition active:scale-[0.98]">
+        <Link to={`/escanear?grupo=${folder.id}`} className="flex items-center justify-center gap-1 rounded-full bg-polar py-2 text-xs font-semibold text-eel transition active:scale-[0.98]">
           <Plus className="size-3.5" /> Hojas
         </Link>
       </div>

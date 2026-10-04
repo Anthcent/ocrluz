@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import { ArrowLeft, Camera, ChevronDown, ImagePlus, PencilLine, Plus, ScanText, Sparkles, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LessonProgress } from '../components/ActionTile';
+import { LabeledProgress } from '../components/ActionTile';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Badge, Button, Card, Input, ProgressBar, Segmented, Toggle } from '../components/ui';
 import { DocFieldsForm, TemplateModal, useDocTemplates } from '../documents/shared';
@@ -157,7 +157,7 @@ export function DocumentNewPage() {
           <ArrowLeft className="size-6" />
         </button>
         <div className="min-w-0 flex-1">
-          <LessonProgress value={((STEP_INDEX[step] + 1) / 4) * 100} label={`Paso ${Math.min(STEP_INDEX[step] + 1, 3)} de 3`} />
+          <LabeledProgress value={((STEP_INDEX[step] + 1) / 4) * 100} label={`Paso ${Math.min(STEP_INDEX[step] + 1, 3)} de 3`} />
         </div>
       </div>
 
@@ -310,7 +310,7 @@ export function DocumentNewPage() {
                 Texto leído
                 <ChevronDown className="size-5 transition group-open:rotate-180" />
               </summary>
-              <pre className="max-h-80 overflow-auto whitespace-pre-wrap px-4 pb-4 font-serif text-sm leading-relaxed text-wolf">{text}</pre>
+              <pre className="max-h-80 overflow-auto whitespace-pre-wrap px-4 pb-4 text-sm leading-relaxed text-wolf">{text}</pre>
             </details>
           )}
           <div className="sticky bottom-24 z-10 rounded-full bg-white/90 p-1.5 shadow-[0_12px_32px_rgba(30,27,48,0.16)] lg:bottom-4">

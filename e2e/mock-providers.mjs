@@ -11,27 +11,27 @@ const DELAY_MS = Number(process.env.MOCK_DELAY_MS ?? 600);
 const wait = () => new Promise((r) => setTimeout(r, DELAY_MS));
 
 const ANALYSIS = {
-  resumen: 'Un hidalgo de la Mancha pierde el juicio leyendo libros de caballerías.',
-  temas: ['Caballería', 'Locura'],
-  ideasClave: ['La lectura transforma al protagonista', 'La realidad se confunde con la ficción'],
-  entidades: [{ nombre: 'La Mancha', tipo: 'lugar' }],
-  vocabulario: [{ termino: 'Hidalgo', definicion: 'Noble de rango menor.' }],
-  preguntas: ['¿Dónde vive el protagonista?'],
-  tono: 'Satírico',
+  resumen: 'Acta de reunión de docentes para revisar las calificaciones del lapso.',
+  tipoDocumento: 'Acta',
+  datosClave: [
+    { dato: 'Número de acta', valor: '12' },
+    { dato: 'Fecha', valor: '2025-03-15' },
+  ],
+  entidades: [{ nombre: 'Unidad Educativa San José', tipo: 'institución' }],
+  observaciones: ['No se menciona la firma del director.'],
   calidadOcr: 'Buena, sin errores evidentes.',
 };
 
-/** Con una API key de OCR.space que empieza por «doc-factura» se devuelve el texto de una factura. */
-const INVOICE = [
-  'Librería El Quijote S.A.C.',
-  'RUC: 20512345678',
-  'FACTURA ELECTRÓNICA',
-  'F001-000123',
-  'Fecha de emisión: 15/03/2025',
-  'Cliente: María Pérez',
-  'Subtotal: S/ 1,000.00',
-  'IGV 18%: S/ 180.00',
-  'Importe total: S/ 1,180.00',
+/** Con una API key de OCR.space que empieza por «doc-informe» se devuelve el texto de un informe médico. */
+const MEDICAL_REPORT = [
+  'Clínica Santa Ana',
+  'INFORME MÉDICO',
+  'Paciente: María Pérez',
+  'Cédula: V-12345678',
+  'Fecha: 15/03/2025',
+  'Médico tratante: Dr. Luis Gómez',
+  'Diagnóstico: Faringitis aguda',
+  'Indicaciones: Reposo por tres días',
 ].join('\r\n');
 
 let counter = 0;
@@ -57,13 +57,13 @@ http
       if (req.headers.apikey === INVALID) return send(res, 403, 'The API key is invalid');
       await wait();
       counter++;
-      if (String(req.headers.apikey).startsWith('doc-factura')) {
-        return send(res, 200, { IsErroredOnProcessing: false, OCRExitCode: 1, ParsedResults: [{ ParsedText: INVOICE }] });
+      if (String(req.headers.apikey).startsWith('doc-informe')) {
+        return send(res, 200, { IsErroredOnProcessing: false, OCRExitCode: 1, ParsedResults: [{ ParsedText: MEDICAL_REPORT }] });
       }
       return send(res, 200, {
         IsErroredOnProcessing: false,
         OCRExitCode: 1,
-        ParsedResults: [{ ParsedText: `Texto de OCR.space número ${counter}: en un lugar de la Mancha vivía un hidalgo.\r\n\r\n— ${counter + 10} —\r\n` }],
+        ParsedResults: [{ ParsedText: `Texto de OCR.space número ${counter}: acta de reunión de docentes del plantel.\r\n\r\n— ${counter + 10} —\r\n` }],
       });
     }
 
@@ -84,7 +84,7 @@ http
       } else if (schema) text = JSON.stringify(ANALYSIS);
       else if (parts.some((p) => p.inline_data)) {
         counter++;
-        text = `Texto de Gemini número ${counter}: el caballero de la triste figura.`;
+        text = `Texto de Gemini número ${counter}: ficha de inscripción del estudiante.`;
       }
       return send(res, 200, { candidates: [{ content: { parts: [{ text }] }, finishReason: 'STOP' }] });
     }

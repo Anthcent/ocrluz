@@ -12,6 +12,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
+  forbidOnly: !!process.env.CI,
   workers: 1,
   reporter: [['list']],
   globalSetup: './e2e/global-setup.ts',

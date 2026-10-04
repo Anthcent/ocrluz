@@ -1,10 +1,10 @@
 import clsx from 'clsx';
-import { ArrowLeft, BookOpen, BookOpenText, BrainCircuit, ChevronLeft, ChevronRight, Clock, Copy, Download, FileText, LayoutGrid, Pencil, Plus, Trash2, Type } from 'lucide-react';
+import { AlignLeft, ArrowLeft, BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, Eye, FileCheck, FileText, FolderOpen, LayoutGrid, Pencil, Plus, Trash2, Type } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type React from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { BookViewer } from '../components/BookViewer';
 import { AnalysisPanel } from '../components/AnalysisPanel';
+import { DocumentViewer } from '../components/DocumentViewer';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Reader } from '../components/Reader';
 import { Button, EmptyState, PageLoader, Segmented } from '../components/ui';
@@ -14,7 +14,7 @@ import { copyText, downloadText, formatDate, formatNumber } from '../lib/format'
 import type { Group, Scan } from '../lib/types';
 import { GroupFormModal } from './Catalog';
 
-type Tab = 'paginas' | 'leer' | 'analisis';
+type Tab = 'paginas' | 'texto' | 'analisis';
 
 export function GroupDetailPage() {
   const id = Number(useParams().id);
@@ -25,10 +25,10 @@ export function GroupDetailPage() {
   const [tab, setTab] = useState<Tab>('paginas');
   const [editing, setEditing] = useState(false);
   const [notFound, setNotFound] = useState(false);
-  // «?libro=1» abre directamente el modo libro (desde el catálogo).
+  // «?visor=1» abre directamente el visor (desde el archivo).
   const [params, setParams] = useSearchParams();
-  const bookOpen = params.get('libro') === '1';
-  const setBookOpen = (open: boolean) => setParams(open ? { libro: '1' } : {}, { replace: true });
+  const viewerOpen = params.get('visor') === '1';
+  const setViewerOpen = (open: boolean) => setParams(open ? { visor: '1' } : {}, { replace: true });
 
   useEffect(() => {
     api.groups
@@ -42,7 +42,7 @@ export function GroupDetailPage() {
 
   if (notFound) {
     return (
-      <EmptyState icon={<BookOpen className="size-10" />} title="Grupo no encontrado" action={<Link to="/catalogo"><Button>Volver al catálogo</Button></Link>} />
+      <EmptyState icon={<FolderOpen className="size-10" />} title="Carpeta no encontrada" action={<Link to="/archivo"><Button>Volver al archivo</Button></Link>} />
     );
   }
   if (!group) return <PageLoader />;
@@ -50,7 +50,6 @@ export function GroupDetailPage() {
   const style = GROUP_STYLES[group.color];
   const fullText = scans.map((s) => s.text).join('\n\n');
   const words = scans.reduce((sum, s) => sum + s.wordCount, 0);
-  const minutes = Math.max(1, Math.round(words / 200));
   const addPages = () => navigate(`/escanear?grupo=${group.id}`);
 
   const move = async (index: number, delta: number) => {
@@ -67,12 +66,12 @@ export function GroupDetailPage() {
   };
 
   const removeScan = async (scan: Scan) => {
-    const ok = await confirm({ title: '¿Borrar esta página?', message: `Se borrará «${scan.title}» y su texto.`, confirmLabel: 'Borrar', danger: true });
+    const ok = await confirm({ title: '¿Borrar esta hoja?', message: `Se borrará «${scan.title}» y su texto.`, confirmLabel: 'Borrar', danger: true });
     if (!ok) return;
     try {
       await api.scans.remove(scan.id);
       setScans((s) => s.filter((x) => x.id !== scan.id));
-      toast('Página borrada');
+      toast('Hoja borrada');
     } catch (err) {
       toast(errorMessage(err), 'error');
     }
@@ -80,16 +79,16 @@ export function GroupDetailPage() {
 
   const removeGroup = async () => {
     const ok = await confirm({
-      title: '¿Borrar el grupo?',
-      message: `Se borrarán «${group.title}» y sus ${scans.length} páginas. Esta acción no se puede deshacer.`,
+      title: '¿Borrar la carpeta?',
+      message: `Se borrarán «${group.title}» y sus ${scans.length} hojas. Esta acción no se puede deshacer.`,
       confirmLabel: 'Borrar todo',
       danger: true,
     });
     if (!ok) return;
     try {
       await api.groups.remove(group.id);
-      toast('Grupo borrado');
-      navigate('/catalogo', { replace: true });
+      toast('Carpeta borrada');
+      navigate('/archivo', { replace: true });
     } catch (err) {
       toast(errorMessage(err), 'error');
     }
@@ -113,15 +112,15 @@ export function GroupDetailPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <Link to="/catalogo" className="inline-flex min-h-10 items-center gap-2 rounded-full px-2 text-sm font-bold text-wolf transition-colors hover:text-eel">
-        <ArrowLeft className="size-4" /> Catálogo
+      <Link to="/archivo" className="inline-flex min-h-10 items-center gap-2 rounded-full px-2 text-sm font-bold text-wolf transition-colors hover:text-eel">
+        <ArrowLeft className="size-4" /> Archivo
       </Link>
 
       <section className="overflow-hidden rounded-3xl bg-white p-5 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:p-8">
         <div className="grid gap-7 sm:grid-cols-[160px_minmax(0,1fr)] sm:items-center lg:grid-cols-[190px_minmax(0,1fr)]">
-          <div className={clsx('mx-auto flex aspect-[4/5] w-36 flex-col rounded-2xl p-5 sm:mx-0 sm:w-40 lg:w-48', style.soft)} aria-hidden="true">
-            <BookOpen className={clsx('size-8', style.text)} />
-            <span className="mt-auto line-clamp-4 text-xl font-bold leading-tight text-eel">{group.title}</span>
+          <div className={clsx('mx-auto flex aspect-[4/3] w-36 flex-col rounded-2xl p-5 sm:mx-0 sm:w-40 lg:w-48', style.soft)} aria-hidden="true">
+            <FolderOpen className={clsx('size-8', style.text)} />
+            <span className="mt-auto line-clamp-3 text-xl font-bold leading-tight text-eel">{group.title}</span>
             {group.author && <span className="mt-2 line-clamp-2 text-sm font-semibold text-wolf">{group.author}</span>}
           </div>
           <div className="min-w-0">
@@ -134,19 +133,24 @@ export function GroupDetailPage() {
               <span className="rounded-full bg-polar px-3 py-1.5 text-xs font-bold text-wolf">Creado el {formatDate(group.createdAt)}</span>
             </div>
             <h1 className="mt-4 text-3xl font-bold leading-[1.1] text-eel sm:text-4xl">{group.title}</h1>
-            {group.author && <p className="mt-1 text-lg font-semibold text-wolf">de {group.author}</p>}
+            {group.author && <p className="mt-1 text-lg font-semibold text-wolf">Responsable: {group.author}</p>}
             {group.description && <p className="mt-3 max-w-[70ch] text-wolf">{group.description}</p>}
 
             <div className="mt-6 grid grid-cols-3 divide-x divide-swan sm:max-w-lg">
-              <Stat icon={<FileText />} tone="text-macaw bg-macaw-light" value={scans.length} label={scans.length === 1 ? 'página' : 'páginas'} />
+              <Stat icon={<FileText />} tone="text-macaw bg-macaw-light" value={scans.length} label={scans.length === 1 ? 'hoja' : 'hojas'} />
               <Stat icon={<Type />} tone="text-bee-dark bg-bee-light" value={formatNumber(words)} label="palabras" />
-              <Stat icon={<Clock />} tone="text-feather-dark bg-feather-light" value={minutes} label="min lectura" />
+              <Stat
+                icon={<FileCheck />}
+                tone="text-feather-dark bg-feather-light"
+                value={group.totalPages ? Math.max(0, group.totalPages - scans.length) : '—'}
+                label="por escanear"
+              />
             </div>
 
             {progress !== null && (
               <div className="mt-5 rounded-2xl bg-feather-light p-4 sm:max-w-lg">
                 <div className="mb-2 flex items-center justify-between gap-4 text-sm font-bold">
-                  <span>{progress >= 100 ? '🎉 ¡Libro completo!' : 'Avance del libro'}</span>
+                  <span>{progress >= 100 ? '✅ Carpeta completa' : 'Avance de la carpeta'}</span>
                   <span className="text-wolf">
                     {scans.length} / {group.totalPages}
                   </span>
@@ -157,12 +161,12 @@ export function GroupDetailPage() {
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
               {scans.length > 0 && (
-                <Button size="lg" icon={<BookOpenText className="size-6" />} onClick={() => setBookOpen(true)}>
-                  Abrir en modo libro
+                <Button size="lg" icon={<Eye className="size-6" />} onClick={() => setViewerOpen(true)}>
+                  Abrir visor
                 </Button>
               )}
               <Button size="lg" variant="secondary" icon={<Plus className="size-6" />} onClick={addPages}>
-                Añadir páginas
+                Añadir hojas
               </Button>
             </div>
           </div>
@@ -172,8 +176,8 @@ export function GroupDetailPage() {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:hidden">
         <QuickAction icon={<Download />} label="Exportar .txt" disabled={!scans.length} onClick={exportTxt} />
         <QuickAction icon={<Copy />} label="Copiar" disabled={!scans.length} onClick={copyAll} tone="violet" />
-        <QuickAction icon={<Pencil />} label="Editar grupo" onClick={() => setEditing(true)} />
-        <QuickAction icon={<Trash2 />} label="Borrar grupo" onClick={removeGroup} tone="danger" />
+        <QuickAction icon={<Pencil />} label="Editar carpeta" onClick={() => setEditing(true)} />
+        <QuickAction icon={<Trash2 />} label="Borrar carpeta" onClick={removeGroup} tone="danger" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
@@ -182,8 +186,8 @@ export function GroupDetailPage() {
             value={tab}
             onChange={setTab}
             options={[
-              { value: 'paginas', label: 'Páginas', icon: <LayoutGrid className="size-5" /> },
-              { value: 'leer', label: 'Leer', icon: <BookOpenText className="size-5" /> },
+              { value: 'paginas', label: 'Hojas', icon: <LayoutGrid className="size-5" /> },
+              { value: 'texto', label: 'Texto', icon: <AlignLeft className="size-5" /> },
               { value: 'analisis', label: 'Análisis', icon: <BrainCircuit className="size-5" /> },
             ]}
           />
@@ -192,14 +196,14 @@ export function GroupDetailPage() {
             (scans.length === 0 ? (
               <EmptyState
                 icon={<FileText className="size-10" />}
-                title="Este grupo está vacío"
+                title="Esta carpeta está vacía"
                 action={
                   <Button icon={<Plus className="size-5" />} onClick={addPages}>
-                    Añadir páginas
+                    Añadir hojas
                   </Button>
                 }
               >
-                Escanea las hojas de tu libro y aparecerán aquí en orden.
+                Escanea las hojas del documento y aparecerán aquí en orden.
               </EmptyState>
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))]">
@@ -218,7 +222,7 @@ export function GroupDetailPage() {
                         )}
                       </div>
                       <div className="truncate text-sm font-bold text-eel group-hover:text-macaw-dark">{s.title}</div>
-                      <p className="mt-2 line-clamp-5 rounded-xl bg-polar p-3 font-serif text-xs leading-relaxed text-wolf">{s.text || 'Sin texto'}</p>
+                      <p className="mt-2 line-clamp-5 rounded-xl bg-polar p-3 text-xs leading-relaxed text-wolf">{s.text || 'Sin texto'}</p>
                     </Link>
                     <div className="flex items-center justify-between border-t border-swan px-2 py-1.5">
                       <button
@@ -232,7 +236,7 @@ export function GroupDetailPage() {
                       </button>
                       <button
                         type="button"
-                        aria-label="Borrar página"
+                        aria-label="Borrar hoja"
                         onClick={() => removeScan(s)}
                         className="flex size-10 items-center justify-center rounded-xl text-hare transition-colors hover:bg-cardinal-light hover:text-cardinal-dark"
                       >
@@ -258,12 +262,12 @@ export function GroupDetailPage() {
                   <span className="flex size-11 items-center justify-center rounded-full bg-eel text-white">
                     <Plus className="size-7" />
                   </span>
-                  <span className="text-sm font-bold">Añadir páginas</span>
+                  <span className="text-sm font-bold">Añadir hojas</span>
                 </button>
               </div>
             ))}
 
-          {tab === 'leer' && <Reader pages={scans} />}
+          {tab === 'texto' && <Reader pages={scans} />}
 
           {tab === 'analisis' && <AnalysisPanel targetType="group" targetId={group.id} text={fullText} />}
         </div>
@@ -274,16 +278,16 @@ export function GroupDetailPage() {
             <div className="border-b border-swan px-4 py-3 text-sm font-bold text-wolf">Opciones</div>
             <OptionRow icon={<Download />} tone="bg-macaw-light text-macaw-dark" label="Exportar .txt" name="Exportar .txt" disabled={!scans.length} onClick={exportTxt} />
             <OptionRow icon={<Copy />} tone="bg-beetle-light text-beetle-dark" label="Copiar todo el texto" name="Copiar" disabled={!scans.length} onClick={copyAll} />
-            <OptionRow icon={<BrainCircuit />} tone="bg-bee-light text-bee-dark" label="Analizar el libro" name="Analizar" disabled={!scans.length} onClick={openAnalysis} />
-            <OptionRow icon={<Pencil />} tone="bg-fox-light text-fox-dark" label="Editar datos del libro" name="Editar grupo" onClick={() => setEditing(true)} />
-            <OptionRow icon={<Trash2 />} tone="bg-cardinal-light text-cardinal-dark" label="Borrar grupo" name="Borrar grupo" danger onClick={removeGroup} />
+            <OptionRow icon={<BrainCircuit />} tone="bg-bee-light text-bee-dark" label="Analizar la carpeta" name="Analizar" disabled={!scans.length} onClick={openAnalysis} />
+            <OptionRow icon={<Pencil />} tone="bg-fox-light text-fox-dark" label="Editar datos de la carpeta" name="Editar carpeta" onClick={() => setEditing(true)} />
+            <OptionRow icon={<Trash2 />} tone="bg-cardinal-light text-cardinal-dark" label="Borrar carpeta" name="Borrar carpeta" danger onClick={removeGroup} />
           </div>
           <div className="rounded-2xl bg-white p-4 shadow-[0_1px_2px_rgba(41,36,68,0.06)]">
             <div className="mb-3 text-sm font-bold text-wolf">Detalles</div>
             <dl className="space-y-2.5 text-sm">
-              <Detail label="Autor" value={group.author || '—'} />
+              <Detail label="Responsable" value={group.author || '—'} />
               <Detail label="Categoría" value={group.category ? `${categoryEmoji(group.category)} ${group.category}` : '—'} />
-              <Detail label="Páginas del libro" value={group.totalPages ? String(group.totalPages) : '—'} />
+              <Detail label="Hojas esperadas" value={group.totalPages ? String(group.totalPages) : '—'} />
               <Detail label="Hojas escaneadas" value={String(scans.length)} />
               <Detail label="Palabras" value={formatNumber(words)} />
               <Detail label="Actualizado" value={formatDate(group.updatedAt)} />
@@ -292,7 +296,7 @@ export function GroupDetailPage() {
         </aside>
       </div>
 
-      {bookOpen && scans.length > 0 && <BookViewer group={group} pages={scans} onClose={() => setBookOpen(false)} />}
+      {viewerOpen && scans.length > 0 && <DocumentViewer group={group} pages={scans} onClose={() => setViewerOpen(false)} />}
 
       <GroupFormModal open={editing} onClose={() => setEditing(false)} group={group} onSaved={setGroup} />
     </div>
@@ -368,7 +372,7 @@ function QuickAction({ icon, label, onClick, disabled, tone = 'neutral' }: { ico
 function QuietProgress({ value }: { value: number }) {
   const percent = Math.max(0, Math.min(100, value));
   return (
-    <div className="h-2.5 overflow-hidden rounded-full bg-white" role="progressbar" aria-label="Avance del libro" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
+    <div className="h-2.5 overflow-hidden rounded-full bg-white" role="progressbar" aria-label="Avance de la carpeta" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
       <div className="h-full rounded-full bg-feather-dark transition-[width] duration-300" style={{ width: `${percent}%` }} />
     </div>
   );

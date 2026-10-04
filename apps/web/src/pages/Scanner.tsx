@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { BookOpen, Camera, ImagePlus, Save, ScanLine, Trash2, Upload } from 'lucide-react';
+import { Camera, Files, ImagePlus, Save, ScanLine, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
@@ -49,7 +49,7 @@ export function ScannerPage() {
   const systemCamera = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Al llegar desde «Añadir páginas» de un grupo, ese grupo queda seleccionado.
+    // Al llegar desde «Añadir hojas» de una carpeta, esa carpeta queda seleccionada.
     if (preselected) {
       setMode('group');
       setGroupId(preselected);
@@ -129,7 +129,7 @@ export function ScannerPage() {
   const save = async () => {
     if (mode === 'group' && groupId === NEW_GROUP && !newGroup.title.trim()) {
       setOpenStep(1);
-      toast('Ponle un nombre al grupo', 'error');
+      toast('Ponle un nombre a la carpeta', 'error');
       return;
     }
     const skipped = pages.length - done.length;
@@ -160,7 +160,7 @@ export function ScannerPage() {
       // Tras guardar el texto, las imágenes se descartan.
       session.removeMany(done.map((p) => p.id));
       toast(`¡Guardado! +${items.length} ${items.length === 1 ? 'escaneo' : 'páginas'}`);
-      navigate(result.groupId ? `/catalogo/grupo/${result.groupId}` : '/catalogo?vista=individuales');
+      navigate(result.groupId ? `/archivo/carpeta/${result.groupId}` : '/archivo?vista=individuales');
     } catch (err) {
       toast(errorMessage(err), 'error');
     } finally {
@@ -301,11 +301,11 @@ export function ScannerPage() {
         {pages.length === 0 ? (
           <Card className="flex flex-col items-center px-6 py-12 text-center sm:py-16">
             <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-macaw-light text-macaw-dark">
-              <BookOpen className="size-10" />
+              <Files className="size-10" />
             </div>
             <h3 className="text-xl font-bold">Aún no hay páginas</h3>
             <p className="mt-2 max-w-sm text-wolf">
-              Toma una foto por página. Puedes tomar varias seguidas: aparecerán aquí numeradas y podrás revisarlas antes de guardar.
+              Toma una foto por hoja del documento. Puedes tomar varias seguidas: aparecerán aquí numeradas y podrás revisarlas antes de guardar.
             </p>
           </Card>
         ) : (

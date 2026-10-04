@@ -138,7 +138,7 @@ export function DocumentDetailPage() {
             Texto leído
             <ChevronDown className="size-5 transition group-open:rotate-180" />
           </summary>
-          <pre className="max-h-96 overflow-auto whitespace-pre-wrap px-4 pb-4 font-serif text-sm leading-relaxed text-wolf">{doc.text}</pre>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap px-4 pb-4 text-sm leading-relaxed text-wolf">{doc.text}</pre>
         </details>
       )}
 

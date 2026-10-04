@@ -1,14 +1,14 @@
 import clsx from 'clsx';
 import {
   ArrowRight,
-  BookOpenCheck,
+  Archive,
   Camera,
   CheckCircle2,
   Clock3,
   FilePlus2,
   Files,
   Gauge,
-  Library,
+  FolderOpen,
   Search,
   Settings2,
   SlidersHorizontal,
@@ -67,7 +67,6 @@ export function HomePage() {
   const groupedScans = Math.max(0, stats.totals.scans - stats.totals.individual);
   const organizedPercent = stats.totals.scans ? Math.round((groupedScans / stats.totals.scans) * 100) : 0;
   const individualPercent = stats.totals.scans ? 100 - organizedPercent : 0;
-  const readingMinutes = stats.totals.words ? Math.max(1, Math.ceil(stats.totals.words / 200)) : 0;
   const firstName = user?.name.split(' ')[0] ?? '';
 
   return (
@@ -104,7 +103,7 @@ export function HomePage() {
                   id="dashboard-search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Título, palabra o frase"
+                  placeholder="Título, nombre, cédula o frase"
                   className="min-w-0 flex-1 bg-transparent py-2 text-sm font-medium text-eel outline-none placeholder:text-wolf"
                 />
                 <button type="submit" aria-label="Buscar en el archivo" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-eel text-white transition active:scale-95">
@@ -150,21 +149,21 @@ export function HomePage() {
         <section className="rounded-[24px] bg-white p-5 sm:p-6">
           <div>
             <h2 className="text-xl font-bold">Panorama del archivo</h2>
-            <p className="mt-1 text-sm text-wolf">Tamaño, lectura estimada y nivel de organización.</p>
+            <p className="mt-1 text-sm text-wolf">Tamaño y nivel de organización.</p>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-[minmax(10rem,0.72fr)_minmax(0,1.28fr)]">
             <div className="flex min-h-40 flex-col justify-between rounded-2xl bg-macaw-light p-4">
               <span className="flex size-10 items-center justify-center rounded-xl bg-white text-macaw-dark">
-                <BookOpenCheck className="size-5" />
+                <FolderOpen className="size-5" />
               </span>
               <div className="mt-6">
-                <div className="text-3xl font-bold tabular-nums text-eel">{formatNumber(readingMinutes)}</div>
-                <div className="mt-1 text-sm font-semibold text-[#493d77]">minutos de lectura estimada</div>
+                <div className="text-3xl font-bold tabular-nums text-eel">{formatNumber(stats.totals.groups)}</div>
+                <div className="mt-1 text-sm font-semibold text-[#493d77]">{stats.totals.groups === 1 ? 'carpeta en tu archivo' : 'carpetas en tu archivo'}</div>
               </div>
             </div>
             <div className="flex flex-col justify-center gap-5 rounded-2xl bg-polar p-4">
-              <DistributionRow label="Páginas dentro de libros" value={groupedScans} percent={organizedPercent} tone="mint" />
-              <DistributionRow label="Páginas sueltas" value={stats.totals.individual} percent={individualPercent} tone="amber" />
+              <DistributionRow label="Hojas en carpetas" value={groupedScans} percent={organizedPercent} tone="mint" />
+              <DistributionRow label="Documentos sueltos" value={stats.totals.individual} percent={individualPercent} tone="amber" />
               {!stats.totals.scans && (
                 <p className="text-sm text-wolf">Cuando guardes páginas, aquí verás cómo está distribuido tu archivo.</p>
               )}
@@ -187,7 +186,7 @@ export function HomePage() {
           </div>
           <div className="divide-y divide-swan">
             <QuickAction to="/buscar" icon={<Search />} title="Buscar contenido" detail="Texto, nombres y categorías" tone="violet" />
-            <QuickAction to="/catalogo" icon={<Library />} title="Abrir biblioteca" detail={`${stats.totals.groups} grupos y ${stats.totals.individual} sueltos`} tone="mint" />
+            <QuickAction to="/archivo" icon={<Archive />} title="Abrir archivo" detail={`${stats.totals.groups} carpetas y ${stats.totals.individual} sueltos`} tone="mint" />
             <QuickAction to="/documentos" icon={<Files />} title="Revisar documentos" detail="Formularios y exportaciones" tone="amber" />
             <QuickAction to="/ajustes" icon={<Settings2 />} title="Configurar OCR" detail={`${ENGINE_LABEL[settings.defaultEngine]} como predeterminado`} tone="gray" />
           </div>
@@ -197,23 +196,23 @@ export function HomePage() {
       <section>
         <div className="mb-3 flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold">Biblioteca reciente</h2>
-            <p className="mt-1 text-sm text-wolf">Continúa desde última colección actualizada.</p>
+            <h2 className="text-xl font-bold">Carpetas recientes</h2>
+            <p className="mt-1 text-sm text-wolf">Continúa desde la última carpeta actualizada.</p>
           </div>
-          <Link to="/catalogo" className="inline-flex min-h-10 items-center gap-1 text-sm font-bold text-eel hover:text-macaw-dark">
-            Ver biblioteca <ArrowRight className="size-4" />
+          <Link to="/archivo" className="inline-flex min-h-10 items-center gap-1 text-sm font-bold text-eel hover:text-macaw-dark">
+            Ver archivo <ArrowRight className="size-4" />
           </Link>
         </div>
 
         {stats.recentGroups.length ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             {stats.recentGroups.map((group, index) => {
               const style = GROUP_STYLES[group.color];
               const progress = group.totalPages ? Math.min(100, (group.scanCount / group.totalPages) * 100) : null;
               return (
                 <Link
                   key={group.id}
-                  to={`/catalogo/grupo/${group.id}`}
+                  to={`/archivo/carpeta/${group.id}`}
                   className={clsx(
                     'group flex min-h-44 flex-col justify-between rounded-2xl p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(41,36,68,0.10)] active:translate-y-0',
                     index === 0 ? 'bg-eel text-white' : style.soft,
@@ -221,17 +220,17 @@ export function HomePage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <span className={clsx('flex size-10 items-center justify-center rounded-xl', index === 0 ? 'bg-white/10 text-macaw' : 'bg-white/75 text-eel')}>
-                      <BookOpenCheck className="size-5" />
+                      <FolderOpen className="size-5" />
                     </span>
                     <ArrowRight className={clsx('size-4 transition-transform group-hover:translate-x-0.5', index === 0 ? 'text-white/55' : 'text-wolf')} />
                   </div>
                   <div className="mt-5 min-w-0">
                     <h3 className="truncate font-bold">{group.title}</h3>
                     <p className={clsx('mt-1 truncate text-sm', index === 0 ? 'text-white/55' : 'text-wolf')}>
-                      {group.author || group.category || 'Sin detalles'}
+                      {group.author ? `Responsable: ${group.author}` : group.category || 'Sin detalles'}
                     </p>
                     <div className="mt-4 flex items-center justify-between gap-2 text-xs font-semibold">
-                      <span>{group.scanCount} {group.scanCount === 1 ? 'página' : 'páginas'}</span>
+                      <span>{group.scanCount} {group.scanCount === 1 ? 'hoja' : 'hojas'}</span>
                       <span className={index === 0 ? 'text-white/45' : 'text-wolf'}>{timeAgo(group.updatedAt)}</span>
                     </div>
                     {progress !== null && (
@@ -246,12 +245,12 @@ export function HomePage() {
           </div>
         ) : (
           <div className="flex flex-col items-start gap-4 rounded-[24px] bg-white p-6 sm:flex-row sm:items-center">
-            <span className="flex size-12 items-center justify-center rounded-xl bg-feather-light text-feather-dark"><BookOpenCheck className="size-6" /></span>
+            <span className="flex size-12 items-center justify-center rounded-xl bg-feather-light text-feather-dark"><FolderOpen className="size-6" /></span>
             <div className="flex-1">
-              <h3 className="font-bold">Tu biblioteca está vacía</h3>
-              <p className="mt-1 text-sm text-wolf">Crea tu primer grupo para mantener páginas relacionadas en orden.</p>
+              <h3 className="font-bold">Tu archivo está vacío</h3>
+              <p className="mt-1 text-sm text-wolf">Crea tu primera carpeta para mantener juntas las hojas de un mismo documento o trámite.</p>
             </div>
-            <Link to="/escanear" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-eel px-4 text-sm font-bold text-white"><Camera className="size-4" /> Escanear libro</Link>
+            <Link to="/escanear" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-eel px-4 text-sm font-bold text-white"><Camera className="size-4" /> Escanear documentos</Link>
           </div>
         )}
       </section>

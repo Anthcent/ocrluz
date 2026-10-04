@@ -81,7 +81,7 @@ export function AnalysisPanel({ targetType, targetId, text }: Props) {
         </div>
         <div>
           <h2 className="text-lg font-bold text-eel">Análisis del texto</h2>
-          <p className="text-sm leading-relaxed text-wolf">Resumen, temas y estadísticas de lo escaneado.</p>
+          <p className="text-sm leading-relaxed text-wolf">Resumen, datos clave y estadísticas del documento.</p>
         </div>
       </div>
 
@@ -162,15 +162,51 @@ function Stat({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+
+function Chips({ items, tone = 'polar' }: { items: { key: string; main: ReactNode; sub?: ReactNode }[]; tone?: 'polar' | 'bee' }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((i) => (
+        <span key={i.key} className={clsx('rounded-lg px-3 py-1.5 text-sm font-semibold', tone === 'bee' ? 'bg-bee-light text-bee-dark' : 'bg-polar')}>
+          {i.main} {i.sub && <span className="font-semibold text-hare">{i.sub}</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function OfflineView({ a }: { a: OfflineAnalysis }) {
+  const datos = a.datos;
+  const detected: { title: string; items: string[] }[] = datos
+    ? [
+        { title: 'Fechas', items: datos.fechas },
+        { title: 'Cédulas', items: datos.cedulas },
+        { title: 'Correos', items: datos.correos },
+        { title: 'Teléfonos', items: datos.telefonos },
+      ].filter((d) => d.items.length > 0)
+    : [];
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:col-span-2">
         <Stat label="Palabras" value={formatNumber(a.palabras)} />
         <Stat label="Oraciones" value={formatNumber(a.oraciones)} />
-        <Stat label="Min. de lectura" value={a.minutosLectura} />
+        <Stat label="Párrafos" value={formatNumber(a.parrafos)} />
         <Stat label="Diversidad léxica" value={`${a.diversidadLexica}%`} />
       </div>
+      {detected.length > 0 && (
+        <Section title="Datos detectados" wide>
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {detected.map((d) => (
+              <div key={d.title} className="space-y-1.5">
+                <dt className="text-xs font-bold text-wolf">{d.title}</dt>
+                <dd>
+                  <Chips items={d.items.map((v) => ({ key: v, main: v }))} />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Section>
+      )}
       <Section title="Legibilidad">
         <div className="flex items-center gap-3">
           <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-swan/80">
@@ -182,18 +218,12 @@ function OfflineView({ a }: { a: OfflineAnalysis }) {
         </div>
         <p className="text-xs text-wolf">Índice Fernández Huerta · {a.promedioPalabrasPorOracion} palabras por oración en promedio.</p>
       </Section>
-      {a.palabrasClave.length > 0 && (
+      {a.palabrasClave?.length > 0 && (
         <Section title="Palabras clave">
-          <div className="flex flex-wrap gap-2">
-            {a.palabrasClave.map((k) => (
-              <span key={k.palabra} className="rounded-lg bg-bee-light px-3 py-1.5 text-sm font-semibold text-bee-dark">
-                {k.palabra} <span className="text-hare">×{k.veces}</span>
-              </span>
-            ))}
-          </div>
+          <Chips tone="bee" items={a.palabrasClave.map((k) => ({ key: k.palabra, main: k.palabra, sub: `×${k.veces}` }))} />
         </Section>
       )}
-      {a.resumen.length > 0 && (
+      {a.resumen?.length > 0 && (
         <Section title="Frases principales" wide>
           <ul className="space-y-2">
             {a.resumen.map((s, i) => (
@@ -229,38 +259,53 @@ function OnlineView({ a }: { a: OnlineAnalysisContent }) {
           <Badge tone="yellow">El texto era muy largo: se analizó la primera parte</Badge>
         </div>
       )}
-      <Section title="Resumen" wide>
-        <p className="whitespace-pre-line leading-relaxed">{a.resumen}</p>
-      </Section>
-      {a.temas?.length > 0 && (
-        <Section title="Temas">
-          <div className="flex flex-wrap gap-2">
-            {a.temas.map((t) => (
-              <Badge key={t} tone="blue" className="normal-case">
-                {t}
-              </Badge>
-            ))}
-          </div>
+      {a.tipoDocumento && (
+        <Section title="Tipo de documento" wide>
+          <Badge tone="blue" className="normal-case">
+            {a.tipoDocumento}
+          </Badge>
         </Section>
       )}
-      {a.ideasClave?.length > 0 && (
-        <Section title="Ideas clave">
+      {a.resumen && (
+        <Section title="Resumen" wide>
+          <p className="whitespace-pre-line leading-relaxed">{a.resumen}</p>
+        </Section>
+      )}
+      {!!a.datosClave?.length && (
+        <Section title="Datos clave" wide>
+          <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {a.datosClave.map((d, i) => (
+              <div key={`${d.dato}-${i}`} className="rounded-xl bg-polar p-3">
+                <dt className="text-xs font-bold text-wolf">{d.dato}</dt>
+                <dd className="font-semibold text-eel">{d.valor}</dd>
+              </div>
+            ))}
+          </dl>
+        </Section>
+      )}
+      {!!a.entidades?.length && (
+        <Section title="Personas, instituciones y fechas">
+          <Chips items={a.entidades.map((e, i) => ({ key: `${e.nombre}-${e.tipo}-${i}`, main: e.nombre, sub: `· ${e.tipo}` }))} />
+        </Section>
+      )}
+      {!!a.observaciones?.length && (
+        <Section title="Observaciones">
+          <List items={a.observaciones} />
+        </Section>
+      )}
+      {/* Campos de análisis guardados con el formato anterior */}
+      {!!a.temas?.length && (
+        <Section title="Temas">
+          <Chips items={a.temas.map((t) => ({ key: t, main: t }))} />
+        </Section>
+      )}
+      {!!a.ideasClave?.length && (
+        <Section title="Puntos clave">
           <List items={a.ideasClave} />
         </Section>
       )}
-      {a.entidades?.length > 0 && (
-        <Section title="Personas, lugares y obras">
-          <div className="flex flex-wrap gap-2">
-            {a.entidades.map((e) => (
-              <span key={`${e.nombre}-${e.tipo}`} className="rounded-lg bg-polar px-3 py-1.5 text-sm font-semibold">
-                {e.nombre} <span className="font-semibold text-hare">· {e.tipo}</span>
-              </span>
-            ))}
-          </div>
-        </Section>
-      )}
-      {a.vocabulario?.length > 0 && (
-        <Section title="Vocabulario" wide>
+      {!!a.vocabulario?.length && (
+        <Section title="Términos" wide>
           <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {a.vocabulario.map((v) => (
               <div key={v.termino} className="rounded-xl bg-polar p-3">
@@ -271,17 +316,21 @@ function OnlineView({ a }: { a: OnlineAnalysisContent }) {
           </dl>
         </Section>
       )}
-      {a.preguntas?.length > 0 && (
-        <Section title="Preguntas de repaso">
+      {!!a.preguntas?.length && (
+        <Section title="Preguntas">
           <List items={a.preguntas} />
         </Section>
       )}
-      <Section title="Tono">
-        <p>{a.tono}</p>
-      </Section>
-      <Section title="Calidad del OCR">
-        <p className="text-sm text-wolf">{a.calidadOcr}</p>
-      </Section>
+      {a.tono && (
+        <Section title="Tono">
+          <p>{a.tono}</p>
+        </Section>
+      )}
+      {a.calidadOcr && (
+        <Section title="Calidad del OCR">
+          <p className="text-sm text-wolf">{a.calidadOcr}</p>
+        </Section>
+      )}
     </div>
   );
 }

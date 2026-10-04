@@ -34,18 +34,20 @@ export const GROUP_STYLES: Record<GroupColor, { bg: string; soft: string; text: 
 
 export const GROUP_COLORS = Object.keys(GROUP_STYLES) as GroupColor[];
 
-/** Categorías sugeridas para los grupos; el usuario puede escribir otras. */
+/** Categorías sugeridas para las carpetas (tipos de documento habituales); el usuario puede escribir otras. */
 export const CATEGORY_PRESETS: { name: string; emoji: string }[] = [
-  { name: 'Novela', emoji: '📖' },
-  { name: 'Cuento', emoji: '🧚' },
-  { name: 'Poesía', emoji: '🪶' },
-  { name: 'Ensayo', emoji: '💭' },
-  { name: 'Historia', emoji: '🏛️' },
-  { name: 'Ciencia', emoji: '🔬' },
-  { name: 'Texto escolar', emoji: '🎒' },
-  { name: 'Apuntes', emoji: '📝' },
-  { name: 'Documento', emoji: '📄' },
-  { name: 'Receta', emoji: '🍳' },
+  { name: 'Resumen final', emoji: '📊' },
+  { name: 'Revisión', emoji: '🔍' },
+  { name: 'Materia vista', emoji: '📚' },
+  { name: 'Acta', emoji: '📜' },
+  { name: 'Cédula de estudiante', emoji: '🪪' },
+  { name: 'Cédula de representante', emoji: '🪪' },
+  { name: 'Informe médico', emoji: '🏥' },
+  { name: 'Sábana de notas', emoji: '📋' },
+  { name: 'Partida de nacimiento', emoji: '👶' },
+  { name: 'Ficha de inscripción', emoji: '🗂️' },
+  { name: 'Nómina', emoji: '👥' },
+  { name: 'Otro', emoji: '📄' },
 ];
 
 export const categoryEmoji = (name: string) => CATEGORY_PRESETS.find((c) => c.name === name)?.emoji ?? '🏷️';

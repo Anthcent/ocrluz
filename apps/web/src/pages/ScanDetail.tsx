@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { ArrowLeft, BookOpen, BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, FileText, FolderInput, Pencil, Save, Trash2, X } from 'lucide-react';
+import { ArrowLeft, BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, FileText, Folder, FolderInput, Pencil, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { AnalysisPanel } from '../components/AnalysisPanel';
@@ -27,7 +27,7 @@ export function ScanDetailPage() {
   const [saving, setSaving] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
-  /** Páginas del mismo grupo, para navegar a la anterior / siguiente. */
+  /** Hojas de la misma carpeta, para navegar a la anterior / siguiente. */
   const loadSiblings = (groupId: number | null) => {
     if (!groupId) return setSiblings([]);
     api.groups.get(groupId).then((r) => setSiblings(r.scans.map((s) => s.id))).catch(() => setSiblings([]));
@@ -49,7 +49,7 @@ export function ScanDetailPage() {
   }, [id]);
 
   if (notFound) {
-    return <EmptyState icon={<FileText className="size-10" />} title="Escaneo no encontrado" action={<Link to="/catalogo"><Button>Volver al catálogo</Button></Link>} />;
+    return <EmptyState icon={<FileText className="size-10" />} title="Escaneo no encontrado" action={<Link to="/archivo"><Button>Volver al archivo</Button></Link>} />;
   }
   if (!scan) return <PageLoader />;
 
@@ -86,7 +86,7 @@ export function ScanDetailPage() {
       const { scan: updated } = await api.scans.update(scan.id, { groupId });
       setScan(updated);
       loadSiblings(updated.groupId);
-      toast(updated.groupTitle ? `Movido a «${updated.groupTitle}»` : 'Ahora es un escaneo individual');
+      toast(updated.groupTitle ? `Movido a «${updated.groupTitle}»` : 'Ahora es un documento suelto');
     } catch (err) {
       toast(errorMessage(err), 'error');
     }
@@ -97,7 +97,7 @@ export function ScanDetailPage() {
     try {
       await api.scans.remove(scan.id);
       toast('Escaneo borrado');
-      navigate(scan.groupId ? `/catalogo/grupo/${scan.groupId}` : '/catalogo?vista=individuales', { replace: true });
+      navigate(scan.groupId ? `/archivo/carpeta/${scan.groupId}` : '/archivo?vista=individuales', { replace: true });
     } catch (err) {
       toast(errorMessage(err), 'error');
     }
@@ -129,14 +129,14 @@ export function ScanDetailPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      {/* Navegación: volver y, si es parte de un grupo, avance por sus páginas */}
+      {/* Navegación: volver y, si es parte de una carpeta, avance por sus hojas */}
       <div className="flex flex-wrap items-center gap-3">
         <Link
-          to={scan.groupId ? `/catalogo/grupo/${scan.groupId}` : '/catalogo?vista=individuales'}
+          to={scan.groupId ? `/archivo/carpeta/${scan.groupId}` : '/archivo?vista=individuales'}
           className="inline-flex min-h-10 min-w-0 items-center gap-2 rounded-full px-2 text-sm font-bold text-wolf transition-colors hover:text-eel"
         >
           <ArrowLeft className="size-4 shrink-0" />
-          <span className="max-w-48 truncate">{scan.groupTitle ?? 'Individuales'}</span>
+          <span className="max-w-48 truncate">{scan.groupTitle ?? 'Sueltos'}</span>
         </Link>
         {siblings.length > 1 && (
           <div className="flex min-w-60 flex-1 items-center gap-2">
@@ -155,7 +155,7 @@ export function ScanDetailPage() {
 
       <header className="flex items-start gap-4 rounded-3xl bg-white p-5 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:p-6">
         <div className={clsx('flex size-12 shrink-0 items-center justify-center rounded-xl sm:size-14', group ? `${GROUP_STYLES[group.color].soft} ${GROUP_STYLES[group.color].text}` : 'bg-beetle-light text-beetle-dark')}>
-          {group ? <BookOpen className="size-7" /> : <FileText className="size-7" />}
+          {group ? <Folder className="size-7" /> : <FileText className="size-7" />}
         </div>
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold leading-tight text-eel sm:text-3xl">{scan.title}</h1>
@@ -186,7 +186,7 @@ export function ScanDetailPage() {
             (editing ? (
               <Card className="space-y-3 p-4 sm:p-6">
                 <Input value={title} onChange={(e) => setTitle(e.target.value)} className="text-lg font-black" aria-label="Título" maxLength={200} />
-                <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={18} aria-label="Texto escaneado" className="font-serif text-base" autoFocus />
+                <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={18} aria-label="Texto escaneado" className="text-base" autoFocus />
                 <div className="grid grid-cols-2 gap-3 sm:flex sm:justify-end">
                   <Button variant="plain" icon={<X className="size-5" />} onClick={cancelEdit}>
                     Cancelar
@@ -198,8 +198,8 @@ export function ScanDetailPage() {
               </Card>
             ) : (
               <Card className="relative min-h-[55vh] px-5 py-7 sm:px-10 sm:py-12">
-                <article className="mx-auto max-w-2xl whitespace-pre-line font-serif text-lg leading-relaxed sm:text-xl" aria-label="Texto escaneado">
-                  {scan.text || <span className="font-sans text-hare">Este escaneo no tiene texto.</span>}
+                <article className="mx-auto max-w-[72ch] whitespace-pre-line text-base leading-relaxed sm:text-lg" aria-label="Texto escaneado">
+                  {scan.text || <span className="text-hare">Este escaneo no tiene texto.</span>}
                 </article>
               </Card>
             ))}
@@ -211,7 +211,7 @@ export function ScanDetailPage() {
         <aside className="hidden space-y-4 lg:sticky lg:top-24 lg:block">
           <div className="space-y-2">{actions(false)}</div>
           <Card className="divide-y divide-swan px-4 text-sm">
-            <Detail label="Grupo" value={scan.groupTitle ?? 'Individual'} />
+            <Detail label="Carpeta" value={scan.groupTitle ?? 'Suelto'} />
             <Detail label="Motor" value={ENGINE_LABEL[scan.engine]} />
             <Detail label="Idioma" value={language} />
             <Detail label="Palabras" value={formatNumber(scan.wordCount)} />
@@ -223,14 +223,14 @@ export function ScanDetailPage() {
       <Modal open={moving} onClose={() => setMoving(false)} title="Mover a…">
         <div className="space-y-2">
           <MoveOption selected={scan.groupId === null} onClick={() => moveTo(null)} icon={<FileText className="size-5" />} iconClass="bg-beetle-light text-beetle-dark">
-            Ninguno (individual)
+            Ninguna (documento suelto)
           </MoveOption>
           {groups.map((g) => (
             <MoveOption
               key={g.id}
               selected={scan.groupId === g.id}
               onClick={() => moveTo(g.id)}
-              icon={<BookOpen className="size-5" />}
+              icon={<Folder className="size-5" />}
               iconClass={`${GROUP_STYLES[g.color].soft} ${GROUP_STYLES[g.color].text}`}
             >
               {g.title}

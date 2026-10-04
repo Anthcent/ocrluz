@@ -39,10 +39,10 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
             <span className="h-2 w-9 rounded-full bg-feather" />
             <span className="h-2 w-6 rounded-full bg-bee" />
           </div>
-          <p className="text-3xl font-bold leading-tight tracking-[-0.025em]">Tus páginas, ordenadas y listas para encontrar.</p>
-          <p className="mt-4 max-w-sm text-base leading-relaxed text-white/65">Un espacio tranquilo para convertir documentos fotografiados en texto útil.</p>
+          <p className="text-3xl font-bold leading-tight tracking-[-0.025em]">Tus documentos, ordenados y listos para encontrar.</p>
+          <p className="mt-4 max-w-sm text-base leading-relaxed text-white/65">Actas, cédulas, partidas de nacimiento, informes y más: fotografíalos y conviértelos en texto útil.</p>
         </div>
-        <p className="text-sm text-white/45">Captura. Organiza. Lee.</p>
+        <p className="text-sm text-white/45">Captura. Organiza. Encuentra.</p>
       </section>
 
       <main className="flex items-center justify-center px-4 py-10 sm:px-8 lg:py-16">
@@ -53,7 +53,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           <div className="mb-8">
             <h1 className="text-3xl font-bold leading-tight text-eel">{isLogin ? '¡Hola de nuevo!' : 'Crea tu cuenta'}</h1>
             <p className="mt-2 max-w-sm text-wolf">
-              {isLogin ? 'Sigue convirtiendo tus libros en texto.' : 'Escanea libros con tu cámara en segundos.'}
+              {isLogin ? 'Sigue digitalizando tus documentos.' : 'Escanea documentos con tu cámara en segundos.'}
             </p>
           </div>
 

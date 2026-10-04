@@ -70,7 +70,7 @@ test.describe('Escáner', () => {
     await expect(cards(page)).toHaveCount(2);
 
     await page.getByRole('button', { name: 'Guardar (2)' }).click();
-    await expect(page).toHaveURL(/\/catalogo\?vista=individuales$/);
+    await expect(page).toHaveURL(/\/archivo\?vista=individuales$/);
     await expectToast(page, '¡Guardado! +2');
     await expect(page.getByText('Texto corregido a mano').first()).toBeVisible();
     await expect(page.getByText(/Texto de OCR.space número \d+/).first()).toBeVisible();
@@ -119,7 +119,7 @@ test.describe('Escáner', () => {
     await expect(page.getByText('Aún no hay páginas')).toBeVisible();
   });
 
-  test('escaneo automático con Gemini y guardado en un grupo nuevo', async ({ page }) => {
+  test('escaneo automático con Gemini y guardado en una carpeta nueva', async ({ page }) => {
     await signUp(page);
     await updateSettings(page, { geminiKey: 'clave-de-prueba-123' });
     await page.goto('/escanear');
@@ -131,126 +131,126 @@ test.describe('Escáner', () => {
     await expect(page.getByText('2 de 2 escaneadas')).toBeVisible();
 
     await openStep(page, '¿Dónde se guarda?');
-    await page.getByRole('button', { name: /^Libro o grupo/ }).click();
-    await page.getByLabel('Nombre del grupo').fill('El Quijote');
-    await page.getByLabel('Autor').fill('Miguel de Cervantes');
-    await page.getByRole('group', { name: 'Categoría' }).getByRole('button', { name: /Novela/ }).click();
-    await page.getByLabel('Páginas del libro').fill('100');
+    await page.getByRole('button', { name: /^Carpeta/ }).click();
+    await page.getByLabel('Nombre de la carpeta').fill('Fichas de inscripción 3er año');
+    await page.getByLabel('Responsable').fill('Secretaría');
+    await page.getByRole('group', { name: 'Categoría' }).getByRole('button', { name: /Ficha de inscripción/ }).click();
+    await page.getByLabel('Hojas esperadas').fill('100');
     await page.getByRole('button', { name: 'Color blue' }).click();
     await expect(page.getByTestId('sheet-count')).toHaveText('2 hojas detectadas');
-    await expect(page.getByText('2 de 100 páginas')).toBeVisible();
+    await expect(page.getByText('2 de 100 hojas')).toBeVisible();
     await page.getByRole('button', { name: 'Guardar (2)' }).click();
 
-    await expect(page).toHaveURL(/\/catalogo\/grupo\/\d+$/);
-    await expect(page.getByRole('heading', { name: 'El Quijote' })).toBeVisible();
-    await expect(page.getByText('de Miguel de Cervantes')).toBeVisible();
+    await expect(page).toHaveURL(/\/archivo\/carpeta\/\d+$/);
+    await expect(page.getByRole('heading', { name: 'Fichas de inscripción 3er año' })).toBeVisible();
+    await expect(page.getByRole('main').getByText('Responsable: Secretaría')).toBeVisible();
     await expect(page.getByText('2 / 100')).toBeVisible();
-    await expect(page.getByText('Página 1')).toBeVisible();
-    await expect(page.getByText('Página 2')).toBeVisible();
+    await expect(page.getByText('Hoja 1', { exact: true })).toBeVisible();
+    await expect(page.getByText('Hoja 2', { exact: true })).toBeVisible();
   });
 
-  test('pide nombre para el grupo nuevo antes de guardar', async ({ page }) => {
+  test('pide nombre para la carpeta nueva antes de guardar', async ({ page }) => {
     await signUp(page);
     await page.goto('/escanear');
     await openStep(page, '¿Dónde se guarda?');
-    await page.getByRole('button', { name: /^Libro o grupo/ }).click();
+    await page.getByRole('button', { name: /^Carpeta/ }).click();
     await upload(page, [pageImage(1)]);
     await page.getByRole('button', { name: 'Ver página 1' }).click();
     await page.getByLabel('Texto de la página').fill('Escrito a mano');
     await page.getByRole('button', { name: 'Guardar texto' }).click();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Guardar (1)' }).click();
-    await expectToast(page, 'Ponle un nombre al grupo');
-    await expect(page.getByLabel('Nombre del grupo')).toBeVisible();
+    await expectToast(page, 'Ponle un nombre a la carpeta');
+    await expect(page.getByLabel('Nombre de la carpeta')).toBeVisible();
   });
 
-  test('añadir páginas a un grupo existente desde su ficha', async ({ page }) => {
+  test('añadir hojas a una carpeta existente desde su ficha', async ({ page }) => {
     await signUp(page);
     await updateSettings(page, { ocrspaceKey: 'clave-de-prueba-123' });
     const res = await page.request.post('/api/scans', {
       headers: { 'X-Requested-With': 'ocryon' },
-      data: { newGroup: { title: 'Mi libro' }, items: [{ text: 'Primera página guardada', engine: 'manual' }] },
+      data: { newGroup: { title: 'Mis actas' }, items: [{ text: 'Primera hoja guardada', engine: 'manual' }] },
     });
     const { groupId } = await res.json();
 
-    await page.goto(`/catalogo/grupo/${groupId}`);
-    await page.getByRole('button', { name: 'Añadir páginas' }).first().click();
+    await page.goto(`/archivo/carpeta/${groupId}`);
+    await page.getByRole('button', { name: 'Añadir hojas' }).first().click();
     await expect(page).toHaveURL(new RegExp(`/escanear\\?grupo=${groupId}$`));
-    await expect(page.getByText('Grupo: Mi libro').or(page.getByText('se añadirán al final de «Mi libro»')).locator('visible=true').first()).toBeVisible();
+    await expect(page.getByText('Carpeta: Mis actas').or(page.getByText('se añadirán al final de «Mis actas»')).locator('visible=true').first()).toBeVisible();
     await openStep(page, '¿Dónde se guarda?');
-    await expect(page.getByRole('group', { name: 'Grupo' }).getByRole('button', { name: 'Mi libro' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('group', { name: 'Carpeta' }).getByRole('button', { name: 'Mis actas' })).toHaveAttribute('aria-pressed', 'true');
 
     await upload(page, [pageImage(3)]);
     await page.getByRole('button', { name: 'Escanear (1)' }).click();
     await expect(page.getByText('1 de 1 escaneadas')).toBeVisible();
     await page.getByRole('button', { name: 'Guardar (1)' }).click();
 
-    await expect(page).toHaveURL(new RegExp(`/catalogo/grupo/${groupId}$`));
+    await expect(page).toHaveURL(new RegExp(`/archivo/carpeta/${groupId}$`));
     await expect(page.locator('a[href^="/escaneo/"]')).toHaveCount(2);
-    await expect(page.getByRole('link', { name: /Página 2/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Hoja 2/ })).toBeVisible();
   });
 
-  test('buscar el grupo entre muchos: por autor, categoría o una frase del texto', async ({ page }) => {
+  test('buscar la carpeta entre muchas: por responsable, categoría o una frase del texto', async ({ page }) => {
     await signUp(page);
-    const books = [
-      { title: 'Cien años de soledad', author: 'Gabriel García Márquez', category: 'Novela', text: 'Muchos años después, frente al pelotón de fusilamiento.' },
-      { title: 'Apuntes de química', author: '', category: 'Estudio', text: 'La tabla periódica ordena los elementos.' },
-      { title: 'Recetario de la abuela', author: '', category: '', description: 'Postres de Navidad', text: 'Mezclar la harina con los huevos.' },
-      { title: 'Libro sin nombre claro', author: '', category: '', text: 'Y vio treinta o cuarenta molinos de viento que había en aquel campo.' },
-      { title: 'Historia antigua', author: 'Tito Livio', category: 'Historia', text: 'La fundación de Roma.' },
-      { title: 'Poemas', author: 'Pablo Neruda', category: 'Poesía', text: 'Puedo escribir los versos más tristes esta noche.' },
+    const folders = [
+      { title: 'Actas del consejo', author: 'Coordinación Pedagógica', category: 'Acta', text: 'Se reunió el consejo de docentes del plantel.' },
+      { title: 'Archivo de química', author: '', category: 'Materia vista', text: 'La tabla periódica ordena los elementos.' },
+      { title: 'Expedientes médicos', author: '', category: '', description: 'Reposos de diciembre', text: 'Paciente con faringitis aguda.' },
+      { title: 'Carpeta sin nombre claro', author: '', category: '', text: 'Constancia de inscripción del estudiante en el lapso escolar.' },
+      { title: 'Nóminas antiguas', author: 'Secretaría', category: 'Nómina', text: 'Listado de estudiantes del año escolar.' },
+      { title: 'Partidas', author: 'Registro', category: 'Partida de nacimiento', text: 'Nació en la ciudad de Valencia.' },
     ];
-    for (const b of books) {
+    for (const b of folders) {
       await createScans(page, { newGroup: { title: b.title, author: b.author, category: b.category, description: b.description ?? '' }, items: [{ text: b.text, engine: 'manual' }] });
     }
     await page.goto('/escanear');
     await openStep(page, '¿Dónde se guarda?');
-    await page.getByRole('button', { name: /^Libro o grupo/ }).click();
+    await page.getByRole('button', { name: /^Carpeta/ }).click();
     // Solo los recientes como accesos rápidos; el resto, con el buscador.
-    await expect(page.getByRole('group', { name: 'Grupo' }).getByRole('button')).toHaveCount(5);
+    await expect(page.getByRole('group', { name: 'Carpeta' }).getByRole('button')).toHaveCount(5);
 
-    await page.getByRole('button', { name: 'Buscar entre tus 6 grupos' }).click();
-    const picker = page.getByRole('dialog', { name: 'Buscar grupo' });
-    const results = picker.getByRole('list', { name: 'Grupos encontrados' }).getByRole('listitem');
+    await page.getByRole('button', { name: 'Buscar entre tus 6 carpetas' }).click();
+    const picker = page.getByRole('dialog', { name: 'Buscar carpeta' });
+    const results = picker.getByRole('list', { name: 'Carpetas encontradas' }).getByRole('listitem');
     await expect(results).toHaveCount(6);
 
-    // Sin tildes y por autor.
-    await picker.getByLabel('Texto a buscar').fill('garcia marquez');
+    // Sin tildes y por responsable.
+    await picker.getByLabel('Texto a buscar').fill('coordinacion pedagogica');
     await expect(results).toHaveCount(1);
-    await expect(results.first()).toContainText('Cien años de soledad');
-    await expect(results.first().getByText('Autor', { exact: true })).toBeVisible();
+    await expect(results.first()).toContainText('Actas del consejo');
+    await expect(results.first().getByText('Responsable', { exact: true })).toBeVisible();
 
     // Por la descripción.
-    await picker.getByLabel('Texto a buscar').fill('navidad');
+    await picker.getByLabel('Texto a buscar').fill('diciembre');
     await expect(results).toHaveCount(1);
-    await expect(results.first()).toContainText('Recetario de la abuela');
+    await expect(results.first()).toContainText('Expedientes médicos');
 
     // No recuerdo el nombre, pero sí una frase del texto.
-    await picker.getByLabel('Texto a buscar').fill('molinos de viento');
+    await picker.getByLabel('Texto a buscar').fill('constancia de inscripcion');
     await expect(results).toHaveCount(1);
-    await expect(results.first()).toContainText('Libro sin nombre claro');
+    await expect(results.first()).toContainText('Carpeta sin nombre claro');
     await expect(results.first()).toContainText('1 coincidencia en el texto');
     await picker.getByRole('button', { name: /Buscar también dentro del texto/ }).click();
-    await expect(picker.getByText('Ningún grupo coincide')).toBeVisible();
+    await expect(picker.getByText('Ninguna carpeta coincide')).toBeVisible();
     await picker.getByRole('button', { name: /Buscar también dentro del texto/ }).click();
     await expect(results).toHaveCount(1);
 
     // Filtro por categoría y orden alfabético.
     await picker.getByRole('button', { name: 'Quitar filtros' }).click();
-    await picker.getByRole('group', { name: 'Filtrar grupos' }).getByRole('button', { name: /Historia/ }).click();
+    await picker.getByRole('group', { name: 'Filtrar carpetas' }).getByRole('button', { name: /Nómina/ }).click();
     await expect(results).toHaveCount(1);
-    await expect(picker.getByTestId('group-picker-count')).toHaveText('1 de 6 grupos');
-    await picker.getByRole('group', { name: 'Filtrar grupos' }).getByRole('button', { name: /Historia/ }).click();
+    await expect(picker.getByTestId('group-picker-count')).toHaveText('1 de 6 carpetas');
+    await picker.getByRole('group', { name: 'Filtrar carpetas' }).getByRole('button', { name: /Nómina/ }).click();
     await picker.getByRole('button', { name: 'A–Z' }).click();
-    await expect(results.first()).toContainText('Apuntes de química');
+    await expect(results.first()).toContainText('Actas del consejo');
 
     // Al elegirlo aparece seleccionado entre los accesos rápidos aunque no fuera reciente.
-    await picker.getByLabel('Texto a buscar').fill('molinos');
-    await picker.getByRole('button', { name: 'Elegir Libro sin nombre claro' }).click();
+    await picker.getByLabel('Texto a buscar').fill('constancia');
+    await picker.getByRole('button', { name: 'Elegir Carpeta sin nombre claro' }).click();
     await expect(picker).toBeHidden();
-    await expect(page.getByRole('group', { name: 'Grupo' }).getByRole('button', { name: 'Libro sin nombre claro' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByText('se añadirán al final de «Libro sin nombre claro»')).toBeVisible();
-    await expect(page.getByRole('group', { name: 'Grupo' }).getByRole('button')).toHaveCount(5);
+    await expect(page.getByRole('group', { name: 'Carpeta' }).getByRole('button', { name: 'Carpeta sin nombre claro' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByText('se añadirán al final de «Carpeta sin nombre claro»')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Carpeta' }).getByRole('button')).toHaveCount(5);
   });
 
   test('una API key inválida detiene la cola y muestra el error', async ({ page }) => {
@@ -316,6 +316,6 @@ test.describe('Escáner', () => {
     await upload(page, [pageImage(1)]);
     await page.getByRole('button', { name: 'Escanear (1)' }).click();
     await expect(cards(page).nth(0).getByText('Listo')).toBeVisible({ timeout: 90_000 });
-    await expect(cards(page).nth(0)).toContainText('lugar de la Mancha');
+    await expect(cards(page).nth(0)).toContainText('reunieron los docentes');
   });
 });
