@@ -1,24 +1,42 @@
 import clsx from 'clsx';
-import { BookOpen, ChevronRight, FileScan, FileText, BarChart3, ScanLine, Type, WifiOff } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import {
+  ArrowRight,
+  BookOpenCheck,
+  Camera,
+  CheckCircle2,
+  Clock3,
+  FilePlus2,
+  Files,
+  Gauge,
+  Library,
+  Search,
+  Settings2,
+  SlidersHorizontal,
+  TextSearch,
+  WifiOff,
+} from 'lucide-react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
-import { Button, Card, EmptyState, PageLoader } from '../components/ui';
+import { Button, EmptyState, PageLoader } from '../components/ui';
 import { api } from '../lib/api';
 import { GROUP_STYLES } from '../lib/constants';
 import { formatNumber, timeAgo } from '../lib/format';
-import type { Stats } from '../lib/types';
+import type { Engine, Stats } from '../lib/types';
 import { useScanSession } from '../scan/ScanSession';
 import { useSettings } from '../settings/SettingsContext';
 
-const WEEKDAY = new Intl.DateTimeFormat('es', { weekday: 'narrow', timeZone: 'UTC' });
+const WEEKDAY = new Intl.DateTimeFormat('es', { weekday: 'short', timeZone: 'UTC' });
+const ENGINE_LABEL: Record<Engine, string> = { ocrspace: 'OCR.space', gemini: 'Gemini', tesseract: 'Tesseract local' };
 
 export function HomePage() {
   const { user } = useAuth();
   const { settings, loaded } = useSettings();
   const { pages } = useScanSession();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<Stats | null>(null);
   const [failed, setFailed] = useState(false);
+  const [query, setQuery] = useState('');
 
   const load = () => {
     setFailed(false);
@@ -28,6 +46,12 @@ export function HomePage() {
       .catch(() => setFailed(true));
   };
   useEffect(load, []);
+
+  const search = (event: FormEvent) => {
+    event.preventDefault();
+    const value = query.trim();
+    if (value) navigate(`/buscar?q=${encodeURIComponent(value)}`);
+  };
 
   if (failed) {
     return (
@@ -39,151 +63,254 @@ export function HomePage() {
   if (!stats) return <PageLoader />;
 
   const noKeys = loaded && !settings.keys.ocrspace.configured && !settings.keys.gemini.configured;
-  const maxDay = Math.max(1, ...stats.week.map((d) => d.count));
-  const weekTotal = stats.week.reduce((sum, d) => sum + d.count, 0);
+  const weekTotal = stats.week.reduce((sum, day) => sum + day.count, 0);
+  const maxDay = Math.max(1, ...stats.week.map((day) => day.count));
+  const averageWords = stats.totals.scans ? Math.round(stats.totals.words / stats.totals.scans) : 0;
+  const groupedScans = Math.max(0, stats.totals.scans - stats.totals.individual);
+  const firstName = user?.name.split(' ')[0] ?? '';
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-5 rounded-[24px] bg-white p-5 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:flex-row sm:items-end sm:justify-between sm:p-7">
-        <div>
-          <span className="mb-4 inline-flex rounded-full bg-feather-light px-3 py-1 text-sm font-semibold text-feather-dark">Espacio de lectura</span>
-          <h1 className="text-3xl font-bold leading-tight text-eel sm:text-4xl">¡Hola, {user?.name.split(' ')[0]}!</h1>
-          <p className="mt-2 font-medium text-wolf">{stats.totals.scans === 0 ? 'Escanea tu primera página para empezar.' : '¿Qué vamos a escanear hoy?'}</p>
-        </div>
-        <Link to="/escanear" className="inline-flex items-center gap-2 self-start rounded-full bg-eel px-5 py-3 text-sm font-bold text-white transition hover:bg-[#303138] active:scale-[0.98] sm:self-auto">
-          <ScanLine className="size-5" /> Empezar a escanear
-        </Link>
-      </div>
-
-      {pages.length > 0 && (
-        <Link to="/escanear">
-          <Card interactive className="flex items-center gap-4 bg-macaw-light p-4">
-            <ScanLine className="size-8 text-macaw-dark" />
-            <div className="flex-1">
-              <div className="font-bold text-macaw-dark">Tienes {pages.length} {pages.length === 1 ? 'página' : 'páginas'} sin guardar</div>
-              <div className="text-sm text-wolf">Continúa donde lo dejaste.</div>
-            </div>
-            <ChevronRight className="size-6 text-macaw-dark" />
-          </Card>
-        </Link>
-      )}
-
-      {noKeys && (
-        <Card className="flex flex-col gap-3 bg-bee-light p-4 sm:flex-row sm:items-center">
-          <p className="flex-1 font-semibold">
-            Configura tu API key de OCR.space o Gemini para escanear con la mejor calidad. Mientras tanto puedes usar Tesseract.
-          </p>
-          <Link to="/ajustes">
-            <Button variant="warning" size="sm">
-              Ir a ajustes
-            </Button>
-          </Link>
-        </Card>
-      )}
-
-      {/* Actividad de la semana: hojas escaneadas por día */}
-      <Card className="p-5">
-        <div className="flex items-center gap-4">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-macaw-light text-macaw-dark">
-            <BarChart3 className="size-8" />
-          </div>
-          <div>
-            <div className="text-2xl font-bold">
-              {weekTotal} {weekTotal === 1 ? 'hoja escaneada' : 'hojas escaneadas'}
-            </div>
-            <div className="text-sm text-wolf">
-              {weekTotal > 0 ? 'Tu actividad de los últimos 7 días.' : 'Esta semana aún no has escaneado nada.'}
-            </div>
-          </div>
-        </div>
-        <div className="mt-5 grid grid-cols-7 gap-2">
-          {stats.week.map((d, i) => {
-            const today = i === stats.week.length - 1;
-            return (
-              <div key={d.day} className="flex flex-col items-center gap-1.5">
-                <span className="h-4 text-xs font-bold text-feather-dark">{d.count > 0 ? d.count : ''}</span>
-                <div className="flex h-20 w-full items-end overflow-hidden rounded-xl bg-polar">
-                  <div
-                    className={clsx('h-full w-full origin-bottom rounded-xl transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]', d.count > 0 ? 'bg-feather' : 'bg-transparent')}
-                    style={{ transform: `scaleY(${d.count / maxDay})` }}
-                    title={`${d.count} hojas`}
-                  />
-                </div>
-                <span className={clsx('text-xs font-semibold', today ? 'text-eel' : 'text-hare')}>
-                  {today ? 'Hoy' : WEEKDAY.format(new Date(`${d.day}T12:00:00Z`))}
-                </span>
+    <div className="space-y-5 lg:space-y-6">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(19rem,0.65fr)]">
+        <section className="overflow-hidden rounded-[24px] bg-macaw p-5 text-eel sm:p-7 lg:p-8">
+          <div className="grid h-full gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.8fr)] lg:items-end">
+            <div>
+              <div className="mb-5 flex items-center gap-2 text-sm font-semibold text-macaw-dark">
+                <span className="size-2 rounded-full bg-eel" />
+                Centro de trabajo
               </div>
-            );
-          })}
-        </div>
-      </Card>
+              <h1 className="max-w-xl text-3xl font-bold leading-[1.08] tracking-[-0.03em] sm:text-4xl">¡Hola, {firstName}!</h1>
+              <p className="mt-3 max-w-lg text-base font-medium text-[#352d5f]">
+                {weekTotal > 0
+                  ? `${weekTotal} ${weekTotal === 1 ? 'hoja escaneada' : 'hojas escaneadas'} esta semana. Tu archivo ya tiene ${formatNumber(stats.totals.words)} palabras.`
+                  : 'Tu espacio está listo para capturar, organizar y encontrar información.'}
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                <Link to="/escanear" className="inline-flex min-h-11 items-center gap-2 rounded-full bg-eel px-5 text-sm font-bold text-white transition-[transform,background-color] duration-200 hover:bg-[#303138] active:scale-[0.98]">
+                  <Camera className="size-5" /> Capturar páginas
+                </Link>
+                <Link to="/documentos/nuevo" className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-bold text-eel transition-[transform,background-color] duration-200 hover:bg-polar active:scale-[0.98]">
+                  <FilePlus2 className="size-5" /> Nuevo documento
+                </Link>
+              </div>
+            </div>
 
-      {/* Totales */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile icon={<ScanLine />} tone="text-feather" label="Escaneos" value={stats.totals.scans} />
-        <StatTile icon={<BookOpen />} tone="text-macaw" label="Grupos" value={stats.totals.groups} />
-        <StatTile icon={<FileText />} tone="text-beetle" label="Individuales" value={stats.totals.individual} />
-        <StatTile icon={<Type />} tone="text-fox" label="Palabras" value={stats.totals.words} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Link to="/escanear" className="block">
-          <Button block size="lg" icon={<ScanLine className="size-6" />}>
-            Empezar a escanear
-          </Button>
-        </Link>
-        <Link to="/documentos/nuevo" className="block">
-          <Button block size="lg" variant="secondary" icon={<FileScan className="size-6" />}>
-            Escanear documento
-          </Button>
-        </Link>
-      </div>
-
-      {stats.recentGroups.length > 0 && (
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xl font-bold">Tus grupos recientes</h2>
-            <Link to="/catalogo" className="text-sm font-bold text-macaw-dark hover:text-eel">
-              Ver todo
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {stats.recentGroups.map((g) => (
-              <Link key={g.id} to={`/catalogo/grupo/${g.id}`}>
-                <Card interactive className="flex items-center gap-4 p-4">
-                  <div className={clsx('flex size-12 shrink-0 items-center justify-center rounded-2xl text-white', GROUP_STYLES[g.color].bg)}>
-                    <BookOpen className="size-6" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-bold">{g.title}</div>
-                    <div className="text-sm text-wolf">
-                      {g.scanCount} {g.scanCount === 1 ? 'página' : 'páginas'} · {timeAgo(g.updatedAt)}
-                    </div>
-                  </div>
-                  <ChevronRight className="size-5 text-hare" />
-                </Card>
-              </Link>
-            ))}
+            <form onSubmit={search} className="rounded-2xl bg-white p-3 shadow-[0_8px_18px_rgba(48,37,105,0.10)]">
+              <label htmlFor="dashboard-search" className="mb-2 block px-1 text-sm font-bold text-eel">Buscar en todo tu archivo</label>
+              <div className="flex items-center gap-2 rounded-xl bg-polar p-1.5 pl-3">
+                <Search className="size-5 shrink-0 text-wolf" />
+                <input
+                  id="dashboard-search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Título, palabra o frase"
+                  className="min-w-0 flex-1 bg-transparent py-2 text-sm font-medium text-eel outline-none placeholder:text-wolf"
+                />
+                <button type="submit" aria-label="Buscar en el archivo" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-eel text-white transition active:scale-95">
+                  <ArrowRight className="size-5" />
+                </button>
+              </div>
+              <p className="mt-2 px-1 text-xs text-wolf">Busca dentro del texto reconocido, no solo por título.</p>
+            </form>
           </div>
         </section>
-      )}
+
+        <aside className="rounded-[24px] bg-eel p-5 text-white sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">Estado del espacio</h2>
+              <p className="mt-1 text-sm text-white/65">Todo lo necesario para continuar.</p>
+            </div>
+            <Gauge className="size-6 text-macaw" />
+          </div>
+          <div className="mt-6 divide-y divide-white/10">
+            <StatusRow
+              icon={pages.length ? <Clock3 /> : <CheckCircle2 />}
+              label="Cola de escaneo"
+              value={pages.length ? `${pages.length} ${pages.length === 1 ? 'página pendiente' : 'páginas pendientes'}` : 'Sin pendientes'}
+              tone={pages.length ? 'amber' : 'mint'}
+            />
+            <StatusRow icon={<SlidersHorizontal />} label="Motor predeterminado" value={ENGINE_LABEL[settings.defaultEngine]} tone="violet" />
+            <StatusRow
+              icon={noKeys ? <Settings2 /> : <CheckCircle2 />}
+              label="OCR remoto"
+              value={noKeys ? 'Requiere configuración' : 'Disponible'}
+              tone={noKeys ? 'amber' : 'mint'}
+            />
+          </div>
+          <Link to={pages.length ? '/escanear' : '/ajustes'} className="mt-5 flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold transition hover:bg-white/15">
+            {pages.length ? 'Continuar escaneo' : 'Revisar configuración'}
+            <ArrowRight className="size-4" />
+          </Link>
+        </aside>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+        <section className="rounded-[24px] bg-white p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold">Ritmo de captura</h2>
+              <p className="mt-1 text-sm text-wolf">Actividad de los últimos siete días.</p>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold tabular-nums">{weekTotal}</div>
+              <div className="text-xs font-semibold text-wolf">hojas esta semana</div>
+            </div>
+          </div>
+          <div className="mt-6 grid grid-cols-7 gap-2" aria-label="Actividad semanal">
+            {stats.week.map((day, index) => {
+              const today = index === stats.week.length - 1;
+              const intensity = day.count / maxDay;
+              return (
+                <div key={day.day} className="text-center">
+                  <div
+                    className={clsx(
+                      'flex aspect-square items-center justify-center rounded-2xl text-base font-bold tabular-nums transition-colors',
+                      day.count ? 'bg-feather text-eel' : 'bg-polar text-hare',
+                      today && 'shadow-[inset_0_0_0_2px_#18191d]',
+                    )}
+                    style={day.count ? { opacity: 0.55 + intensity * 0.45 } : undefined}
+                    title={`${day.count} hojas`}
+                  >
+                    {day.count}
+                  </div>
+                  <div className={clsx('mt-2 text-[11px] font-semibold capitalize', today ? 'text-eel' : 'text-wolf')}>
+                    {today ? 'Hoy' : WEEKDAY.format(new Date(`${day.day}T12:00:00Z`)).replace('.', '')}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-6 grid grid-cols-3 divide-x divide-swan rounded-2xl bg-polar px-2 py-4">
+            <Metric value={formatNumber(stats.totals.scans)} label="Páginas" />
+            <Metric value={formatNumber(averageWords)} label="Palabras/pág." />
+            <Metric value={formatNumber(groupedScans)} label="En libros" />
+          </div>
+        </section>
+
+        <section className="rounded-[24px] bg-white p-5 sm:p-6">
+          <div className="mb-2 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold">Acciones rápidas</h2>
+              <p className="mt-1 text-sm text-wolf">Atajos para tareas frecuentes.</p>
+            </div>
+            <TextSearch className="size-6 text-macaw-dark" />
+          </div>
+          <div className="divide-y divide-swan">
+            <QuickAction to="/buscar" icon={<Search />} title="Buscar contenido" detail="Texto, nombres y categorías" tone="violet" />
+            <QuickAction to="/catalogo" icon={<Library />} title="Abrir biblioteca" detail={`${stats.totals.groups} grupos y ${stats.totals.individual} sueltos`} tone="mint" />
+            <QuickAction to="/documentos" icon={<Files />} title="Revisar documentos" detail="Formularios y exportaciones" tone="amber" />
+            <QuickAction to="/ajustes" icon={<Settings2 />} title="Configurar OCR" detail={`${ENGINE_LABEL[settings.defaultEngine]} como predeterminado`} tone="gray" />
+          </div>
+        </section>
+      </div>
+
+      <section>
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold">Biblioteca reciente</h2>
+            <p className="mt-1 text-sm text-wolf">Continúa desde última colección actualizada.</p>
+          </div>
+          <Link to="/catalogo" className="inline-flex min-h-10 items-center gap-1 text-sm font-bold text-eel hover:text-macaw-dark">
+            Ver biblioteca <ArrowRight className="size-4" />
+          </Link>
+        </div>
+
+        {stats.recentGroups.length ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {stats.recentGroups.map((group, index) => {
+              const style = GROUP_STYLES[group.color];
+              const progress = group.totalPages ? Math.min(100, (group.scanCount / group.totalPages) * 100) : null;
+              return (
+                <Link
+                  key={group.id}
+                  to={`/catalogo/grupo/${group.id}`}
+                  className={clsx(
+                    'group flex min-h-44 flex-col justify-between rounded-2xl p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(41,36,68,0.10)] active:translate-y-0',
+                    index === 0 ? 'bg-eel text-white' : style.soft,
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className={clsx('flex size-10 items-center justify-center rounded-xl', index === 0 ? 'bg-white/10 text-macaw' : 'bg-white/75 text-eel')}>
+                      <BookOpenCheck className="size-5" />
+                    </span>
+                    <ArrowRight className={clsx('size-4 transition-transform group-hover:translate-x-0.5', index === 0 ? 'text-white/55' : 'text-wolf')} />
+                  </div>
+                  <div className="mt-5 min-w-0">
+                    <h3 className="truncate font-bold">{group.title}</h3>
+                    <p className={clsx('mt-1 truncate text-sm', index === 0 ? 'text-white/55' : 'text-wolf')}>
+                      {group.author || group.category || 'Sin detalles'}
+                    </p>
+                    <div className="mt-4 flex items-center justify-between gap-2 text-xs font-semibold">
+                      <span>{group.scanCount} {group.scanCount === 1 ? 'página' : 'páginas'}</span>
+                      <span className={index === 0 ? 'text-white/45' : 'text-wolf'}>{timeAgo(group.updatedAt)}</span>
+                    </div>
+                    {progress !== null && (
+                      <div className={clsx('mt-2 h-1.5 overflow-hidden rounded-full', index === 0 ? 'bg-white/15' : 'bg-white/70')}>
+                        <div className="h-full origin-left rounded-full bg-feather" style={{ transform: `scaleX(${progress / 100})` }} />
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex flex-col items-start gap-4 rounded-[24px] bg-white p-6 sm:flex-row sm:items-center">
+            <span className="flex size-12 items-center justify-center rounded-xl bg-feather-light text-feather-dark"><BookOpenCheck className="size-6" /></span>
+            <div className="flex-1">
+              <h3 className="font-bold">Tu biblioteca está vacía</h3>
+              <p className="mt-1 text-sm text-wolf">Crea tu primer grupo para mantener páginas relacionadas en orden.</p>
+            </div>
+            <Link to="/escanear" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-eel px-4 text-sm font-bold text-white"><Camera className="size-4" /> Escanear libro</Link>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-const TILE_TONES: Record<string, string> = {
-  'text-feather': 'bg-feather-light',
-  'text-macaw': 'bg-macaw-light',
-  'text-beetle': 'bg-white',
-  'text-fox': 'bg-bee-light',
-};
-
-function StatTile({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: number; tone: string }) {
+function StatusRow({ icon, label, value, tone }: { icon: ReactNode; label: string; value: string; tone: 'mint' | 'violet' | 'amber' }) {
+  const tones = {
+    mint: 'bg-feather text-feather-dark',
+    violet: 'bg-macaw text-eel',
+    amber: 'bg-bee text-bee-dark',
+  };
   return (
-    <div className={clsx('rounded-2xl p-4 shadow-[0_1px_2px_rgba(41,36,68,0.06)]', TILE_TONES[tone])}>
-      <div className={clsx('mb-3 flex size-10 items-center justify-center rounded-xl bg-white/75 [&>svg]:size-6', tone)}>{icon}</div>
-      <div className="text-2xl font-bold tabular-nums">{formatNumber(value)}</div>
-      <div className="text-sm font-semibold text-wolf">{label}</div>
+    <div className="flex items-center gap-3 py-4 first:pt-0">
+      <span className={clsx('flex size-9 shrink-0 items-center justify-center rounded-xl [&>svg]:size-4', tones[tone])}>{icon}</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-medium text-white/60">{label}</div>
+        <div className="truncate text-sm font-semibold text-white">{value}</div>
+      </div>
     </div>
+  );
+}
+
+function Metric({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="px-2 text-center">
+      <div className="text-xl font-bold tabular-nums text-eel sm:text-2xl">{value}</div>
+      <div className="mt-0.5 text-[11px] font-semibold text-wolf sm:text-xs">{label}</div>
+    </div>
+  );
+}
+
+function QuickAction({ to, icon, title, detail, tone }: { to: string; icon: ReactNode; title: string; detail: string; tone: 'violet' | 'mint' | 'amber' | 'gray' }) {
+  const tones = {
+    violet: 'bg-macaw-light text-macaw-dark',
+    mint: 'bg-feather-light text-feather-dark',
+    amber: 'bg-bee-light text-bee-dark',
+    gray: 'bg-polar text-eel',
+  };
+  return (
+    <Link to={to} className="group flex items-center gap-3 py-3.5">
+      <span className={clsx('flex size-10 shrink-0 items-center justify-center rounded-xl [&>svg]:size-5', tones[tone])}>{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-bold text-eel">{title}</span>
+        <span className="block truncate text-sm text-wolf">{detail}</span>
+      </span>
+      <ArrowRight className="size-4 text-hare transition-transform group-hover:translate-x-0.5 group-hover:text-eel" />
+    </Link>
   );
 }
