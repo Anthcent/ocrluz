@@ -1,0 +1,97 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Fustat', ui-rounded, system-ui, sans-serif;
+
+  --color-feather: #a4f5a6;
+  --color-feather-dark: #267a46;
+  --color-feather-light: #e8fbe8;
+  --color-macaw: #a38ef9;
+  --color-macaw-dark: #5f49c8;
+  --color-macaw-light: #eeeafe;
+  --color-cardinal: #d85252;
+  --color-cardinal-dark: #9f3434;
+  --color-cardinal-light: #ffe7e5;
+  --color-bee: #ffd89d;
+  --color-bee-dark: #855616;
+  --color-bee-light: #fff2da;
+  --color-fox: #f3bd70;
+  --color-fox-dark: #855616;
+  --color-fox-light: #fff2da;
+  --color-beetle: #a38ef9;
+  --color-beetle-dark: #5f49c8;
+  --color-beetle-light: #eeeafe;
+  --color-eel: #18191d;
+  --color-wolf: #666b74;
+  --color-hare: #7c818a;
+  --color-swan: #dde0e4;
+  --color-polar: #eceef0;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    color-scheme: light;
+    scroll-padding-top: 4.5rem;
+    scroll-padding-bottom: 7rem;
+  }
+  @media (min-width: 1024px) {
+    html {
+      scroll-padding-top: 5rem;
+      scroll-padding-bottom: 6rem;
+    }
+  }
+  body {
+    @apply bg-polar font-sans font-medium text-eel antialiased;
+    min-width: 320px;
+  }
+  ::selection {
+    @apply bg-macaw-light;
+  }
+  :focus-visible {
+    outline: 3px solid color-mix(in srgb, #a38ef9 55%, transparent);
+    outline-offset: 2px;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+@layer utilities {
+  .uppercase {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .font-black,
+  .font-extrabold {
+    font-weight: 700;
+  }
+  [class*='border-b-'] {
+    border-bottom-width: 1px;
+  }
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+mark.hit {
+  @apply rounded-md bg-bee px-1 font-bold text-eel;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

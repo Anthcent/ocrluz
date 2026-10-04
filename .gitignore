@@ -1,0 +1,34 @@
+# Dependencias
+node_modules/
+vendor/
+.venv/
+venv/
+__pycache__/
+
+# Builds
+dist/
+build/
+*.log
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Proyecto
+apps/server/data/
+*.db
+*.db-shm
+*.db-wal
+apps/web/public/tesseract/
+
+# Pruebas E2E
+e2e/.fixtures/
+test-results/
+playwright-report/
