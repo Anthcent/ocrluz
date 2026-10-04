@@ -26,7 +26,6 @@ import type { Engine, Stats } from '../lib/types';
 import { useScanSession } from '../scan/ScanSession';
 import { useSettings } from '../settings/SettingsContext';
 
-const WEEKDAY = new Intl.DateTimeFormat('es', { weekday: 'short', timeZone: 'UTC' });
 const ENGINE_LABEL: Record<Engine, string> = { ocrspace: 'OCR.space', gemini: 'Gemini', tesseract: 'Tesseract local' };
 
 export function HomePage() {
@@ -64,9 +63,11 @@ export function HomePage() {
 
   const noKeys = loaded && !settings.keys.ocrspace.configured && !settings.keys.gemini.configured;
   const weekTotal = stats.week.reduce((sum, day) => sum + day.count, 0);
-  const maxDay = Math.max(1, ...stats.week.map((day) => day.count));
   const averageWords = stats.totals.scans ? Math.round(stats.totals.words / stats.totals.scans) : 0;
   const groupedScans = Math.max(0, stats.totals.scans - stats.totals.individual);
+  const organizedPercent = stats.totals.scans ? Math.round((groupedScans / stats.totals.scans) * 100) : 0;
+  const individualPercent = stats.totals.scans ? 100 - organizedPercent : 0;
+  const readingMinutes = stats.totals.words ? Math.max(1, Math.ceil(stats.totals.words / 200)) : 0;
   const firstName = user?.name.split(' ')[0] ?? '';
 
   return (
@@ -147,44 +148,32 @@ export function HomePage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
         <section className="rounded-[24px] bg-white p-5 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-bold">Ritmo de captura</h2>
-              <p className="mt-1 text-sm text-wolf">Actividad de los últimos siete días.</p>
+          <div>
+            <h2 className="text-xl font-bold">Panorama del archivo</h2>
+            <p className="mt-1 text-sm text-wolf">Tamaño, lectura estimada y nivel de organización.</p>
+          </div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-[minmax(10rem,0.72fr)_minmax(0,1.28fr)]">
+            <div className="flex min-h-40 flex-col justify-between rounded-2xl bg-macaw-light p-4">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-white text-macaw-dark">
+                <BookOpenCheck className="size-5" />
+              </span>
+              <div className="mt-6">
+                <div className="text-3xl font-bold tabular-nums text-eel">{formatNumber(readingMinutes)}</div>
+                <div className="mt-1 text-sm font-semibold text-[#493d77]">minutos de lectura estimada</div>
+              </div>
             </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold tabular-nums">{weekTotal}</div>
-              <div className="text-xs font-semibold text-wolf">hojas esta semana</div>
+            <div className="flex flex-col justify-center gap-5 rounded-2xl bg-polar p-4">
+              <DistributionRow label="Páginas dentro de libros" value={groupedScans} percent={organizedPercent} tone="mint" />
+              <DistributionRow label="Páginas sueltas" value={stats.totals.individual} percent={individualPercent} tone="amber" />
+              {!stats.totals.scans && (
+                <p className="text-sm text-wolf">Cuando guardes páginas, aquí verás cómo está distribuido tu archivo.</p>
+              )}
             </div>
           </div>
-          <div className="mt-6 grid grid-cols-7 gap-2" aria-label="Actividad semanal">
-            {stats.week.map((day, index) => {
-              const today = index === stats.week.length - 1;
-              const intensity = day.count / maxDay;
-              return (
-                <div key={day.day} className="text-center">
-                  <div
-                    className={clsx(
-                      'flex aspect-square items-center justify-center rounded-2xl text-base font-bold tabular-nums transition-colors',
-                      day.count ? 'bg-feather text-eel' : 'bg-polar text-hare',
-                      today && 'shadow-[inset_0_0_0_2px_#18191d]',
-                    )}
-                    style={day.count ? { opacity: 0.55 + intensity * 0.45 } : undefined}
-                    title={`${day.count} hojas`}
-                  >
-                    {day.count}
-                  </div>
-                  <div className={clsx('mt-2 text-[11px] font-semibold capitalize', today ? 'text-eel' : 'text-wolf')}>
-                    {today ? 'Hoy' : WEEKDAY.format(new Date(`${day.day}T12:00:00Z`)).replace('.', '')}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-6 grid grid-cols-3 divide-x divide-swan rounded-2xl bg-polar px-2 py-4">
+          <div className="mt-4 grid grid-cols-3 divide-x divide-swan rounded-2xl bg-polar px-2 py-4">
             <Metric value={formatNumber(stats.totals.scans)} label="Páginas" />
-            <Metric value={formatNumber(averageWords)} label="Palabras/pág." />
-            <Metric value={formatNumber(groupedScans)} label="En libros" />
+            <Metric value={formatNumber(stats.totals.words)} label="Palabras" />
+            <Metric value={formatNumber(averageWords)} label="Promedio/pág." />
           </div>
         </section>
 
@@ -292,6 +281,23 @@ function Metric({ value, label }: { value: string; label: string }) {
     <div className="px-2 text-center">
       <div className="text-xl font-bold tabular-nums text-eel sm:text-2xl">{value}</div>
       <div className="mt-0.5 text-[11px] font-semibold text-wolf sm:text-xs">{label}</div>
+    </div>
+  );
+}
+
+function DistributionRow({ label, value, percent, tone }: { label: string; value: number; percent: number; tone: 'mint' | 'amber' }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="font-semibold text-eel">{label}</span>
+        <span className="shrink-0 font-bold tabular-nums text-eel">{formatNumber(value)} <span className="font-medium text-wolf">({percent}%)</span></span>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-swan">
+        <div
+          className={clsx('h-full origin-left rounded-full', tone === 'mint' ? 'bg-feather' : 'bg-bee')}
+          style={{ transform: `scaleX(${percent / 100})` }}
+        />
+      </div>
     </div>
   );
 }
