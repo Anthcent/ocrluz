@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Archive, Eye, FileScan, FileText, Folder, House, LogOut, Plus, ScanLine, Search, Settings, Type } from 'lucide-react';
+import { Archive, Eye, FileScan, FileText, Folder, House, Layers, LogOut, Plus, ScanLine, Search, Settings, Type } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
@@ -103,8 +103,13 @@ export function Layout() {
           <Logo className="lg:hidden" />
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2" data-testid="top-stats">
             {pendingPages > 0 && (
-              <Link to="/escanear" title="Hojas en el escáner sin guardar" className="inline-flex items-center gap-1.5 rounded-full bg-bee px-3 py-1.5 text-sm font-semibold text-eel transition active:scale-[0.98]">
-                <ScanLine className="size-4" /> {pendingPages} <span className="hidden sm:inline">sin guardar</span>
+              <Link
+                to="/escanear"
+                title="Hojas en el lote sin archivar"
+                aria-label={`${pendingPages} ${pendingPages === 1 ? 'hoja' : 'hojas'} en el lote sin archivar`}
+                className="inline-flex items-center gap-1.5 rounded-full bg-bee px-3 py-1.5 text-sm font-semibold text-eel transition active:scale-[0.98]"
+              >
+                <Layers className="size-4" aria-hidden /> {pendingPages} <span className="hidden sm:inline">por archivar</span>
               </Link>
             )}
             <StatChip icon={<FileText className="size-4" />} value={formatNumber(stats?.totals.scans ?? 0)} label="Escaneos" />

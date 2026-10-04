@@ -1,6 +1,7 @@
 import clsx from 'clsx';
-import { Check, FileSearch, Plus, Search, X } from 'lucide-react';
+import { Check, FileSearch, FolderPlus, Search, SearchX, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FolderCard } from '../components/FolderCard';
 import { Snippet } from '../components/Snippet';
 import { Modal, Segmented, Spinner } from '../components/ui';
@@ -137,16 +138,17 @@ export function GroupPicker({
 
   const filtersActive = !!(q || category || color);
 
-  return (
-    <Modal open={open} onClose={onClose} title="Buscar carpeta" wide>
+  // Rendered in a portal: the picker can live inside transformed panels (the mobile settings sheet).
+  return createPortal(
+    <Modal open={open} onClose={onClose} title="Elegir carpeta de destino" wide>
       <div className="space-y-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-hare" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Título, responsable, categoría o una frase del documento…"
-            aria-label="Texto a buscar"
+            placeholder="Nombre, responsable, categoría o una frase del contenido"
+            aria-label="Buscar carpeta por nombre o contenido"
             autoFocus
             className="w-full rounded-xl border border-transparent bg-polar py-3 pl-12 pr-11 text-base font-semibold outline-none transition-[background-color,box-shadow] placeholder:text-wolf focus:bg-white focus:shadow-[0_0_0_3px_rgba(163,142,249,0.35)]"
           />
@@ -154,7 +156,7 @@ export function GroupPicker({
             <Spinner className="absolute right-3 top-1/2 size-5 -translate-y-1/2" />
           ) : (
             query && (
-              <button type="button" aria-label="Limpiar" onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-hare hover:text-eel">
+              <button type="button" aria-label="Borrar lo escrito" onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-hare hover:text-eel">
                 <X className="size-5" />
               </button>
             )
@@ -166,19 +168,19 @@ export function GroupPicker({
           aria-pressed={inText}
           onClick={() => setInText(!inText)}
           className={clsx(
-            'flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-[transform,background-color,color] active:scale-[0.99]',
+            'flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.99]',
             inText ? 'bg-macaw-light text-macaw-dark' : 'bg-polar text-wolf hover:text-eel',
           )}
         >
           <FileSearch className="size-5 shrink-0" />
-          <span className="flex-1">Buscar también dentro del texto escaneado</span>
-          <span className={clsx('flex size-6 items-center justify-center rounded-lg', inText ? 'bg-eel text-white' : 'bg-white shadow-[inset_0_0_0_1px_#c9cdd2]')}>
+          <span className="flex-1">Incluir el contenido de las hojas archivadas</span>
+          <span className={clsx('flex size-6 items-center justify-center rounded-lg', inText ? 'bg-eel text-white' : 'bg-white shadow-[inset_0_0_0_1px_var(--color-hare)]')}>
             {inText && <Check className="size-4" strokeWidth={3} />}
           </span>
         </button>
 
         {(categories.length > 0 || colors.length > 1) && (
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filtrar carpetas">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filtrar por categoría o color">
             {categories.map(([c, n]) => (
               <FilterChip key={c} selected={category === c} onClick={() => setCategory(category === c ? null : c)}>
                 <span aria-hidden>{categoryEmoji(c)}</span> {c} <span className="text-xs opacity-70">{n}</span>
@@ -189,10 +191,10 @@ export function GroupPicker({
                 <button
                   key={c}
                   type="button"
-                  aria-label={`Color ${COLOR_NAME[c]}`}
+                  aria-label={`Solo color ${COLOR_NAME[c]}`}
                   aria-pressed={color === c}
                   onClick={() => setColor(color === c ? null : c)}
-                  className={clsx('size-9 shrink-0 rounded-full ring-2 ring-offset-2 transition-transform active:scale-95', GROUP_STYLES[c].bg, color === c ? 'ring-eel' : 'ring-transparent')}
+                  className={clsx('size-11 shrink-0 rounded-full ring-2 ring-offset-2 transition-transform active:scale-95', GROUP_STYLES[c].bg, color === c ? 'ring-eel' : 'ring-transparent')}
                 />
               ))}
           </div>
@@ -202,32 +204,32 @@ export function GroupPicker({
           value={sort}
           onChange={setSort}
           options={[
-            { value: 'recientes', label: 'Recientes' },
-            { value: 'nombre', label: 'A–Z' },
-            { value: 'hojas', label: 'Más hojas' },
+            { value: 'recientes', label: 'Última actividad' },
+            { value: 'nombre', label: 'Alfabético' },
+            { value: 'hojas', label: 'Con más hojas' },
           ]}
         />
 
         <div className="flex items-center justify-between text-sm font-semibold text-wolf">
           <span data-testid="group-picker-count">
-            {results.length} de {groups.length} {groups.length === 1 ? 'carpeta' : 'carpetas'}
+            Mostrando {results.length} de {groups.length}
           </span>
           {filtersActive && (
             <button
               type="button"
-              className="text-macaw hover:underline"
+              className="min-h-11 font-bold text-macaw-dark underline decoration-macaw/40 underline-offset-2"
               onClick={() => {
                 setQuery('');
                 setCategory(null);
                 setColor(null);
               }}
             >
-              Quitar filtros
+              Limpiar búsqueda
             </button>
           )}
         </div>
 
-        <ul className="space-y-2" aria-label="Carpetas encontradas">
+        <ul className="space-y-2" aria-label="Resultados">
           {results.map(({ group: g, where, hits }) => {
             const selected = selectedId === String(g.id);
             const style = GROUP_STYLES[g.color];
@@ -236,25 +238,25 @@ export function GroupPicker({
                 <button
                   type="button"
                   onClick={() => pick(String(g.id))}
-                  aria-label={`Elegir ${g.title}`}
+                  aria-label={`Usar ${g.title}`}
                   className={clsx(
-                    'flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition-[transform,background-color,box-shadow] duration-200 active:scale-[0.99]',
-                    selected ? 'bg-macaw-light shadow-[0_0_0_2px_#a38ef9]' : 'bg-white shadow-[0_1px_2px_rgba(41,36,68,0.06)] hover:bg-[#f7f7f8]',
+                    'flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-[transform,background-color,box-shadow] duration-150 ease-out active:scale-[0.99]',
+                    selected ? 'bg-macaw-light shadow-[inset_0_0_0_2px_var(--color-macaw)]' : 'bg-polar hover:bg-polar-hover',
                   )}
                 >
                   <FolderCard group={g} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-bold">{g.title}</div>
                     <div className="flex flex-wrap items-center gap-x-2 text-xs font-semibold text-wolf">
-                      {g.author && <span className={clsx('font-bold', style.text)}>Responsable: {g.author}</span>}
+                      {g.author && <span className={clsx('font-bold', style.text)}>{g.author} (responsable)</span>}
                       {g.category && (
                         <span>
                           {categoryEmoji(g.category)} {g.category}
                         </span>
                       )}
                       <span>
-                        {g.scanCount ?? 0} {g.scanCount === 1 ? 'hoja' : 'hojas'}
-                        {g.totalPages ? ` de ${g.totalPages}` : ''}
+                        {g.scanCount ?? 0}
+                        {g.totalPages ? `/${g.totalPages}` : ''} {g.scanCount === 1 && !g.totalPages ? 'hoja' : 'hojas'}
                       </span>
                       <span>· {timeAgo(g.updatedAt)}</span>
                     </div>
@@ -267,7 +269,7 @@ export function GroupPicker({
                         ))}
                         {hits && (
                           <span className="rounded-full bg-macaw-light px-2 py-0.5 text-[11px] font-semibold text-macaw-dark">
-                            {hits.count} {hits.count === 1 ? 'coincidencia' : 'coincidencias'} en el texto
+                            Aparece {hits.count} {hits.count === 1 ? 'vez' : 'veces'} en el contenido
                           </span>
                         )}
                       </div>
@@ -278,7 +280,7 @@ export function GroupPicker({
                       </p>
                     )}
                   </div>
-                  {selected && <Check className="size-6 shrink-0 text-macaw" strokeWidth={3} />}
+                  {selected && <Check className="size-6 shrink-0 text-macaw-dark" strokeWidth={3} aria-label="Elegida" />}
                 </button>
               </li>
             );
@@ -287,12 +289,10 @@ export function GroupPicker({
 
         {results.length === 0 && (
           <div className="rounded-2xl bg-polar p-5 text-center">
-            <div className="text-3xl" aria-hidden>
-              🔎
-            </div>
-            <div className="mt-1 font-bold">Ninguna carpeta coincide</div>
+            <SearchX className="mx-auto size-8 text-wolf" aria-hidden />
+            <div className="mt-2 font-bold">Sin resultados</div>
             <p className="text-sm font-semibold text-wolf">
-              {inText ? 'Prueba con otra palabra o quita algún filtro.' : 'Activa «Buscar también dentro del texto» y escribe una frase que recuerdes.'}
+              {inText ? 'Cambia las palabras o limpia los filtros.' : 'Activa «Incluir el contenido» y escribe una frase que recuerdes de las hojas.'}
             </p>
           </div>
         )}
@@ -300,12 +300,13 @@ export function GroupPicker({
         <button
           type="button"
           onClick={() => pick('new')}
-          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-feather-light py-3 font-bold text-feather-dark transition-[transform,background-color] hover:bg-feather active:scale-[0.99]"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-eel py-3 font-bold text-white transition-[transform,background-color] duration-150 ease-out hover:bg-eel-hover active:scale-[0.99]"
         >
-          <Plus className="size-5" strokeWidth={3} /> Crear una carpeta nueva
+          <FolderPlus className="size-5" /> Empezar carpeta nueva
         </button>
       </div>
-    </Modal>
+    </Modal>,
+    document.body,
   );
 }
 
@@ -316,7 +317,7 @@ function FilterChip({ selected, onClick, children }: { selected: boolean; onClic
       aria-pressed={selected}
       onClick={onClick}
       className={clsx(
-        'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition-[transform,background-color,color] active:scale-[0.98]',
+        'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition-[transform,background-color,color] active:scale-[0.98]',
         selected ? 'bg-eel text-white' : 'bg-polar text-wolf hover:text-eel',
       )}
     >

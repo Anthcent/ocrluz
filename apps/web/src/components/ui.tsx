@@ -5,10 +5,10 @@ import { forwardRef, useEffect, type ButtonHTMLAttributes, type InputHTMLAttribu
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'warning' | 'plain';
 
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-eel text-white hover:bg-[#303138]',
-  secondary: 'bg-macaw text-eel hover:bg-[#b09eff]',
+  primary: 'bg-eel text-white hover:bg-eel-hover',
+  secondary: 'bg-macaw text-eel hover:bg-macaw-hover',
   danger: 'bg-cardinal text-white hover:bg-cardinal-dark',
-  warning: 'bg-bee text-eel hover:bg-[#ffe1b3]',
+  warning: 'bg-bee text-eel hover:bg-bee-hover',
   ghost: 'bg-white text-eel shadow-[inset_0_0_0_1px_#dde0e4] hover:bg-polar',
   plain: 'bg-transparent text-wolf hover:bg-white hover:text-eel',
 };

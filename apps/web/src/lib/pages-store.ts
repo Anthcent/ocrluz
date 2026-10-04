@@ -2,6 +2,12 @@ import { get, set } from 'idb-keyval';
 
 export type PageStatus = 'pending' | 'queued' | 'scanning' | 'done' | 'error';
 
+/** Capture-quality warnings computed when the image is prepared (optional: older pages lack it). */
+export interface PageQuality {
+  blurry?: boolean;
+  dark?: boolean;
+}
+
 /**
  * Página capturada que aún no se guarda. La imagen vive solo en este dispositivo (IndexedDB)
  * hasta que se guarda el texto; al guardar se elimina: en el servidor solo queda el escaneo.
@@ -14,6 +20,7 @@ export interface PendingPage {
   error?: string;
   engine?: string;
   createdAt: number;
+  quality?: PageQuality;
 }
 
 // Una clave por usuario: en un dispositivo compartido nadie ve las fotos pendientes de otro.

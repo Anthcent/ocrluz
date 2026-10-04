@@ -1,29 +1,32 @@
-import clsx from 'clsx';
-import { Camera, Files, ImagePlus, Save, ScanLine, Trash2, Upload } from 'lucide-react';
+import { Archive, Camera, ScanText, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
-import { Button, Card, ProgressBar } from '../components/ui';
-import { api } from '../lib/api';
 import { EMPTY_GROUP } from '../components/GroupFields';
+import { Button } from '../components/ui';
+import { api } from '../lib/api';
+import type { DocTemplate } from '../lib/doc-templates';
 import { detectPageLabel } from '../lib/page-number';
 import type { Engine, Group, GroupInput, ScanEngine } from '../lib/types';
+import { AddSurface } from '../scan/AddSurface';
+import { BatchProgress, BatchSheet, BatchSummaryButton, DesktopBatchPanel, type BatchStats } from '../scan/BatchPanel';
+import { NEW_GROUP, templateFor, type BatchSettingsProps, type Mode } from '../scan/BatchSettings';
 import { CameraCapture } from '../scan/CameraCapture';
-import { PageGallery } from '../scan/PageGallery';
-import { PageViewer } from '../scan/PageViewer';
-import {
-  DestinationPanel,
-  destinationIcon,
-  destinationSummary,
-  EnginePanel,
-  engineIcon,
-  engineSummary,
-  NEW_GROUP,
-  StepHeader,
-  type Mode,
-} from '../scan/ScanSetup';
+import { CaptureDock } from '../scan/CaptureDock';
 import { useScanSession } from '../scan/ScanSession';
+import { SheetGrid } from '../scan/SheetGrid';
+import { SheetViewer, type RetakeSource } from '../scan/SheetViewer';
 import { useSettings } from '../settings/SettingsContext';
+
+const isDesktop = () => window.matchMedia('(min-width: 1024px)').matches;
+
+/** Folder category for a document type ("Documento general" maps to the generic category). */
+const categoryFor = (t: DocTemplate) => (t.key === 'generico' ? 'Otro' : t.name);
+
+const todayLabel = () => new Date().toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
+const folderSuggestion = (t: DocTemplate) => `${t.name} · ${todayLabel()}`;
+
+const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
 
 export function ScannerPage() {
   const session = useScanSession();
@@ -38,18 +41,19 @@ export function ScannerPage() {
   const [groupId, setGroupId] = useState<string>(preselected ?? NEW_GROUP);
   const [newGroup, setNewGroup] = useState<GroupInput>(EMPTY_GROUP);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [retakeId, setRetakeId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [viewer, setViewer] = useState<number | null>(null);
-  const [dragging, setDragging] = useState(false);
-  // Los pasos empiezan plegados (muestran lo elegido) para que los botones de captura
-  // queden a la vista; se abren al pulsarlos.
-  const [openStep, setOpenStep] = useState<1 | 2 | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [dragDepth, setDragDepth] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const systemCamera = useRef<HTMLInputElement>(null);
+  const retakeInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Al llegar desde «Añadir hojas» de una carpeta, esa carpeta queda seleccionada.
+    // Arriving from a folder's "add sheets" action preselects that folder.
     if (preselected) {
       setMode('group');
       setGroupId(preselected);
@@ -63,15 +67,26 @@ export function ScannerPage() {
       .catch(() => {});
   }, [preselected]);
 
-  const { pages } = session;
+  // A remembered document type pre-fills an empty new-folder form.
+  useEffect(() => {
+    const t = templateFor(session.docType);
+    if (!t) return;
+    setNewGroup((g) => (g.title || g.category ? g : { ...g, title: folderSuggestion(t), category: categoryFor(t) }));
+  }, [session.docType]);
+
+  const { pages, addImages } = session;
   const done = pages.filter((p) => p.status === 'done' && p.text.trim());
-  const busy = pages.some((p) => p.status === 'queued' || p.status === 'scanning');
-  const scannable = pages.filter((p) => p.status === 'pending' || p.status === 'error');
-  const finished = pages.filter((p) => p.status === 'done' || p.status === 'error').length;
-  // El avance global incluye la parte ya hecha de la página que se está escaneando.
   const partial = Object.values(session.progress).reduce((sum, p) => sum + p.value, 0);
-  const overall = pages.length ? ((finished + partial) / pages.length) * 100 : 0;
-  const scanningNow = pages.findIndex((p) => p.status === 'scanning');
+  const finished = pages.filter((p) => p.status === 'done' || p.status === 'error').length;
+  const stats: BatchStats = {
+    total: pages.length,
+    withText: done.length,
+    readable: pages.filter((p) => p.status === 'pending' || p.status === 'error').length,
+    finished,
+    overall: pages.length ? ((finished + partial) / pages.length) * 100 : 0,
+    busy: pages.some((p) => p.status === 'queued' || p.status === 'scanning'),
+    readingIndex: pages.findIndex((p) => p.status === 'scanning'),
+  };
 
   const keysReady: Record<Engine, boolean> = {
     ocrspace: settings.keys.ocrspace.configured,
@@ -79,65 +94,137 @@ export function ScannerPage() {
     tesseract: true,
   };
 
-  const addFiles = async (files: FileList | Blob[] | null) => {
-    // Se copia la lista ya: el FileList del <input> se vacía al reiniciarlo.
-    const list = Array.from(files ?? []);
-    if (list.length === 0) return;
-    const images = list.filter((f) => !(f instanceof File) || f.type.startsWith('image/') || f.type === '');
-    setAdding(true);
-    try {
-      const { ids, failed } = await session.addImages(images);
-      const rejected = failed + (list.length - images.length);
-      if (rejected > 0) {
-        toast(`${rejected === 1 ? 'Una imagen no se pudo' : `${rejected} imágenes no se pudieron`} leer. Usa JPG, PNG o WEBP.`, 'error');
-      } else if (ids.length > 1) {
-        toast(`${ids.length} imágenes añadidas`);
+  const addFiles = useCallback(
+    async (files: FileList | Blob[] | null, origin: 'files' | 'paste' = 'files') => {
+      // Copy now: the <input> FileList is emptied when the input is reset.
+      const list = Array.from(files ?? []);
+      if (list.length === 0) return;
+      const images = list.filter((f) => !(f instanceof File) || f.type.startsWith('image/') || f.type === '');
+      setAdding(true);
+      try {
+        const { ids, failed } = await addImages(images);
+        const rejected = failed + (list.length - images.length);
+        if (rejected > 0) {
+          toast(`No se ${rejected === 1 ? 'pudo abrir 1 archivo' : `pudieron abrir ${rejected} archivos`}. Prueba con JPG, PNG o WEBP.`, 'error');
+        } else if (origin === 'paste') {
+          toast(ids.length === 1 ? 'Hoja pegada desde el portapapeles' : `${ids.length} hojas pegadas desde el portapapeles`);
+        } else if (ids.length > 1) {
+          toast(`${ids.length} hojas sumadas al lote`);
+        }
+      } catch (err) {
+        toast(errorMessage(err), 'error');
+      } finally {
+        setAdding(false);
       }
-      if (ids.length > 0) setOpenStep(null);
-    } catch (err) {
-      toast(errorMessage(err), 'error');
-    } finally {
-      setAdding(false);
-    }
+    },
+    [addImages, toast],
+  );
+
+  // Paste screenshots or copied images anywhere on the page.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const files = Array.from(e.clipboardData?.items ?? [])
+        .filter((i) => i.kind === 'file' && i.type.startsWith('image/'))
+        .map((i) => i.getAsFile())
+        .filter((f): f is File => Boolean(f));
+      if (files.length === 0) return;
+      e.preventDefault();
+      void addFiles(files, 'paste');
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [addFiles]);
+
+  const openCamera = () => {
+    setRetakeId(null);
+    setCameraOpen(true);
   };
 
   const onCameraUnavailable = useCallback(
     (reason: string) => {
       setCameraOpen(false);
       toast(reason, 'info');
-      systemCamera.current?.click();
+      if (retakeId) {
+        retakeInput.current?.setAttribute('capture', 'environment');
+        retakeInput.current?.click();
+      } else systemCamera.current?.click();
     },
-    [toast],
+    [toast, retakeId],
   );
 
-  const onDrop = (e: DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    void addFiles(e.dataTransfer.files);
+  const replacePhoto = async (id: string, file: Blob) => {
+    try {
+      await session.replace(id, file);
+      toast('Foto reemplazada');
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    }
+  };
+
+  const retake = (id: string, source: RetakeSource) => {
+    setRetakeId(id);
+    if (source === 'camera') setCameraOpen(true);
+    else {
+      retakeInput.current?.removeAttribute('capture');
+      retakeInput.current?.click();
+    }
   };
 
   const clearAll = async () => {
     const ok = await confirm({
-      title: '¿Quitar todas las páginas?',
-      message: `Se quitarán las ${pages.length} fotos y su texto sin guardar.`,
-      confirmLabel: 'Quitar todas',
+      title: '¿Vaciar el lote?',
+      message: `Se descartarán ${pages.length === 1 ? 'la hoja y su texto' : `las ${pages.length} hojas y su texto`}. Lo que ya archivaste no cambia.`,
+      confirmLabel: 'Vaciar lote',
       danger: true,
     });
     if (ok) session.removeMany(pages.filter((p) => p.status !== 'scanning').map((p) => p.id));
   };
 
-  const save = async () => {
+  const removeSheets = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    if (ids.length > 1) {
+      const ok = await confirm({
+        title: `¿Descartar ${ids.length} hojas?`,
+        message: 'Se quitarán del lote junto con su texto sin archivar.',
+        confirmLabel: 'Descartar hojas',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    session.removeMany(ids);
+    if (viewerOpen) {
+      const remaining = pages.length - ids.length;
+      if (remaining <= 0) setViewerOpen(false);
+      else setViewerIndex((i) => Math.min(i, remaining - 1));
+    }
+  };
+
+  const rotateSheets = async (ids: string[]) => {
+    for (const id of ids) await session.rotate(id, 'cw');
+  };
+
+  const focusFolderName = () => {
+    const visible = Array.from(document.querySelectorAll<HTMLInputElement>('[aria-label="Nombre de la carpeta"]')).find((el) => el.offsetParent !== null);
+    visible?.focus();
+    visible?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
+
+  const archive = async () => {
     if (mode === 'group' && groupId === NEW_GROUP && !newGroup.title.trim()) {
-      setOpenStep(1);
-      toast('Ponle un nombre a la carpeta', 'error');
+      toast('Escribe el nombre de la carpeta nueva', 'error');
+      if (isDesktop()) focusFolderName();
+      else {
+        setSheetOpen(true);
+        setTimeout(focusFolderName, 320);
+      }
       return;
     }
     const skipped = pages.length - done.length;
     if (skipped > 0) {
       const ok = await confirm({
-        title: '¿Guardar solo lo escaneado?',
-        message: `${skipped} ${skipped === 1 ? 'página no tiene' : 'páginas no tienen'} texto todavía y se quedarán aquí para escanearlas después.`,
-        confirmLabel: 'Guardar',
+        title: '¿Archivar solo las hojas con texto?',
+        message: `${skipped} ${skipped === 1 ? 'hoja sigue sin texto y se quedará' : 'hojas siguen sin texto y se quedarán'} en el lote para leerlas más tarde.`,
+        confirmLabel: 'Archivar',
       });
       if (!ok) return;
     }
@@ -157,9 +244,9 @@ export function ScannerPage() {
             ? { newGroup: { ...newGroup, title: newGroup.title.trim() }, items }
             : { groupId: Number(groupId), items },
       );
-      // Tras guardar el texto, las imágenes se descartan.
+      // Once the text is stored, the photos are discarded.
       session.removeMany(done.map((p) => p.id));
-      toast(`¡Guardado! +${items.length} ${items.length === 1 ? 'escaneo' : 'páginas'}`);
+      toast(`Archivado: ${items.length} ${items.length === 1 ? 'hoja' : 'hojas'}`);
       navigate(result.groupId ? `/archivo/carpeta/${result.groupId}` : '/archivo?vista=individuales');
     } catch (err) {
       toast(errorMessage(err), 'error');
@@ -168,211 +255,216 @@ export function ScannerPage() {
     }
   };
 
-  const removePage = (id: string) => {
-    session.remove(id);
-    if (viewer !== null) {
-      const remaining = pages.length - 1;
-      if (remaining === 0) setViewer(null);
-      else setViewer(Math.min(viewer, remaining - 1));
-    }
+  const changeDocType = (key: string | null) => {
+    const prev = templateFor(session.docType);
+    const next = templateFor(key);
+    session.setDocType(key);
+    setNewGroup((g) => {
+      const wasSuggested = !g.title.trim() || (prev && g.title === folderSuggestion(prev));
+      const wasAutoCategory = !g.category || (prev && g.category === categoryFor(prev));
+      return {
+        ...g,
+        title: wasSuggested ? (next ? folderSuggestion(next) : '') : g.title,
+        category: wasAutoCategory ? (next ? categoryFor(next) : '') : g.category,
+      };
+    });
   };
 
-  const toggle = (step: 1 | 2) => setOpenStep((s) => (s === step ? null : step));
-
-  // Números de página impresos detectados en el texto de las hojas ya escaneadas.
   const pageLabels = pages.map((p) => (p.status === 'done' ? detectPageLabel(p.text) : '')).filter(Boolean);
-  const destination = {
-    mode,
-    setMode,
-    groups,
-    groupId,
-    setGroupId,
-    newGroup,
-    setNewGroup,
+  const batchSettings: BatchSettingsProps = {
+    destination: { mode, setMode, groups, groupId, setGroupId, newGroup, setNewGroup },
+    engine: {
+      engine: session.engine,
+      setEngine: session.setEngine,
+      language: session.language,
+      setLanguage: session.setLanguage,
+      autoScan: session.autoScan,
+      setAutoScan: session.setAutoScan,
+      keysReady,
+    },
+    docType: session.docType,
+    onDocType: changeDocType,
     sheets: { count: pages.length, labels: pageLabels },
   };
-  const engineOptions = {
-    engine: session.engine,
-    setEngine: session.setEngine,
-    language: session.language,
-    setLanguage: session.setLanguage,
-    autoScan: session.autoScan,
-    setAutoScan: session.setAutoScan,
-    keysReady,
+  const actions = { onRead: () => session.queue(), onArchive: archive, onClear: clearAll, saving, adding };
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    void addFiles(e.target.files);
+    e.target.value = '';
   };
 
   return (
-    <div className={clsx('mx-auto max-w-6xl', pages.length > 0 && 'pb-32 lg:pb-24')}>
-      <div className="mb-6 sm:mb-8">
-        <h1 className="text-3xl font-bold leading-tight sm:text-4xl">Escanear</h1>
-        <p className="mt-2 max-w-2xl text-wolf">Elige cómo guardar, toma las fotos y conviértelas en texto.</p>
-      </div>
+    <div
+      className="mx-auto max-w-7xl pb-24 lg:pb-0"
+      onDragEnter={(e) => hasFiles(e) && setDragDepth((d) => d + 1)}
+      onDragLeave={(e) => hasFiles(e) && setDragDepth((d) => Math.max(0, d - 1))}
+      onDragOver={(e) => hasFiles(e) && e.preventDefault()}
+      onDrop={(e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        setDragDepth(0);
+        void addFiles(e.dataTransfer.files);
+      }}
+    >
+      <header className="mb-4 lg:mb-6">
+        <h1 className="text-3xl font-bold leading-tight sm:text-4xl">Digitalizar hojas</h1>
+        <p className="mt-1.5 hidden max-w-2xl text-wolf lg:block">Fotografía o trae las hojas, revisa cada una y archívalas con su texto.</p>
+      </header>
 
-      <div className="space-y-4">
-        {/* Opciones arriba: dos botones con lo elegido; al pulsar uno se abren sus opciones debajo */}
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2 sm:gap-3">
-            <StepHeader
-              step={1}
-              title="¿Dónde se guarda?"
-              shortTitle="¿Dónde?"
-              summary={destinationSummary(destination)}
-              icon={destinationIcon(mode)}
-              open={openStep === 1}
-              onToggle={() => toggle(1)}
-            />
-            <StepHeader
-              step={2}
-              title="¿Cómo escanear?"
-              shortTitle="¿Cómo?"
-              summary={engineSummary(engineOptions)}
-              icon={engineIcon(session.engine)}
-              open={openStep === 2}
-              onToggle={() => toggle(2)}
-              warning={!keysReady[session.engine]}
-            />
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start lg:gap-6 xl:grid-cols-[minmax(0,1fr)_25rem]">
+        <div className="min-w-0 space-y-4">
+          <div className="space-y-3 lg:hidden">
+            <BatchSummaryButton settings={batchSettings} onOpen={() => setSheetOpen(true)} expanded={sheetOpen} />
+            {stats.total > 0 && (
+              <div className="rounded-2xl bg-white px-4 py-3 shadow-[0_1px_2px_rgba(41,36,68,0.06)]">
+                <BatchProgress stats={stats} compact />
+              </div>
+            )}
           </div>
-          {openStep === 1 && <DestinationPanel {...destination} />}
-          {openStep === 2 && <EnginePanel {...engineOptions} />}
-        </div>
 
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-          className={clsx(
-            'rounded-3xl bg-white p-3 shadow-[0_1px_2px_rgba(41,36,68,0.06)] transition-[background-color,box-shadow] duration-200 sm:p-4',
-            dragging ? 'bg-macaw-light shadow-[0_0_0_2px_#a38ef9]' : '',
-          )}
-        >
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setCameraOpen(true)}
-              className="flex min-h-32 flex-col items-center justify-center gap-3 rounded-2xl bg-eel px-3 py-5 text-white transition-[transform,background-color] duration-200 hover:bg-[#303138] active:scale-[0.98] sm:min-h-40 sm:py-7"
-            >
-              <Camera className="size-10 sm:size-12" strokeWidth={2.25} />
-              <span className="text-sm font-bold sm:text-base">Tomar fotos</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => fileInput.current?.click()}
-              className="flex min-h-32 flex-col items-center justify-center gap-3 rounded-2xl bg-macaw px-3 py-5 text-eel transition-[transform,background-color] duration-200 hover:bg-[#b09eff] active:scale-[0.98] sm:min-h-40 sm:py-7"
-            >
-              <ImagePlus className="size-10 sm:size-12" strokeWidth={2.25} />
-              <span className="text-sm font-bold sm:text-base">Subir imágenes</span>
-            </button>
-          </div>
-          <p className="mt-3 hidden items-center justify-center gap-2 text-sm font-semibold text-wolf sm:flex">
-            <Upload className="size-4" /> {dragging ? 'Suelta las imágenes aquí' : 'También puedes arrastrar imágenes aquí'}
-          </p>
-          {adding && (
-            <p className="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-macaw-dark" role="status">
-              <ScanLine className="size-4" /> Preparando imágenes…
-            </p>
-          )}
-        </div>
-        <input
-          ref={fileInput}
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          onChange={(e) => {
-            void addFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
-        <input
-          ref={systemCamera}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          hidden
-          onChange={(e) => {
-            void addFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
+          <AddSurface compact={pages.length > 0} dragging={dragDepth > 0} adding={adding} onFiles={() => fileInput.current?.click()} onCamera={openCamera} />
 
-        {pages.length === 0 ? (
-          <Card className="flex flex-col items-center px-6 py-12 text-center sm:py-16">
-            <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-macaw-light text-macaw-dark">
-              <Files className="size-10" />
-            </div>
-            <h3 className="text-xl font-bold">Aún no hay páginas</h3>
-            <p className="mt-2 max-w-sm text-wolf">
-              Toma una foto por hoja del documento. Puedes tomar varias seguidas: aparecerán aquí numeradas y podrás revisarlas antes de guardar.
-            </p>
-          </Card>
-        ) : (
-          <section>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="flex items-center gap-2 text-xl font-bold">
-                Tus páginas
-                <span className="rounded-full bg-macaw-light px-2.5 py-0.5 text-sm font-semibold text-macaw-dark">{pages.length}</span>
-              </h2>
-              <Button variant="plain" size="sm" icon={<Trash2 className="size-4" />} onClick={clearAll} disabled={adding || pages.every((p) => p.status === 'scanning')}>
-                Quitar todas
-              </Button>
-            </div>
-            <PageGallery
+          {pages.length === 0 ? (
+            <EmptyBatch />
+          ) : (
+            <SheetGrid
               pages={pages}
               progress={session.progress}
-              onOpen={(id) => setViewer(pages.findIndex((p) => p.id === id))}
-              onRemove={removePage}
-              onMove={session.move}
-              onScan={(id) => session.queue([id])}
+              onOpen={(id) => {
+                setViewerIndex(pages.findIndex((p) => p.id === id));
+                setViewerOpen(true);
+              }}
+              onRead={(ids) => session.queue(ids)}
+              onRotate={(ids) => void rotateSheets(ids)}
+              onRemove={(ids) => void removeSheets(ids)}
+              onReorder={session.reorder}
               onAdd={() => fileInput.current?.click()}
+              headerExtra={
+                <span className="flex gap-1 lg:hidden">
+                  {stats.withText > 0 && (stats.readable > 0 || stats.busy) && (
+                    <Button variant="plain" size="sm" className="h-11" icon={<Archive className="size-4" />} onClick={archive} loading={saving} disabled={stats.busy}>
+                      Archivar ({stats.withText})
+                    </Button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={clearAll}
+                    aria-label="Vaciar lote"
+                    title="Vaciar lote"
+                    className="flex size-11 items-center justify-center rounded-full text-wolf transition-colors hover:bg-white hover:text-cardinal-dark"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </span>
+              }
             />
-          </section>
-        )}
+          )}
+        </div>
+
+        <DesktopBatchPanel stats={stats} actions={actions} settings={batchSettings} />
       </div>
 
-      {/* Barra de acciones fija, siempre a la vista mientras hay páginas */}
-      {pages.length > 0 && (
-        <div className="fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-30 border-t border-swan bg-white/95 shadow-[0_-8px_24px_rgba(30,27,48,0.08)] backdrop-blur lg:bottom-0 lg:left-[17.5rem]">
-          <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6">
-            <div className="flex items-center gap-3 sm:flex-1">
-              <span className="shrink-0 text-sm font-bold">
-                {finished} de {pages.length} escaneadas
-                {scanningNow >= 0 && <span className="ml-1 font-semibold text-macaw-dark">· página {scanningNow + 1}…</span>}
-              </span>
-              <ProgressBar value={overall} className="h-3" />
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:flex">
-              <Button variant="secondary" icon={<ScanLine className="hidden size-5 sm:block" />} className="whitespace-nowrap" disabled={scannable.length === 0} onClick={() => session.queue()}>
-                Escanear {scannable.length > 0 && `(${scannable.length})`}
-              </Button>
-              <Button icon={<Save className="hidden size-5 sm:block" />} className="whitespace-nowrap" disabled={done.length === 0 || busy} loading={saving} onClick={save}>
-                Guardar {done.length > 0 && `(${done.length})`}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={onFileChange} />
+      <input ref={systemCamera} type="file" accept="image/*" capture="environment" hidden onChange={onFileChange} />
+      <input
+        ref={retakeInput}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && retakeId) void replacePhoto(retakeId, file);
+          e.target.value = '';
+          setRetakeId(null);
+        }}
+      />
 
-      {cameraOpen && <CameraCapture onClose={() => setCameraOpen(false)} onUnavailable={onCameraUnavailable} />}
+      <CaptureDock
+        stats={stats}
+        onCamera={openCamera}
+        onFiles={() => fileInput.current?.click()}
+        onRead={() => session.queue()}
+        onArchive={archive}
+        onSettings={() => setSheetOpen(true)}
+        saving={saving}
+        adding={adding}
+      />
 
-      {viewer !== null && pages[viewer] && (
-        <PageViewer
-          pages={pages}
-          progress={session.progress}
-          index={viewer}
-          onIndex={setViewer}
-          onClose={() => setViewer(null)}
-          onSaveText={(id, text) => {
-            session.updateText(id, text);
-            toast('Texto actualizado');
-          }}
-          onScan={(id) => session.queue([id])}
-          onRotate={session.rotate}
-          onRemove={removePage}
-        />
-      )}
+      <BatchSheet open={sheetOpen} onClose={() => setSheetOpen(false)} settings={batchSettings} />
+
+      <CameraCapture
+        open={cameraOpen}
+        onClose={() => {
+          setCameraOpen(false);
+          setRetakeId(null);
+        }}
+        onUnavailable={onCameraUnavailable}
+        retake={
+          retakeId
+            ? {
+                sheetNumber: pages.findIndex((p) => p.id === retakeId) + 1,
+                onShot: (photo) => {
+                  void replacePhoto(retakeId, photo);
+                  setCameraOpen(false);
+                  setRetakeId(null);
+                },
+              }
+            : undefined
+        }
+      />
+
+      <SheetViewer
+        open={viewerOpen}
+        pages={pages}
+        progress={session.progress}
+        index={viewerIndex}
+        onIndex={setViewerIndex}
+        onClose={() => setViewerOpen(false)}
+        onSaveText={(id, text) => {
+          session.updateText(id, text);
+          toast('Cambios del texto aplicados');
+        }}
+        onRead={(id) => session.queue([id])}
+        onRotate={session.rotate}
+        onEdit={async (id, edits) => {
+          try {
+            await session.edit(id, edits);
+            toast('Ajustes aplicados a la foto');
+          } catch (err) {
+            toast(errorMessage(err), 'error');
+          }
+        }}
+        onRetake={retake}
+        onRemove={(id) => void removeSheets([id])}
+      />
+    </div>
+  );
+}
+
+/** Empty batch on mobile (desktop shows the drop surface instead). */
+function EmptyBatch() {
+  const steps = [
+    { icon: Camera, title: 'Captura', text: 'Una foto por hoja; puedes tomar varias seguidas.' },
+    { icon: ScanText, title: 'Lee', text: 'El texto de cada hoja se reconoce y puedes corregirlo.' },
+    { icon: Archive, title: 'Archiva', text: 'Guárdalas como documentos sueltos o en una carpeta.' },
+  ];
+  return (
+    <div className="rounded-2xl bg-white p-5 shadow-[0_1px_2px_rgba(41,36,68,0.06)] lg:hidden">
+      <h2 className="text-lg font-bold">El lote está vacío</h2>
+      <p className="mt-1 text-sm text-wolf">Pulsa la cámara de abajo o elige fotos guardadas en tu teléfono.</p>
+      <ol className="mt-4 space-y-3">
+        {steps.map(({ icon: Icon, title, text }) => (
+          <li key={title} className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-macaw-light text-macaw-dark">
+              <Icon className="size-5" aria-hidden />
+            </span>
+            <span className="min-w-0">
+              <span className="block font-bold">{title}</span>
+              <span className="block text-sm text-wolf">{text}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

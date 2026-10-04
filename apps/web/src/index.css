@@ -26,6 +26,47 @@
   --color-hare: #7c818a;
   --color-swan: #dde0e4;
   --color-polar: #eceef0;
+
+  /* Hover tones for filled surfaces (keep in sync with their base colors). */
+  --color-eel-hover: #303138;
+  --color-macaw-hover: #b09eff;
+  --color-bee-hover: #ffe1b3;
+  --color-polar-hover: #e5e7ea;
+  --color-snow: #f7f7f8;
+
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --animate-card-in: card-in 280ms var(--ease-out-strong) backwards;
+  --animate-swap-in: swap-in 220ms var(--ease-out-strong) backwards;
+  --animate-pop-in: pop-in 220ms var(--ease-out-strong) backwards;
+  --animate-fade-in: fade-in 180ms ease-out backwards;
+
+  @keyframes card-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
+    }
+  }
+  @keyframes swap-in {
+    from {
+      opacity: 0;
+      filter: blur(3px);
+      transform: translateY(4px);
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.85);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
 }
 
 @layer base {
@@ -81,6 +122,41 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Moving highlight over a progress fill while work is running. */
+.progress-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.progress-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes shutter {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Long-press on touch must not open the native image menu while dragging sheets. */
+.no-callout {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 mark.hit {
   @apply rounded-md bg-bee px-1 font-bold text-eel;
 }
@@ -93,5 +169,8 @@ mark.hit {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  .progress-shimmer::after {
+    display: none;
   }
 }
