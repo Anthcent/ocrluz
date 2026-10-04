@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { AlignLeft, ArrowLeft, BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, Eye, FileCheck, FileText, FolderOpen, LayoutGrid, Pencil, Plus, Tag, Trash2, Type } from 'lucide-react';
+import { AlignLeft, BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, Eye, FileCheck, FileText, FolderOpen, LayoutGrid, Pencil, Plus, Tag, Trash2, Type } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type React from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -7,6 +7,7 @@ import { AnalysisPanel } from '../components/AnalysisPanel';
 import { DocumentViewer } from '../components/DocumentViewer';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Reader } from '../components/Reader';
+import { BackLink, HeaderChip, PageHeader } from '../components/PageHeader';
 import { Button, EmptyState, PageLoader, Segmented } from '../components/ui';
 import { api } from '../lib/api';
 import { GROUP_STYLES } from '../lib/constants';
@@ -113,66 +114,60 @@ export function GroupDetailPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <Link to="/archivo" className="inline-flex min-h-10 items-center gap-2 rounded-full px-2 text-sm font-bold text-wolf transition-colors hover:text-eel">
-        <ArrowLeft className="size-4" /> Archivo
-      </Link>
-
-      <section className="overflow-hidden rounded-3xl bg-white p-5 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:p-8">
-        <div className="grid gap-7 sm:grid-cols-[160px_minmax(0,1fr)] sm:items-center lg:grid-cols-[190px_minmax(0,1fr)]">
-          <div className={clsx('mx-auto flex aspect-[4/3] w-36 flex-col rounded-2xl p-5 sm:mx-0 sm:w-40 lg:w-48', style.soft)} aria-hidden="true">
-            <FolderOpen className={clsx('size-8', style.text)} />
-            <span className="mt-auto line-clamp-3 text-xl font-bold leading-tight text-eel">{group.title}</span>
-            {group.author && <span className="mt-2 line-clamp-2 text-sm font-semibold text-wolf">{group.author}</span>}
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap gap-2">
-              {group.category && (
-                <span className={clsx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold', style.soft, style.text)}>
-                  <DocTypeIcon type={group.category} variant="inline" fallback={Tag} className="[&_svg]:size-3.5" /> {group.category}
-                </span>
-              )}
-              <span className="rounded-full bg-polar px-3 py-1.5 text-xs font-bold text-wolf">Creado el {formatDate(group.createdAt)}</span>
-            </div>
-            <h1 className="mt-4 text-3xl font-bold leading-[1.1] text-eel sm:text-4xl">{group.title}</h1>
-            {group.author && <p className="mt-1 text-lg font-semibold text-wolf">Responsable: {group.author}</p>}
-            {group.description && <p className="mt-3 max-w-[70ch] text-wolf">{group.description}</p>}
-
-            <div className="mt-6 grid grid-cols-3 divide-x divide-swan sm:max-w-lg">
-              <Stat icon={<FileText />} tone="text-macaw bg-macaw-light" value={scans.length} label={scans.length === 1 ? 'hoja' : 'hojas'} />
-              <Stat icon={<Type />} tone="text-bee-dark bg-bee-light" value={formatNumber(words)} label="palabras" />
-              <Stat
-                icon={<FileCheck />}
-                tone="text-feather-dark bg-feather-light"
-                value={group.totalPages ? Math.max(0, group.totalPages - scans.length) : '—'}
-                label="por escanear"
-              />
-            </div>
-
-            {progress !== null && (
-              <div className="mt-5 rounded-2xl bg-feather-light p-4 sm:max-w-lg">
-                <div className="mb-2 flex items-center justify-between gap-4 text-sm font-bold">
-                  <span>{progress >= 100 ? '✅ Carpeta completa' : 'Avance de la carpeta'}</span>
-                  <span className="text-wolf">
-                    {scans.length} / {group.totalPages}
-                  </span>
-                </div>
-                <QuietProgress value={progress} />
-              </div>
+      <PageHeader
+        back={<BackLink to="/archivo">Archivo</BackLink>}
+        icon={<FolderOpen />}
+        tileClassName={clsx(style.soft, style.text)}
+        title={group.title}
+        subtitle={group.author ? `Responsable: ${group.author}` : undefined}
+        meta={
+          <>
+            {group.category && (
+              <HeaderChip className={clsx(style.soft, style.text)}>
+                <DocTypeIcon type={group.category} variant="inline" fallback={Tag} className="[&_svg]:size-3.5" /> {group.category}
+              </HeaderChip>
             )}
-
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              {scans.length > 0 && (
-                <Button size="lg" icon={<Eye className="size-6" />} onClick={() => setViewerOpen(true)}>
-                  Abrir visor
-                </Button>
-              )}
-              <Button size="lg" variant="secondary" icon={<Plus className="size-6" />} onClick={addPages}>
-                Añadir hojas
+            <HeaderChip>Creado el {formatDate(group.createdAt)}</HeaderChip>
+          </>
+        }
+        actions={
+          <>
+            {scans.length > 0 && (
+              <Button icon={<Eye className="size-5" />} onClick={() => setViewerOpen(true)} className="max-sm:flex-1">
+                Abrir visor
               </Button>
-            </div>
+            )}
+            <Button variant="secondary" icon={<Plus className="size-5" />} onClick={addPages} className="max-sm:flex-1">
+              Añadir hojas
+            </Button>
+          </>
+        }
+      >
+        {group.description && <p className="mb-4 max-w-[70ch] text-wolf">{group.description}</p>}
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-stretch">
+          <div className="grid grid-cols-3 divide-x divide-swan rounded-2xl bg-polar py-3">
+            <Stat icon={<FileText />} tone="text-macaw-dark bg-macaw-light" value={scans.length} label={scans.length === 1 ? 'hoja' : 'hojas'} />
+            <Stat icon={<Type />} tone="text-bee-dark bg-bee-light" value={formatNumber(words)} label="palabras" />
+            <Stat
+              icon={<FileCheck />}
+              tone="text-feather-dark bg-feather-light"
+              value={group.totalPages ? Math.max(0, group.totalPages - scans.length) : '—'}
+              label="por escanear"
+            />
           </div>
+          {progress !== null && (
+            <div className="flex flex-col justify-center rounded-2xl bg-feather-light p-4">
+              <div className="mb-2 flex items-center justify-between gap-4 text-sm font-bold">
+                <span>{progress >= 100 ? '✅ Carpeta completa' : 'Avance de la carpeta'}</span>
+                <span className="text-wolf">
+                  {scans.length} / {group.totalPages}
+                </span>
+              </div>
+              <QuietProgress value={progress} />
+            </div>
+          )}
         </div>
-      </section>
+      </PageHeader>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:hidden">
         <QuickAction icon={<Download />} label="Exportar .txt" disabled={!scans.length} onClick={exportTxt} />
@@ -308,8 +303,8 @@ function Stat({ icon, tone, value, label }: { icon: React.ReactNode; tone: strin
   return (
     <div className="flex min-w-0 flex-col items-center gap-1 px-2 py-1 text-center">
       <span className={clsx('flex size-8 items-center justify-center rounded-lg [&>svg]:size-4', tone)}>{icon}</span>
-      <span className="mt-1 truncate text-lg font-bold leading-none tabular-nums">{value}</span>
-      <span className="text-xs font-semibold text-wolf">{label}</span>
+      <span className="mt-1 max-w-full truncate text-lg font-bold leading-none tabular-nums">{value}</span>
+      <span className="max-w-full truncate text-xs font-semibold text-wolf">{label}</span>
     </div>
   );
 }

@@ -1,7 +1,8 @@
-import { ArrowLeft, ChevronDown, Copy, FileJson, FileSpreadsheet, Sparkles, Trash2 } from 'lucide-react';
+import { ChevronDown, Copy, FileJson, FileSpreadsheet, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { DocTypeIcon } from '../components/DocTypeIcon';
+import { BackLink, HeaderChip, PageHeader } from '../components/PageHeader';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Badge, Button, Card, Input, PageLoader } from '../components/ui';
 import { DocFieldsForm, documentsToCsv, downloadFile, useDocTemplates } from '../documents/shared';
@@ -80,39 +81,37 @@ export function DocumentDetailPage() {
 
   return (
     <div className="mx-auto max-w-4xl pb-8">
-      <Link to="/documentos" className="mb-5 inline-flex min-h-10 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-bold text-wolf transition hover:text-eel active:scale-[0.98]">
-        <ArrowLeft className="size-4" /> Documentos
-      </Link>
-
-      <header className="mb-6 flex items-center gap-4 rounded-3xl bg-white p-4 sm:p-6">
-        <DocTypeIcon type={doc.templateKey} emoji={emoji} size="xl" />
-        <div className="min-w-0 flex-1">
-          <div className="text-xs font-semibold text-macaw-dark">{doc.templateName}</div>
-          <h1 className="truncate text-2xl font-bold sm:text-3xl">{doc.title}</h1>
-          <div className="mt-2 flex flex-wrap gap-1.5 text-xs font-semibold text-wolf">
-            <span className="rounded-full bg-polar px-2.5 py-1">{formatDate(doc.createdAt)}</span>
-            <span className="rounded-full bg-feather-light px-2.5 py-1 text-feather-dark">
+      <PageHeader
+        back={<BackLink to="/documentos">Documentos</BackLink>}
+        icon={<DocTypeIcon type={doc.templateKey} emoji={emoji} size="lg" />}
+        bareIcon
+        eyebrow={doc.templateName}
+        title={doc.title}
+        meta={
+          <>
+            <HeaderChip>{formatDate(doc.createdAt)}</HeaderChip>
+            <HeaderChip tone="mint">
               {filled}/{fields.length} campos
-            </span>
-            {doc.engine !== 'manual' && <span className="rounded-full bg-macaw-light px-2.5 py-1 text-macaw-dark">{ENGINE_LABEL[doc.engine] ?? doc.engine}</span>}
-          </div>
+            </HeaderChip>
+            {doc.engine !== 'manual' && <HeaderChip tone="violet">{ENGINE_LABEL[doc.engine] ?? doc.engine}</HeaderChip>}
+          </>
+        }
+      >
+        <div className="-mx-1 flex flex-wrap gap-1 border-t border-swan pt-3 sm:gap-2">
+          <Button variant="plain" size="sm" className="min-h-11 hover:bg-polar" icon={<Copy className="size-4" />} onClick={copyData}>
+            Copiar datos
+          </Button>
+          <Button variant="plain" size="sm" className="min-h-11 hover:bg-polar" icon={<FileSpreadsheet className="size-4" />} onClick={() => downloadFile(`${title}.csv`, documentsToCsv([current]), 'text/csv;charset=utf-8')}>
+            CSV
+          </Button>
+          <Button variant="plain" size="sm" className="min-h-11 hover:bg-polar" icon={<FileJson className="size-4" />} onClick={exportJson}>
+            JSON
+          </Button>
+          <Button variant="plain" size="sm" className="min-h-11 text-cardinal-dark hover:bg-cardinal-light hover:text-cardinal-dark" icon={<Trash2 className="size-4" />} onClick={remove}>
+            Borrar
+          </Button>
         </div>
-      </header>
-
-      <div className="mb-5 flex flex-wrap gap-2">
-        <Button variant="plain" size="sm" icon={<Copy className="size-4" />} onClick={copyData}>
-          Copiar datos
-        </Button>
-        <Button variant="plain" size="sm" icon={<FileSpreadsheet className="size-4" />} onClick={() => downloadFile(`${title}.csv`, documentsToCsv([current]), 'text/csv;charset=utf-8')}>
-          CSV
-        </Button>
-        <Button variant="plain" size="sm" icon={<FileJson className="size-4" />} onClick={exportJson}>
-          JSON
-        </Button>
-        <Button variant="plain" size="sm" className="text-cardinal" icon={<Trash2 className="size-4" />} onClick={remove}>
-          Borrar
-        </Button>
-      </div>
+      </PageHeader>
 
       <Card className="mb-4 p-4 sm:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">

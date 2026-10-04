@@ -1,15 +1,13 @@
 import clsx from 'clsx';
-import { Archive, Eye, FileScan, House, Layers, LogOut, Plus, ScanLine, Search, Settings } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Archive, Eye, FileScan, FolderOpen, House, Layers, LogOut, Plus, ScanLine, Search, Settings } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../lib/api';
 import { GROUP_STYLES } from '../lib/constants';
-import { formatNumber } from '../lib/format';
 import type { Stats } from '../lib/types';
 import { useScanSession } from '../scan/ScanSession';
-import { LabeledProgress } from './ActionTile';
-import { FolderCard } from './FolderCard';
+import { SidebarTotals } from './ArchiveTotals';
 import { Logo } from './Logo';
 
 const NAV = [
@@ -36,12 +34,13 @@ export function Layout() {
   const { user, logout } = useAuth();
   const stats = useStats();
   const pendingPages = useScanSession().pages.length;
+  const initial = user?.name.charAt(0).toUpperCase();
 
   return (
     <div className="min-h-dvh bg-polar lg:pl-[17.5rem]">
-      <aside className="fixed inset-y-4 left-4 z-40 hidden w-60 flex-col overflow-hidden rounded-[28px] bg-eel p-4 text-white shadow-[0_12px_32px_rgba(30,27,48,0.18)] lg:flex">
-        <Logo className="px-2 py-3 text-white" />
-        <nav className="mt-6 flex flex-col gap-1">
+      <aside className="fixed inset-y-4 left-4 z-40 hidden w-60 flex-col overflow-hidden rounded-[24px] bg-eel p-3 text-white shadow-floating lg:flex">
+        <Logo className="px-2.5 pb-2 pt-2.5 text-white" />
+        <nav aria-label="Principal" className="mt-4 flex flex-col gap-0.5">
           {NAV.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
@@ -49,15 +48,15 @@ export function Layout() {
               end={end}
               className={({ isActive }) =>
                 clsx(
-                  'group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition-[background-color,color,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98]',
+                  'group flex min-h-11 items-center gap-3 rounded-2xl px-2 py-1.5 text-sm font-semibold transition-[background-color,color,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98]',
                   isActive ? 'bg-white text-eel' : 'text-white/65 hover:bg-white/10 hover:text-white',
                 )
               }
             >
               {({ isActive }) => (
                 <>
-                  <span className={clsx('flex size-9 items-center justify-center rounded-xl', isActive ? 'bg-macaw-light text-macaw-dark' : 'bg-white/8')}>
-                    <Icon className="size-5" strokeWidth={2} />
+                  <span className={clsx('flex size-8 items-center justify-center rounded-xl transition-colors duration-200', isActive ? 'bg-macaw-light text-macaw-dark' : 'bg-white/[0.07]')}>
+                    <Icon className="size-[18px]" strokeWidth={2} />
                   </span>
                   {label}
                 </>
@@ -66,132 +65,182 @@ export function Layout() {
           ))}
         </nav>
 
-        {/* Scrolls on short screens so the account row never gets clipped. */}
-        <div className="-mx-1 mt-5 min-h-0 flex-1 space-y-3 overflow-y-auto px-1 pb-3">
-          <ContinueCard stats={stats} />
-          <ArchiveTotals stats={stats} />
+        {/* Summary blocks sit at the bottom; on short screens the less important one hides instead of scrolling. */}
+        <div className="scrollbar-none mt-4 min-h-0 flex-1 overflow-y-auto">
+          <div className="flex min-h-full flex-col justify-end gap-2 pb-2">
+            <ContinueCard stats={stats} className="[@media(max-height:689px)]:hidden" />
+            <SidebarTotals stats={stats} className="[@media(max-height:579px)]:hidden" />
+          </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3 rounded-2xl bg-white/8 p-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-macaw text-base font-bold text-eel">
-            {user?.name.charAt(0).toUpperCase()}
+        <div className="flex shrink-0 items-center gap-2.5 rounded-2xl bg-white/[0.06] p-2">
+          <div aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-macaw text-sm font-bold text-eel">
+            {initial}
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold">{user?.name}</div>
-            <div className="truncate text-xs text-white/55">{user?.email}</div>
+            <div className="truncate text-xs text-white/60">{user?.email}</div>
           </div>
-          <button onClick={logout} aria-label="Cerrar sesión" title="Cerrar sesión" className="rounded-full p-2 text-white/55 transition hover:bg-white/10 hover:text-white">
-            <LogOut className="size-5" />
+          <button
+            onClick={logout}
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full text-white/60 transition-colors duration-200 hover:bg-white/10 hover:text-white"
+          >
+            <LogOut className="size-[18px]" />
           </button>
         </div>
       </aside>
 
-      <header className="sticky top-0 z-30 bg-polar/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:px-6 lg:h-20 lg:px-8">
-          <Logo className="lg:hidden" />
-          <div className="ml-auto flex items-center gap-1.5 sm:gap-2" data-testid="top-stats">
+      <header className="sticky top-0 z-30 bg-polar/85 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:px-6 lg:h-16 lg:px-8">
+          <Link to="/" aria-label="Ocryon, ir al inicio" className="-ml-1 rounded-xl p-1 lg:hidden">
+            <Logo compact />
+          </Link>
+          <div className="ml-auto flex items-center gap-2" data-testid="top-stats">
             {pendingPages > 0 && (
               <Link
                 to="/escanear"
                 title="Hojas en el lote sin archivar"
                 aria-label={`${pendingPages} ${pendingPages === 1 ? 'hoja' : 'hojas'} en el lote sin archivar`}
-                className="inline-flex items-center gap-1.5 rounded-full bg-bee px-3 py-1.5 text-sm font-semibold text-eel transition active:scale-[0.98]"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-bee py-1 pl-1 pr-3 text-sm font-semibold text-eel shadow-surface transition-transform duration-200 active:scale-[0.98]"
               >
-                <Layers className="size-4" aria-hidden /> {pendingPages} <span className="hidden sm:inline">por archivar</span>
+                <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-full bg-white/70">
+                  <Layers className="size-4" />
+                </span>
+                <span className="tabular-nums">{pendingPages}</span> <span className="hidden min-[400px]:inline">por archivar</span>
               </Link>
             )}
-            <NavLink to="/ajustes" aria-label="Ajustes" className={({ isActive }) => clsx('flex size-10 items-center justify-center rounded-full transition lg:hidden', isActive ? 'bg-eel text-white' : 'bg-white text-wolf')}>
-              <Settings className="size-5" strokeWidth={2} />
+            <NavLink
+              to="/ajustes"
+              aria-label="Ajustes"
+              title="Ajustes"
+              className={({ isActive }) =>
+                clsx(
+                  'flex size-11 items-center justify-center rounded-full shadow-surface transition-[background-color,transform] duration-200 active:scale-95 lg:hidden',
+                  isActive ? 'bg-eel text-white' : 'bg-white text-eel',
+                )
+              }
+            >
+              {({ isActive }) =>
+                isActive ? (
+                  <Settings className="size-5" strokeWidth={2} />
+                ) : (
+                  <span aria-hidden="true" className="relative flex size-8 items-center justify-center rounded-full bg-macaw text-sm font-bold text-eel">
+                    {initial}
+                    <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-white text-eel ring-2 ring-white">
+                      <Settings className="size-3" strokeWidth={2.5} />
+                    </span>
+                  </span>
+                )
+              }
             </NavLink>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-4 pb-28 pt-4 sm:px-6 lg:px-8 lg:pb-12 lg:pt-5">
+      <main className="mx-auto w-full max-w-7xl px-4 pb-32 pt-2 sm:px-6 lg:px-8 lg:pb-12 lg:pt-3">
         <Outlet />
       </main>
 
-      <nav className="pb-safe fixed inset-x-4 bottom-3 z-40 rounded-[22px] bg-eel px-1.5 shadow-[0_12px_32px_rgba(30,27,48,0.28)] lg:hidden">
-        <div className="mx-auto grid h-16 max-w-md grid-cols-5 items-center gap-1">
-          {MOBILE_NAV.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className="flex justify-center">
-              {({ isActive }) => (
-                <span className={clsx('flex min-w-12 flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[10px] font-semibold transition-[background-color,color,transform] duration-200 active:scale-95', isActive ? 'bg-white text-eel' : 'text-white/55')}>
-                  <Icon className="size-5" strokeWidth={2} />
-                  {label}
-                </span>
-              )}
-            </NavLink>
-          ))}
+      <nav aria-label="Principal" className="pb-safe fixed inset-x-3 bottom-3 z-40 rounded-[22px] bg-eel shadow-floating lg:hidden">
+        <div className="mx-auto grid h-[4.25rem] max-w-md grid-cols-5 items-stretch px-1">
+          {MOBILE_NAV.map(({ to, label, icon: Icon, end }) => {
+            const primary = to === '/escanear';
+            return (
+              <NavLink key={to} to={to} end={end} className="group flex flex-col items-center justify-center gap-1 rounded-2xl outline-offset-[-2px]">
+                {({ isActive }) => (
+                  <>
+                    <span
+                      className={clsx(
+                        'flex h-8 items-center justify-center rounded-full transition-[background-color,color,transform,width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-active:scale-95',
+                        primary
+                          ? clsx('w-14 bg-macaw text-eel', isActive && 'ring-2 ring-white/85 ring-offset-2 ring-offset-eel')
+                          : clsx('w-12', isActive ? 'bg-white text-eel' : 'text-white/60'),
+                      )}
+                    >
+                      <Icon className="size-5" strokeWidth={isActive || primary ? 2.25 : 2} />
+                    </span>
+                    <span className={clsx('max-w-full truncate px-0.5 text-[11px] font-semibold leading-none', isActive || primary ? 'text-white' : 'text-white/60')}>{label}</span>
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
         </div>
       </nav>
     </div>
   );
 }
 
-function ContinueCard({ stats }: { stats: Stats | null }) {
-  const folder = stats?.recentGroups[0];
+/** "Carpeta reciente" row for the dark sidebar: open the folder, view it or add sheets. */
+function ContinueCard({ stats, className }: { stats: Stats | null; className?: string }) {
   if (!stats) return null;
+  const folder = stats.recentGroups[0];
+
   if (!folder) {
     return (
-      <div className="rounded-2xl bg-white/8 p-4">
-        <div className="font-semibold text-white">Empieza tu archivo</div>
-        <p className="mt-1 text-sm text-white/55">Escanea documentos y guárdalos en carpetas.</p>
-        <Link to="/escanear" className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-macaw py-2 text-xs font-semibold text-eel transition active:scale-[0.98]">
-          <ScanLine className="size-4" /> Escanear documentos
-        </Link>
-      </div>
+      <Link
+        to="/escanear"
+        className={clsx('flex items-center gap-2.5 rounded-2xl bg-white/[0.06] p-2 transition-colors duration-200 hover:bg-white/10', className)}
+      >
+        <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-macaw text-eel">
+          <ScanLine className="size-[18px]" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold text-white">Empieza tu archivo</span>
+          <span className="block truncate text-xs text-white/60">Escanea tu primera hoja</span>
+        </span>
+      </Link>
     );
   }
+
   const style = GROUP_STYLES[folder.color];
+  const progress = folder.totalPages ? Math.min(100, (folder.scanCount / folder.totalPages) * 100) : null;
   return (
-    <div className="rounded-2xl bg-white p-3 text-eel" data-testid="continue-card">
-      <div className="mb-2 text-xs font-semibold text-wolf">Carpeta reciente</div>
-      <Link to={`/archivo/carpeta/${folder.id}`} className="flex items-center gap-3">
-        <FolderCard group={folder} size="sm" />
-        <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 text-sm font-bold leading-tight">{folder.title}</div>
-          {folder.author && <div className={clsx('truncate text-xs font-semibold', style.text)}>Responsable: {folder.author}</div>}
-          <div className="mt-1 text-xs text-wolf">
+    <div className={clsx('rounded-2xl bg-white/[0.06] p-2', className)} data-testid="continue-card">
+      <div className="flex items-center justify-between gap-2 pb-1 pl-1.5">
+        <span className="text-xs font-semibold text-white/60">Carpeta reciente</span>
+        <span className="flex gap-3 pr-1.5">
+          <SidebarIconLink to={`/archivo/carpeta/${folder.id}?visor=1`} label={`Ver ${folder.title}`}>
+            <Eye className="size-4" />
+          </SidebarIconLink>
+          <SidebarIconLink to={`/escanear?grupo=${folder.id}`} label={`Añadir hojas a ${folder.title}`}>
+            <Plus className="size-4" />
+          </SidebarIconLink>
+        </span>
+      </div>
+      <Link to={`/archivo/carpeta/${folder.id}`} className="flex items-center gap-2.5 rounded-xl p-1 transition-colors duration-200 hover:bg-white/[0.06]">
+        <span aria-hidden="true" className={clsx('flex size-9 shrink-0 items-center justify-center rounded-xl', style.soft, style.text)}>
+          <FolderOpen className="size-[18px]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-white">{folder.title}</span>
+          <span className="block truncate text-xs text-white/60">
             {folder.scanCount} {folder.scanCount === 1 ? 'hoja' : 'hojas'}
             {folder.totalPages ? ` de ${folder.totalPages}` : ''}
-          </div>
-        </div>
+          </span>
+        </span>
       </Link>
-      {folder.totalPages ? <div className="mt-3"><LabeledProgress value={(folder.scanCount / folder.totalPages) * 100} /></div> : null}
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <Link to={`/archivo/carpeta/${folder.id}?visor=1`} className="flex items-center justify-center gap-1 rounded-full bg-eel py-2 text-xs font-semibold text-white transition active:scale-[0.98]">
-          <Eye className="size-3.5" /> Ver
-        </Link>
-        <Link to={`/escanear?grupo=${folder.id}`} className="flex items-center justify-center gap-1 rounded-full bg-polar py-2 text-xs font-semibold text-eel transition active:scale-[0.98]">
-          <Plus className="size-3.5" /> Hojas
-        </Link>
-      </div>
+      {progress !== null && (
+        <div className="mx-1 mt-1.5 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Avance de la carpeta" aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100}>
+          <div className="h-full origin-left rounded-full bg-feather" style={{ transform: `scaleX(${progress / 100})` }} />
+        </div>
+      )}
     </div>
   );
 }
 
-/** Compact archive totals for the desktop sidebar (mobile sees them on Home). */
-function ArchiveTotals({ stats }: { stats: Stats | null }) {
-  if (!stats || stats.totals.scans === 0) return null;
-  const items = [
-    { value: stats.totals.groups, label: stats.totals.groups === 1 ? 'carpeta' : 'carpetas' },
-    { value: stats.totals.scans, label: stats.totals.scans === 1 ? 'hoja' : 'hojas' },
-    { value: stats.totals.words, label: stats.totals.words === 1 ? 'palabra' : 'palabras' },
-  ];
+/** Small circular icon link with an expanded 44px hit area. */
+function SidebarIconLink({ to, label, children }: { to: string; label: string; children: ReactNode }) {
   return (
-    <section aria-labelledby="archive-totals-title" className="rounded-2xl bg-white/8 px-3 py-3" data-testid="archive-totals">
-      <h2 id="archive-totals-title" className="text-xs font-semibold text-white/60">
-        Tu archivo
-      </h2>
-      <dl className="mt-2 grid grid-cols-3 gap-2">
-        {items.map(({ value, label }) => (
-          <div key={label} className="flex min-w-0 flex-col" title={`${formatNumber(value)} ${label}`}>
-            <dt className="order-2 truncate text-xs font-medium text-white/60">{label}</dt>
-            <dd className="order-1 truncate text-base font-bold tabular-nums text-white">{formatNumber(value)}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
+    <Link
+      to={to}
+      aria-label={label}
+      title={label}
+      className="relative flex size-8 items-center justify-center rounded-full bg-white/10 text-white/80 transition-colors duration-200 after:absolute after:-inset-1.5 hover:bg-white/20 hover:text-white"
+    >
+      {children}
+    </Link>
   );
 }

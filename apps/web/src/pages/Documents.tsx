@@ -3,6 +3,7 @@ import { Download, FileScan, LayoutGrid, Plus, Search, Trash2, X } from 'lucide-
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { DocTypeIcon } from '../components/DocTypeIcon';
+import { HeaderChip, PageHeader } from '../components/PageHeader';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Button, Card, EmptyState, Input, PageLoader } from '../components/ui';
 import { documentsToCsv, downloadFile, TemplateModal, useDocTemplates } from '../documents/shared';
@@ -76,23 +77,25 @@ export function DocumentsPage() {
 
   return (
     <div>
-      <header className="mb-6 flex items-end gap-4 sm:mb-8">
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 inline-flex rounded-full bg-macaw-light px-3 py-1 text-xs font-bold text-macaw-dark">
-            {total} guardados
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-3xl font-bold leading-none tracking-[-0.025em] sm:text-4xl">Tus documentos</h1>
-            <p className="mt-2 hidden max-w-xl text-sm font-medium text-wolf sm:block">Escanea y los datos se llenan solos en un formulario.</p>
-          </div>
-        </div>
-        <Link
-          to="/documentos/nuevo"
-          className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-eel px-4 text-sm font-bold text-white transition duration-200 hover:bg-[#303138] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-macaw/35 sm:px-5"
-        >
-          <Plus className="size-5" /> Nuevo documento
-        </Link>
-      </header>
+      <PageHeader
+        icon={<FileScan />}
+        tone="amber"
+        title="Tus documentos"
+        subtitle="Escanea y los datos se llenan solos en un formulario."
+        meta={
+          <HeaderChip tone="violet">
+            <span className="tabular-nums">{total}</span> guardados
+          </HeaderChip>
+        }
+        actions={
+          <Link
+            to="/documentos/nuevo"
+            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-eel px-5 text-sm font-bold text-white transition duration-200 hover:bg-eel-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-macaw/35 max-sm:flex-1"
+          >
+            <Plus className="size-5" /> Nuevo documento
+          </Link>
+        }
+      />
 
       <div className="relative mb-4">
         <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-hare" />

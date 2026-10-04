@@ -1,9 +1,10 @@
 import clsx from 'clsx';
-import { ArrowLeft, Camera, ChevronDown, ImagePlus, PencilLine, Plus, ScanText, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, Camera, ChevronDown, FilePlus2, ImagePlus, PencilLine, Plus, ScanText, Sparkles, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LabeledProgress } from '../components/ActionTile';
 import { DocTypeIcon } from '../components/DocTypeIcon';
+import { PageHeader } from '../components/PageHeader';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Badge, Button, Card, Input, ProgressBar, Segmented, Toggle } from '../components/ui';
 import { DocFieldsForm, TemplateModal, useDocTemplates } from '../documents/shared';
@@ -19,6 +20,12 @@ import { useSettings } from '../settings/SettingsContext';
 
 type Step = 'tipo' | 'fotos' | 'leyendo' | 'formulario';
 const STEP_INDEX: Record<Step, number> = { tipo: 0, fotos: 1, leyendo: 2, formulario: 3 };
+const STEP_SUBTITLE: Record<Step, string> = {
+  tipo: 'Elige el tipo para saber qué datos buscar.',
+  fotos: 'Añade las fotos y elige cómo leer el texto.',
+  leyendo: 'Estamos extrayendo los datos de tus fotos.',
+  formulario: 'Revisa los datos detectados antes de guardar.',
+};
 
 interface Photo {
   id: string;
@@ -147,25 +154,31 @@ export function DocumentNewPage() {
 
   return (
     <div className="mx-auto max-w-4xl pb-8">
-      <div className="mb-7 flex items-center gap-3">
-        <button
-          type="button"
-          aria-label="Volver"
-          onClick={() => (step === 'tipo' ? navigate('/documentos') : setStep(step === 'formulario' ? 'fotos' : 'tipo'))}
-          disabled={step === 'leyendo'}
-          className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white text-wolf transition hover:text-eel active:scale-[0.98] disabled:opacity-40"
-        >
-          <ArrowLeft className="size-6" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <LabeledProgress value={((STEP_INDEX[step] + 1) / 4) * 100} label={`Paso ${Math.min(STEP_INDEX[step] + 1, 3)} de 3`} />
-        </div>
-      </div>
+      <PageHeader
+        back={
+          <div className="flex w-full items-center gap-3">
+            <button
+              type="button"
+              aria-label="Volver"
+              onClick={() => (step === 'tipo' ? navigate('/documentos') : setStep(step === 'formulario' ? 'fotos' : 'tipo'))}
+              disabled={step === 'leyendo'}
+              className="flex size-11 shrink-0 items-center justify-center rounded-full bg-polar text-wolf transition hover:text-eel active:scale-[0.98] disabled:opacity-40"
+            >
+              <ArrowLeft className="size-5" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <LabeledProgress value={((STEP_INDEX[step] + 1) / 4) * 100} label={`Paso ${Math.min(STEP_INDEX[step] + 1, 3)} de 3`} />
+            </div>
+          </div>
+        }
+        icon={<FilePlus2 />}
+        tone="amber"
+        title={step === 'tipo' ? '¿Qué documento vas a escanear?' : 'Nuevo documento'}
+        subtitle={STEP_SUBTITLE[step]}
+      />
 
       {step === 'tipo' && (
         <section>
-          <h1 className="mb-2 text-3xl font-bold leading-tight sm:text-4xl">¿Qué documento vas a escanear?</h1>
-          <p className="mb-6 max-w-2xl font-medium text-wolf">Elige el tipo para saber qué datos buscar.</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {templates.map((t) => (
               <button

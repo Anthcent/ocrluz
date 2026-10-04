@@ -1,8 +1,9 @@
-import { CircleCheck, ExternalLink, KeyRound, LogOut, ShieldCheck, SlidersHorizontal, Trash2, UserRound } from 'lucide-react';
+import { CircleCheck, Settings as SettingsIcon, ExternalLink, KeyRound, LogOut, ShieldCheck, SlidersHorizontal, Trash2, UserRound } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { errorMessage, useFeedback } from '../components/feedback';
-import { Badge, Button, Field, Input, PageHeader, Segmented, Select, Toggle } from '../components/ui';
+import { PageHeader } from '../components/PageHeader';
+import { Badge, Button, Field, Input, Segmented, Select, Toggle } from '../components/ui';
 import { api } from '../lib/api';
 import { ENGINES, LANGUAGES } from '../lib/constants';
 import type { Engine, KeyStatus } from '../lib/types';
@@ -40,8 +41,8 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <PageHeader title="Ajustes" subtitle="Configura los motores de OCR, tus preferencias y tu cuenta." />
+    <div className="mx-auto max-w-6xl">
+      <PageHeader icon={<SettingsIcon />} tone="neutral" title="Ajustes" subtitle="Configura los motores de OCR, tus preferencias y tu cuenta." />
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] xl:items-start">
         <div className="space-y-5">

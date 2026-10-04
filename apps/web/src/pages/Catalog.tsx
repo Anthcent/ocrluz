@@ -6,6 +6,7 @@ import { errorMessage, useFeedback } from '../components/feedback';
 import { LabeledProgress } from '../components/ActionTile';
 import { DocTypeIcon } from '../components/DocTypeIcon';
 import { FolderCard } from '../components/FolderCard';
+import { HeaderChip, PageHeader } from '../components/PageHeader';
 import { EMPTY_GROUP, GroupFields } from '../components/GroupFields';
 import { Badge, Button, Card, EmptyState, Input, Modal, PageLoader, Segmented } from '../components/ui';
 import { api } from '../lib/api';
@@ -171,40 +172,30 @@ function ArchiveHero({ onCreate }: { onCreate: () => void }) {
   useEffect(() => {
     api.stats().then(setStats).catch(() => {});
   }, []);
-  const tiles = [
-    { label: 'carpetas', value: stats?.totals.groups ?? 0 },
-    { label: 'sueltos', value: stats?.totals.individual ?? 0 },
+  const chips = [
+    { label: 'carpetas', value: formatNumber(stats?.totals.groups ?? 0) },
+    { label: 'hojas', value: formatNumber(stats?.totals.scans ?? 0) },
+    { label: 'sueltos', value: formatNumber(stats?.totals.individual ?? 0) },
     { label: 'palabras', value: formatNumber(stats?.totals.words ?? 0) },
-  ];
-  const chips = tiles.map((t) => (
-    <span key={t.label} className="inline-flex items-center gap-1.5 rounded-full bg-polar px-3 py-1.5 text-sm font-bold text-eel">
-      <span className="tabular-nums">{t.value}</span>
-      <span className="font-semibold text-wolf">{t.label}</span>
-    </span>
+  ].map((t) => (
+    <HeaderChip key={t.label} tone="strong">
+      <span className="font-bold tabular-nums">{t.value}</span>
+      <span className="text-wolf">{t.label}</span>
+    </HeaderChip>
   ));
 
   return (
-    <div className="relative mb-5 rounded-[24px] bg-white px-4 py-4 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:px-6 sm:py-5">
-      <div className="relative flex items-center gap-3 sm:gap-5">
-        <span className="hidden size-12 shrink-0 items-center justify-center rounded-2xl bg-macaw-light text-macaw-dark sm:flex">
-          <Archive className="size-6" />
-        </span>
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold leading-tight text-eel sm:text-3xl">Tu archivo</h1>
-          <p className="hidden text-sm text-wolf sm:block">Tus documentos escaneados, organizados en carpetas.</p>
-        </div>
-        <div className="hidden flex-wrap gap-2 md:flex">{chips}</div>
-        <button
-          type="button"
-          onClick={onCreate}
-          className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-eel px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#303138] active:scale-[0.98] sm:px-5 sm:text-sm"
-        >
-          <Plus className="size-5" strokeWidth={3} /> Nueva carpeta
-        </button>
-      </div>
-      {/* En pantallas pequeñas el resumen va en una segunda fila */}
-      <div className="relative mt-3 flex flex-wrap gap-1.5 md:hidden">{chips}</div>
-    </div>
+    <PageHeader
+      icon={<Archive />}
+      title="Tu archivo"
+      subtitle="Tus documentos escaneados, organizados en carpetas."
+      meta={chips}
+      actions={
+        <Button icon={<Plus className="size-5" strokeWidth={2.5} />} onClick={onCreate} className="max-sm:flex-1">
+          Nueva carpeta
+        </Button>
+      }
+    />
   );
 }
 

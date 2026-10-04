@@ -1,9 +1,10 @@
 import clsx from 'clsx';
-import { ArrowLeft, BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, FileText, Folder, FolderInput, Pencil, Save, Trash2, X } from 'lucide-react';
+import { BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, FileText, Folder, FolderInput, Pencil, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { errorMessage, useFeedback } from '../components/feedback';
+import { BackLink, HeaderChip, PageHeader } from '../components/PageHeader';
 import { Button, Card, EmptyState, Input, Modal, PageLoader, Segmented, Textarea } from '../components/ui';
 import { api } from '../lib/api';
 import { ENGINE_LABEL, GROUP_STYLES, LANGUAGES } from '../lib/constants';
@@ -129,44 +130,37 @@ export function ScanDetailPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      {/* Navegación: volver y, si es parte de una carpeta, avance por sus hojas */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Link
-          to={scan.groupId ? `/archivo/carpeta/${scan.groupId}` : '/archivo?vista=individuales'}
-          className="inline-flex min-h-10 min-w-0 items-center gap-2 rounded-full px-2 text-sm font-bold text-wolf transition-colors hover:text-eel"
-        >
-          <ArrowLeft className="size-4 shrink-0" />
-          <span className="max-w-48 truncate">{scan.groupTitle ?? 'Sueltos'}</span>
-        </Link>
-        {siblings.length > 1 && (
-          <div className="flex min-w-60 flex-1 items-center gap-2">
-            <RoundNav label="Página anterior" disabled={!prev} onClick={() => prev && navigate(`/escaneo/${prev}`)}>
-              <ChevronLeft className="size-5" />
-            </RoundNav>
-            <div className="flex-1">
-              <PageProgress value={((index + 1) / siblings.length) * 100} label={`${index + 1} / ${siblings.length}`} />
-            </div>
-            <RoundNav label="Página siguiente" disabled={!next} onClick={() => next && navigate(`/escaneo/${next}`)}>
-              <ChevronRight className="size-5" />
-            </RoundNav>
-          </div>
-        )}
-      </div>
-
-      <header className="flex items-start gap-4 rounded-3xl bg-white p-5 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:p-6">
-        <div className={clsx('flex size-12 shrink-0 items-center justify-center rounded-xl sm:size-14', group ? `${GROUP_STYLES[group.color].soft} ${GROUP_STYLES[group.color].text}` : 'bg-beetle-light text-beetle-dark')}>
-          {group ? <Folder className="size-7" /> : <FileText className="size-7" />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold leading-tight text-eel sm:text-3xl">{scan.title}</h1>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-            <Chip>{ENGINE_LABEL[scan.engine]}</Chip>
-            <Chip>{language}</Chip>
-            <Chip>{formatNumber(scan.wordCount)} palabras</Chip>
-            <Chip>{formatDate(scan.createdAt)}</Chip>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        back={
+          <>
+            <BackLink to={scan.groupId ? `/archivo/carpeta/${scan.groupId}` : '/archivo?vista=individuales'}>{scan.groupTitle ?? 'Sueltos'}</BackLink>
+            {siblings.length > 1 && (
+              <div className="flex min-w-60 flex-1 items-center gap-2">
+                <RoundNav label="Página anterior" disabled={!prev} onClick={() => prev && navigate(`/escaneo/${prev}`)}>
+                  <ChevronLeft className="size-5" />
+                </RoundNav>
+                <div className="flex-1">
+                  <PageProgress value={((index + 1) / siblings.length) * 100} label={`${index + 1} / ${siblings.length}`} />
+                </div>
+                <RoundNav label="Página siguiente" disabled={!next} onClick={() => next && navigate(`/escaneo/${next}`)}>
+                  <ChevronRight className="size-5" />
+                </RoundNav>
+              </div>
+            )}
+          </>
+        }
+        icon={group ? <Folder /> : <FileText />}
+        tileClassName={group ? `${GROUP_STYLES[group.color].soft} ${GROUP_STYLES[group.color].text}` : 'bg-beetle-light text-beetle-dark'}
+        title={scan.title}
+        meta={
+          <>
+            <HeaderChip>{ENGINE_LABEL[scan.engine]}</HeaderChip>
+            <HeaderChip>{language}</HeaderChip>
+            <HeaderChip>{formatNumber(scan.wordCount)} palabras</HeaderChip>
+            <HeaderChip>{formatDate(scan.createdAt)}</HeaderChip>
+          </>
+        }
+      />
 
       {/* Acciones en fila (móvil y tablet) */}
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:hidden">{actions(true)}</div>
@@ -240,10 +234,6 @@ export function ScanDetailPage() {
       </Modal>
     </div>
   );
-}
-
-function Chip({ children }: { children: ReactNode }) {
-  return <span className="rounded-full bg-polar px-3 py-1.5 text-wolf">{children}</span>;
 }
 
 function Detail({ label, value }: { label: string; value: string }) {

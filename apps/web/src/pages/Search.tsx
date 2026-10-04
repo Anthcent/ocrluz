@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { ChevronRight, Clock, FileText, Folder, Layers, Search as SearchIcon, Tag, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { PageHeader } from '../components/PageHeader';
 import { Snippet } from '../components/Snippet';
 import { Spinner } from '../components/ui';
 import { api } from '../lib/api';
@@ -118,12 +119,12 @@ export function SearchPage() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-[24px] bg-white p-5 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:p-7">
-        <div>
-          <h1 className="text-3xl font-bold leading-tight text-eel sm:text-4xl">¿Qué quieres encontrar?</h1>
-          <p className="mt-2 text-wolf">Busca cualquier palabra, nombre o número en todas tus carpetas y documentos.</p>
-        </div>
-        <div className="relative mt-5">
+      <PageHeader
+        icon={<SearchIcon />}
+        title="¿Qué quieres encontrar?"
+        subtitle="Busca cualquier palabra, nombre o número en todas tus carpetas y documentos."
+      >
+        <div className="relative">
           <SearchIcon className="absolute left-4 top-1/2 size-6 -translate-y-1/2 text-macaw-dark" />
           <input
             type="text"
@@ -144,14 +145,14 @@ export function SearchPage() {
                 type="button"
                 aria-label="Borrar búsqueda"
                 onClick={() => setQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-hare hover:bg-polar hover:text-wolf"
+                className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full text-wolf hover:bg-polar hover:text-eel"
               >
                 <X className="size-5" />
               </button>
             )
           )}
         </div>
-      </div>
+      </PageHeader>
 
       {/* Filtros */}
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">

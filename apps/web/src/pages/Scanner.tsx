@@ -1,8 +1,9 @@
-import { Archive, Camera, ScanText, Trash2 } from 'lucide-react';
+import { Archive, Camera, ScanLine, ScanText, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { EMPTY_GROUP } from '../components/GroupFields';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui';
 import { api } from '../lib/api';
 import type { DocTemplate } from '../lib/doc-templates';
@@ -306,13 +307,16 @@ export function ScannerPage() {
         void addFiles(e.dataTransfer.files);
       }}
     >
-      <header className="mb-5 lg:mb-6">
-        <h1 className="text-[1.75rem] font-bold leading-[1.1] tracking-[-0.02em] text-balance sm:text-4xl">Digitalizar hojas</h1>
-        <p className="mt-1.5 max-w-2xl text-sm text-wolf text-pretty sm:text-base">
-          <span className="lg:hidden">Captura, revisa y archiva cada hoja con su texto.</span>
-          <span className="hidden lg:inline">Fotografía o trae las hojas, revisa cada una y archívalas con su texto.</span>
-        </p>
-      </header>
+      <PageHeader
+        icon={<ScanLine />}
+        title="Digitalizar hojas"
+        subtitle={
+          <>
+            <span className="lg:hidden">Captura, revisa y archiva cada hoja con su texto.</span>
+            <span className="hidden lg:inline">Fotografía o trae las hojas, revisa cada una y archívalas con su texto.</span>
+          </>
+        }
+      />
 
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start lg:gap-6 xl:grid-cols-[minmax(0,1fr)_25rem]">
         <div className="min-w-0 space-y-4">
