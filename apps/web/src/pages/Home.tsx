@@ -170,9 +170,9 @@ export function HomePage() {
             </div>
           </div>
           <div className="mt-4 grid grid-cols-3 divide-x divide-swan rounded-2xl bg-polar px-2 py-4">
-            <Metric value={formatNumber(stats.totals.scans)} label="Páginas" />
+            <Metric value={formatNumber(stats.totals.scans)} label="Hojas" />
             <Metric value={formatNumber(stats.totals.words)} label="Palabras" />
-            <Metric value={formatNumber(averageWords)} label="Promedio/pág." />
+            <Metric value={formatNumber(averageWords)} label="Palabras por hoja" />
           </div>
         </section>
 
@@ -277,9 +277,9 @@ function StatusRow({ icon, label, value, tone }: { icon: ReactNode; label: strin
 
 function Metric({ value, label }: { value: string; label: string }) {
   return (
-    <div className="px-2 text-center">
-      <div className="text-xl font-bold tabular-nums text-eel sm:text-2xl">{value}</div>
-      <div className="mt-0.5 text-[11px] font-semibold text-wolf sm:text-xs">{label}</div>
+    <div className="min-w-0 px-2 text-center">
+      <div className="truncate text-lg font-bold tabular-nums text-eel sm:text-2xl">{value}</div>
+      <div className="mt-0.5 text-xs font-semibold leading-tight text-wolf text-balance">{label}</div>
     </div>
   );
 }

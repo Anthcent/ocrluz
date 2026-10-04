@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronDown, Copy, FileJson, FileSpreadsheet, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { DocTypeIcon } from '../components/DocTypeIcon';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Badge, Button, Card, Input, PageLoader } from '../components/ui';
 import { DocFieldsForm, documentsToCsv, downloadFile, useDocTemplates } from '../documents/shared';
@@ -36,7 +37,7 @@ export function DocumentDetailPage() {
   if (!doc) return <PageLoader />;
 
   const dirty = title !== doc.title || JSON.stringify(fields) !== JSON.stringify(doc.fields);
-  const emoji = templates.find((t) => t.key === doc.templateKey)?.emoji ?? '📄';
+  const emoji = templates.find((t) => t.key === doc.templateKey)?.emoji;
   const filled = fields.filter((f) => f.value.trim()).length;
 
   const save = async () => {
@@ -84,9 +85,7 @@ export function DocumentDetailPage() {
       </Link>
 
       <header className="mb-6 flex items-center gap-4 rounded-3xl bg-white p-4 sm:p-6">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-macaw-light text-4xl" aria-hidden>
-          {emoji}
-        </span>
+        <DocTypeIcon type={doc.templateKey} emoji={emoji} size="xl" />
         <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold text-macaw-dark">{doc.templateName}</div>
           <h1 className="truncate text-2xl font-bold sm:text-3xl">{doc.title}</h1>

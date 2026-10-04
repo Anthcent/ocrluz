@@ -3,6 +3,7 @@ import { ArrowLeft, Camera, ChevronDown, ImagePlus, PencilLine, Plus, ScanText, 
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LabeledProgress } from '../components/ActionTile';
+import { DocTypeIcon } from '../components/DocTypeIcon';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Badge, Button, Card, Input, ProgressBar, Segmented, Toggle } from '../components/ui';
 import { DocFieldsForm, TemplateModal, useDocTemplates } from '../documents/shared';
@@ -173,9 +174,7 @@ export function DocumentNewPage() {
                 onClick={() => chooseTemplate(t)}
                 className="flex min-h-40 flex-col items-start rounded-2xl border-0 bg-white p-4 text-left shadow-[0_1px_2px_rgba(41,36,68,0.06)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(41,36,68,0.10)] active:translate-y-0"
               >
-                <span className="mb-2 text-4xl" aria-hidden>
-                  {t.emoji}
-                </span>
+                <DocTypeIcon type={t.key} emoji={t.emoji} size="lg" className="mb-3" />
                 <span className="font-bold leading-tight">{t.name}</span>
                 <span className="mt-1 line-clamp-2 text-xs font-medium text-hare">{t.description || `${t.fields.length} campos`}</span>
               </button>
@@ -271,9 +270,7 @@ export function DocumentNewPage() {
 
       {step === 'leyendo' && (
         <Card className="p-6 text-center sm:p-10">
-          <div className="mx-auto mb-5 flex size-16 items-center justify-center rounded-2xl bg-macaw-light text-4xl" aria-hidden>
-            {template?.emoji}
-          </div>
+          <DocTypeIcon type={template?.key} emoji={template?.emoji} size="xl" className="mx-auto mb-5" />
           <h2 className="text-2xl font-bold">Leyendo tu documento…</h2>
           <p className="mb-5 mt-2 font-medium text-wolf">{progress.label}</p>
           <ProgressBar value={progress.value} />
@@ -336,9 +333,7 @@ export function DocumentNewPage() {
 function TemplateBanner({ template, onChange }: { template: DocTemplate; onChange?: () => void }) {
   return (
     <div className="flex items-center gap-3 rounded-3xl bg-macaw-light p-4 text-eel sm:p-5">
-      <span className="flex size-12 items-center justify-center rounded-2xl bg-white text-3xl" aria-hidden>
-        {template.emoji}
-      </span>
+      <DocTypeIcon type={template.key} emoji={template.emoji} size="lg" tone="white" />
       <div className="min-w-0 flex-1">
         <div className="text-xs font-semibold text-macaw-dark">Tipo de documento</div>
         <div className="truncate text-xl font-bold">{template.name}</div>

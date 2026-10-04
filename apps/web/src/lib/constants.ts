@@ -50,4 +50,3 @@ export const CATEGORY_PRESETS: { name: string; emoji: string }[] = [
   { name: 'Otro', emoji: '📄' },
 ];
 
-export const categoryEmoji = (name: string) => CATEGORY_PRESETS.find((c) => c.name === name)?.emoji ?? '🏷️';

@@ -1,11 +1,12 @@
 import clsx from 'clsx';
-import { ChevronRight, Clock, FileText, Folder, Layers, Search as SearchIcon, X } from 'lucide-react';
+import { ChevronRight, Clock, FileText, Folder, Layers, Search as SearchIcon, Tag, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Snippet } from '../components/Snippet';
 import { Spinner } from '../components/ui';
 import { api } from '../lib/api';
-import { categoryEmoji, GROUP_STYLES } from '../lib/constants';
+import { GROUP_STYLES } from '../lib/constants';
+import { DocTypeIcon } from '../components/DocTypeIcon';
 import type { Group, SearchResult } from '../lib/types';
 
 type TypeFilter = 'all' | 'group' | 'individual';
@@ -165,7 +166,7 @@ export function SearchPage() {
         </FilterChip>
         {categories.length > 0 && <span className="mx-1 w-0.5 shrink-0 rounded bg-swan" />}
         {categories.map((c) => (
-          <FilterChip key={c} selected={category === c} onClick={() => setCategory(category === c ? '' : c)} icon={<span aria-hidden>{categoryEmoji(c)}</span>} tone="orange">
+          <FilterChip key={c} selected={category === c} onClick={() => setCategory(category === c ? '' : c)} icon={<DocTypeIcon type={c} variant="inline" fallback={Tag} />} tone="orange">
             {c}
           </FilterChip>
         ))}
@@ -294,7 +295,7 @@ function FolderResults({ folder }: { folder: FolderHits }) {
         <span className="min-w-0 flex-1">
           <span className="block truncate text-lg font-bold leading-tight">{folder.title}</span>
           <span className="block truncate text-sm font-semibold text-wolf">
-            {[folder.author && `Responsable: ${folder.author}`, folder.category && `${categoryEmoji(folder.category)} ${folder.category}`].filter(Boolean).join(' · ') || 'Carpeta'}
+            {[folder.author && `Responsable: ${folder.author}`, folder.category].filter(Boolean).join(' · ') || 'Carpeta'}
           </span>
         </span>
         <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-sm font-bold text-macaw-dark">

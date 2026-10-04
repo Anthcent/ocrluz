@@ -9,7 +9,7 @@ import type { DocTemplate } from '../lib/doc-templates';
 import { detectPageLabel } from '../lib/page-number';
 import type { Engine, Group, GroupInput, ScanEngine } from '../lib/types';
 import { AddSurface } from '../scan/AddSurface';
-import { BatchProgress, BatchSheet, BatchSummaryButton, DesktopBatchPanel, type BatchStats } from '../scan/BatchPanel';
+import { BatchSheet, BatchSummaryButton, DesktopBatchPanel, type BatchStats } from '../scan/BatchPanel';
 import { NEW_GROUP, templateFor, type BatchSettingsProps, type Mode } from '../scan/BatchSettings';
 import { CameraCapture } from '../scan/CameraCapture';
 import { CaptureDock } from '../scan/CaptureDock';
@@ -306,21 +306,17 @@ export function ScannerPage() {
         void addFiles(e.dataTransfer.files);
       }}
     >
-      <header className="mb-4 lg:mb-6">
-        <h1 className="text-3xl font-bold leading-tight sm:text-4xl">Digitalizar hojas</h1>
-        <p className="mt-1.5 hidden max-w-2xl text-wolf lg:block">Fotografía o trae las hojas, revisa cada una y archívalas con su texto.</p>
+      <header className="mb-5 lg:mb-6">
+        <h1 className="text-[1.75rem] font-bold leading-[1.1] tracking-[-0.02em] text-balance sm:text-4xl">Digitalizar hojas</h1>
+        <p className="mt-1.5 max-w-2xl text-sm text-wolf text-pretty sm:text-base">
+          <span className="lg:hidden">Captura, revisa y archiva cada hoja con su texto.</span>
+          <span className="hidden lg:inline">Fotografía o trae las hojas, revisa cada una y archívalas con su texto.</span>
+        </p>
       </header>
 
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start lg:gap-6 xl:grid-cols-[minmax(0,1fr)_25rem]">
         <div className="min-w-0 space-y-4">
-          <div className="space-y-3 lg:hidden">
-            <BatchSummaryButton settings={batchSettings} onOpen={() => setSheetOpen(true)} expanded={sheetOpen} />
-            {stats.total > 0 && (
-              <div className="rounded-2xl bg-white px-4 py-3 shadow-[0_1px_2px_rgba(41,36,68,0.06)]">
-                <BatchProgress stats={stats} compact />
-              </div>
-            )}
-          </div>
+          <BatchSummaryButton settings={batchSettings} stats={stats} onOpen={() => setSheetOpen(true)} expanded={sheetOpen} />
 
           <AddSurface compact={pages.length > 0} dragging={dragDepth > 0} adding={adding} onFiles={() => fileInput.current?.click()} onCamera={openCamera} />
 

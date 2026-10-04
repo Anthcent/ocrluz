@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { AlignLeft, ArrowLeft, BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, Eye, FileCheck, FileText, FolderOpen, LayoutGrid, Pencil, Plus, Trash2, Type } from 'lucide-react';
+import { AlignLeft, ArrowLeft, BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, Eye, FileCheck, FileText, FolderOpen, LayoutGrid, Pencil, Plus, Tag, Trash2, Type } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type React from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -9,7 +9,8 @@ import { errorMessage, useFeedback } from '../components/feedback';
 import { Reader } from '../components/Reader';
 import { Button, EmptyState, PageLoader, Segmented } from '../components/ui';
 import { api } from '../lib/api';
-import { categoryEmoji, GROUP_STYLES } from '../lib/constants';
+import { GROUP_STYLES } from '../lib/constants';
+import { DocTypeIcon } from '../components/DocTypeIcon';
 import { copyText, downloadText, formatDate, formatNumber } from '../lib/format';
 import type { Group, Scan } from '../lib/types';
 import { GroupFormModal } from './Catalog';
@@ -126,8 +127,8 @@ export function GroupDetailPage() {
           <div className="min-w-0">
             <div className="flex flex-wrap gap-2">
               {group.category && (
-                <span className={clsx('rounded-full px-3 py-1.5 text-xs font-bold', style.soft, style.text)}>
-                  {categoryEmoji(group.category)} {group.category}
+                <span className={clsx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold', style.soft, style.text)}>
+                  <DocTypeIcon type={group.category} variant="inline" fallback={Tag} className="[&_svg]:size-3.5" /> {group.category}
                 </span>
               )}
               <span className="rounded-full bg-polar px-3 py-1.5 text-xs font-bold text-wolf">Creado el {formatDate(group.createdAt)}</span>
@@ -286,7 +287,7 @@ export function GroupDetailPage() {
             <div className="mb-3 text-sm font-bold text-wolf">Detalles</div>
             <dl className="space-y-2.5 text-sm">
               <Detail label="Responsable" value={group.author || '—'} />
-              <Detail label="Categoría" value={group.category ? `${categoryEmoji(group.category)} ${group.category}` : '—'} />
+              <Detail label="Categoría" value={group.category || '—'} />
               <Detail label="Hojas esperadas" value={group.totalPages ? String(group.totalPages) : '—'} />
               <Detail label="Hojas escaneadas" value={String(scans.length)} />
               <Detail label="Palabras" value={formatNumber(words)} />

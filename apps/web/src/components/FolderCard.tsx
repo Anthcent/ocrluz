@@ -1,6 +1,7 @@
 import clsx from 'clsx';
-import { FolderOpen } from 'lucide-react';
-import { categoryEmoji, GROUP_STYLES } from '../lib/constants';
+import { FolderOpen, Tag } from 'lucide-react';
+import { GROUP_STYLES } from '../lib/constants';
+import { DocTypeIcon } from './DocTypeIcon';
 import type { Group } from '../lib/types';
 
 const SIZES = {
@@ -23,8 +24,9 @@ export function FolderCard({ group, size = 'md', className }: { group: Pick<Grou
           <FolderOpen className={clsx('absolute -bottom-2 -right-2 text-swan/70', s.icon)} />
           <div className={clsx('relative flex h-full flex-col', s.pad)}>
             {group.category && size !== 'sm' && (
-              <span className={clsx('w-fit max-w-full truncate rounded-lg px-2 py-1 text-xs font-semibold', style.soft, style.text)}>
-                <span aria-hidden>{categoryEmoji(group.category)}</span> {group.category}
+              <span className={clsx('inline-flex w-fit max-w-full items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold', style.soft, style.text)}>
+                <DocTypeIcon type={group.category} variant="inline" fallback={Tag} className="[&_svg]:size-3.5" />
+                <span className="truncate">{group.category}</span>
               </span>
             )}
             <div className={clsx('mt-auto line-clamp-2 font-bold leading-tight text-eel', s.title)}>{group.title}</div>

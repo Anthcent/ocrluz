@@ -1,8 +1,10 @@
 import clsx from 'clsx';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { CATEGORY_PRESETS, categoryEmoji, GROUP_COLORS, GROUP_STYLES } from '../lib/constants';
+import { Tag } from 'lucide-react';
+import { CATEGORY_PRESETS, GROUP_COLORS, GROUP_STYLES } from '../lib/constants';
 import type { GroupInput } from '../lib/types';
+import { DocTypeIcon } from './DocTypeIcon';
 import { Field, Input, Textarea } from './ui';
 
 export const EMPTY_GROUP: GroupInput = { title: '', description: '', author: '', category: '', color: 'green', totalPages: null };
@@ -63,11 +65,11 @@ export function GroupFields({
               aria-pressed={value.category === c}
               onClick={() => set('category', value.category === c ? '' : c)}
               className={clsx(
-                'inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold transition-[transform,background-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] motion-reduce:transition-none',
+                'inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold transition-[transform,background-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] motion-reduce:transition-none',
                 value.category === c ? 'bg-eel text-white' : 'bg-polar text-wolf hover:text-eel',
               )}
             >
-              <span aria-hidden>{categoryEmoji(c)}</span>
+              <DocTypeIcon type={c} variant="inline" fallback={Tag} />
               {c}
             </button>
           ))}

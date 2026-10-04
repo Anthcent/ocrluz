@@ -86,11 +86,25 @@ export function DesktopBatchPanel({ stats, actions, settings }: { stats: BatchSt
   );
 }
 
-/** Mobile header chip that summarizes the batch and opens its settings. */
-export function BatchSummaryButton({ settings, onOpen, expanded }: { settings: BatchSettingsProps; onOpen: () => void; expanded: boolean }) {
+/** Mobile card under the title: where the batch goes, how it is read, and its progress. */
+export function BatchSummaryButton({ settings, stats, onOpen, expanded }: { settings: BatchSettingsProps; stats: BatchStats; onOpen: () => void; expanded: boolean }) {
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_2px_rgba(41,36,68,0.06)] lg:hidden">
+      <SummaryButton settings={settings} onOpen={onOpen} expanded={expanded} />
+      {stats.total > 0 && (
+        <div className="border-t border-swan px-4 py-3">
+          <BatchProgress stats={stats} compact />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryButton({ settings, onOpen, expanded }: { settings: BatchSettingsProps; onOpen: () => void; expanded: boolean }) {
   const { destination, engine } = settings;
   const EngineIcon = ENGINE_ICON[engine.engine];
   const missingKey = !engine.keysReady[engine.engine];
+  const DestinationIcon = destination.mode === 'group' ? FolderOpen : FileText;
   return (
     <button
       type="button"
@@ -98,13 +112,13 @@ export function BatchSummaryButton({ settings, onOpen, expanded }: { settings: B
       aria-expanded={expanded}
       aria-haspopup="dialog"
       aria-label={`Ajustes del lote: ${destinationLabel(destination)}; ${engineLabel(engine)}`}
-      className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-white px-3 py-2 text-left shadow-[0_1px_2px_rgba(41,36,68,0.06)] transition-[transform,background-color] duration-150 ease-out active:scale-[0.99] lg:hidden"
+      className="flex min-h-16 w-full items-center gap-3 px-3 py-2.5 text-left transition-[background-color] duration-150 ease-out hover:bg-snow active:bg-polar"
     >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-macaw-light text-macaw-dark" aria-hidden>
+        <DestinationIcon className="size-5" />
+      </span>
       <span className="min-w-0 flex-1 space-y-0.5">
-        <span className="flex items-center gap-1.5 truncate text-sm font-bold text-eel">
-          {destination.mode === 'group' ? <FolderOpen className="size-4 shrink-0" aria-hidden /> : <FileText className="size-4 shrink-0" aria-hidden />}
-          <span className="truncate">{destinationLabel(destination)}</span>
-        </span>
+        <span className="block truncate text-sm font-bold text-eel">{destinationLabel(destination)}</span>
         <span className={clsx('flex items-center gap-1.5 truncate text-xs font-semibold', missingKey ? 'text-bee-dark' : 'text-wolf')}>
           {missingKey ? <KeyRound className="size-3.5 shrink-0" aria-hidden /> : <EngineIcon className="size-3.5 shrink-0" aria-hidden />}
           <span className="truncate">{engineLabel(engine)}</span>

@@ -1,14 +1,15 @@
 import clsx from 'clsx';
-import { Archive, Eye, FileText, Folder, FolderOpen, Plus, ScanLine } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Archive, Eye, FileText, Folder, FolderOpen, LayoutGrid, Plus, ScanLine, Tag } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { LabeledProgress } from '../components/ActionTile';
+import { DocTypeIcon } from '../components/DocTypeIcon';
 import { FolderCard } from '../components/FolderCard';
 import { EMPTY_GROUP, GroupFields } from '../components/GroupFields';
 import { Badge, Button, Card, EmptyState, Input, Modal, PageLoader, Segmented } from '../components/ui';
 import { api } from '../lib/api';
-import { categoryEmoji, ENGINE_LABEL } from '../lib/constants';
+import { ENGINE_LABEL } from '../lib/constants';
 import { formatNumber, timeAgo } from '../lib/format';
 import type { Group, GroupInput, Scan, Stats } from '../lib/types';
 
@@ -79,9 +80,9 @@ function GroupsList({ filter }: { filter: string }) {
     <div className="space-y-4">
       {categories.length > 0 && (
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filtrar por categoría">
-          <CategoryChip selected={category === null} onClick={() => setCategory(null)} label="Todas" emoji="✨" />
+          <CategoryChip selected={category === null} onClick={() => setCategory(null)} label="Todas" icon={<LayoutGrid className="size-4 shrink-0" aria-hidden />} />
           {categories.map((c) => (
-            <CategoryChip key={c} selected={category === c} onClick={() => setCategory(category === c ? null : c)} label={c} emoji={categoryEmoji(c)} />
+            <CategoryChip key={c} selected={category === c} onClick={() => setCategory(category === c ? null : c)} label={c} icon={<DocTypeIcon type={c} variant="inline" fallback={Tag} />} />
           ))}
         </div>
       )}
@@ -95,18 +96,18 @@ function GroupsList({ filter }: { filter: string }) {
   );
 }
 
-function CategoryChip({ selected, onClick, label, emoji }: { selected: boolean; onClick: () => void; label: string; emoji: string }) {
+function CategoryChip({ selected, onClick, label, icon }: { selected: boolean; onClick: () => void; label: string; icon: ReactNode }) {
   return (
     <button
       type="button"
       aria-pressed={selected}
       onClick={onClick}
       className={clsx(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-semibold transition-[transform,background-color,color] duration-200 active:scale-[0.98]',
+        'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-[transform,background-color,color] duration-200 active:scale-[0.98]',
         selected ? 'bg-eel text-white' : 'bg-white text-wolf hover:bg-macaw-light hover:text-macaw-dark',
       )}
     >
-      <span aria-hidden>{emoji}</span>
+      {icon}
       {label}
     </button>
   );
@@ -122,8 +123,8 @@ function FolderItem({ group: g }: { group: Group }) {
       </Link>
       <div className="relative flex min-w-0 flex-1 flex-col">
         {g.category && (
-          <span className="mb-1 self-start rounded-full bg-macaw-light px-2.5 py-1 text-xs font-semibold text-macaw-dark">
-            {categoryEmoji(g.category)} {g.category}
+          <span className="mb-1 inline-flex items-center gap-1 self-start rounded-full bg-macaw-light px-2.5 py-1 text-xs font-semibold text-macaw-dark">
+            <DocTypeIcon type={g.category} variant="inline" fallback={Tag} className="[&_svg]:size-3.5" /> {g.category}
           </span>
         )}
         <Link to={`/archivo/carpeta/${g.id}`} className="line-clamp-2 text-lg font-bold leading-tight text-eel hover:text-macaw-dark">

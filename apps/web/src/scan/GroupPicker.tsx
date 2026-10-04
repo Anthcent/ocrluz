@@ -1,12 +1,13 @@
 import clsx from 'clsx';
-import { Check, FileSearch, FolderPlus, Search, SearchX, X } from 'lucide-react';
+import { Check, FileSearch, FolderPlus, Search, SearchX, Tag, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FolderCard } from '../components/FolderCard';
 import { Snippet } from '../components/Snippet';
 import { Modal, Segmented, Spinner } from '../components/ui';
 import { api } from '../lib/api';
-import { categoryEmoji, GROUP_COLORS, GROUP_STYLES } from '../lib/constants';
+import { GROUP_COLORS, GROUP_STYLES } from '../lib/constants';
+import { DocTypeIcon } from '../components/DocTypeIcon';
 import { timeAgo } from '../lib/format';
 import type { Group, GroupColor } from '../lib/types';
 
@@ -183,7 +184,7 @@ export function GroupPicker({
           <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filtrar por categoría o color">
             {categories.map(([c, n]) => (
               <FilterChip key={c} selected={category === c} onClick={() => setCategory(category === c ? null : c)}>
-                <span aria-hidden>{categoryEmoji(c)}</span> {c} <span className="text-xs opacity-70">{n}</span>
+                <DocTypeIcon type={c} variant="inline" fallback={Tag} /> {c} <span className="text-xs opacity-70">{n}</span>
               </FilterChip>
             ))}
             {colors.length > 1 &&
@@ -250,8 +251,8 @@ export function GroupPicker({
                     <div className="flex flex-wrap items-center gap-x-2 text-xs font-semibold text-wolf">
                       {g.author && <span className={clsx('font-bold', style.text)}>{g.author} (responsable)</span>}
                       {g.category && (
-                        <span>
-                          {categoryEmoji(g.category)} {g.category}
+                        <span className="inline-flex items-center gap-1">
+                          <DocTypeIcon type={g.category} variant="inline" fallback={Tag} className="[&_svg]:size-3.5" /> {g.category}
                         </span>
                       )}
                       <span>

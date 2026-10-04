@@ -159,7 +159,7 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           aria-pressed={value === o.value}
           className={clsx(
-            'flex items-center justify-center gap-2 rounded-xl border-0 px-3 py-2.5 text-sm font-bold transition-[transform,background-color,color,box-shadow] duration-200 active:scale-[0.98]',
+            'flex min-h-11 items-center justify-center gap-2 rounded-xl border-0 px-3 py-2 text-center text-sm font-bold leading-tight transition-[transform,background-color,color,box-shadow] duration-200 active:scale-[0.98]',
             value === o.value ? 'bg-white text-eel shadow-sm' : 'bg-transparent text-wolf hover:text-eel',
           )}
         >

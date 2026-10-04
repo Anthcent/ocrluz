@@ -1,6 +1,6 @@
 import clsx from 'clsx';
-import { Archive, Eye, FileScan, FileText, Folder, House, Layers, LogOut, Plus, ScanLine, Search, Settings, Type } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { Archive, Eye, FileScan, House, Layers, LogOut, Plus, ScanLine, Search, Settings } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../lib/api';
@@ -30,22 +30,6 @@ function useStats() {
     api.stats().then(setStats).catch(() => {});
   }, [location.pathname]);
   return stats;
-}
-
-function StatChip({ icon, value, label, from }: { icon: ReactNode; value: ReactNode; label: string; from?: 'sm' | 'md' }) {
-  return (
-    <span
-      title={label}
-      aria-label={`${label}: ${value}`}
-      className={clsx(
-        'items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-eel shadow-[0_1px_2px_rgba(41,36,68,0.06)]',
-        from === 'sm' ? 'hidden sm:inline-flex' : from === 'md' ? 'hidden md:inline-flex' : 'inline-flex',
-      )}
-    >
-      <span className="text-macaw-dark">{icon}</span>
-      {value}
-    </span>
-  );
 }
 
 export function Layout() {
@@ -82,9 +66,13 @@ export function Layout() {
           ))}
         </nav>
 
-        <ContinueCard stats={stats} />
+        {/* Scrolls on short screens so the account row never gets clipped. */}
+        <div className="-mx-1 mt-5 min-h-0 flex-1 space-y-3 overflow-y-auto px-1 pb-3">
+          <ContinueCard stats={stats} />
+          <ArchiveTotals stats={stats} />
+        </div>
 
-        <div className="mt-auto flex items-center gap-3 rounded-2xl bg-white/8 p-3">
+        <div className="flex shrink-0 items-center gap-3 rounded-2xl bg-white/8 p-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-macaw text-base font-bold text-eel">
             {user?.name.charAt(0).toUpperCase()}
           </div>
@@ -112,9 +100,6 @@ export function Layout() {
                 <Layers className="size-4" aria-hidden /> {pendingPages} <span className="hidden sm:inline">por archivar</span>
               </Link>
             )}
-            <StatChip icon={<FileText className="size-4" />} value={formatNumber(stats?.totals.scans ?? 0)} label="Escaneos" />
-            <StatChip icon={<Folder className="size-4" />} value={formatNumber(stats?.totals.groups ?? 0)} label="Carpetas" from="sm" />
-            <StatChip icon={<Type className="size-4" />} value={formatNumber(stats?.totals.words ?? 0)} label="Palabras" from="md" />
             <NavLink to="/ajustes" aria-label="Ajustes" className={({ isActive }) => clsx('flex size-10 items-center justify-center rounded-full transition lg:hidden', isActive ? 'bg-eel text-white' : 'bg-white text-wolf')}>
               <Settings className="size-5" strokeWidth={2} />
             </NavLink>
@@ -149,7 +134,7 @@ function ContinueCard({ stats }: { stats: Stats | null }) {
   if (!stats) return null;
   if (!folder) {
     return (
-      <div className="mt-5 rounded-2xl bg-white/8 p-4">
+      <div className="rounded-2xl bg-white/8 p-4">
         <div className="font-semibold text-white">Empieza tu archivo</div>
         <p className="mt-1 text-sm text-white/55">Escanea documentos y guárdalos en carpetas.</p>
         <Link to="/escanear" className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-macaw py-2 text-xs font-semibold text-eel transition active:scale-[0.98]">
@@ -160,7 +145,7 @@ function ContinueCard({ stats }: { stats: Stats | null }) {
   }
   const style = GROUP_STYLES[folder.color];
   return (
-    <div className="mt-5 rounded-2xl bg-white p-3 text-eel" data-testid="continue-card">
+    <div className="rounded-2xl bg-white p-3 text-eel" data-testid="continue-card">
       <div className="mb-2 text-xs font-semibold text-wolf">Carpeta reciente</div>
       <Link to={`/archivo/carpeta/${folder.id}`} className="flex items-center gap-3">
         <FolderCard group={folder} size="sm" />
@@ -183,5 +168,30 @@ function ContinueCard({ stats }: { stats: Stats | null }) {
         </Link>
       </div>
     </div>
+  );
+}
+
+/** Compact archive totals for the desktop sidebar (mobile sees them on Home). */
+function ArchiveTotals({ stats }: { stats: Stats | null }) {
+  if (!stats || stats.totals.scans === 0) return null;
+  const items = [
+    { value: stats.totals.groups, label: stats.totals.groups === 1 ? 'carpeta' : 'carpetas' },
+    { value: stats.totals.scans, label: stats.totals.scans === 1 ? 'hoja' : 'hojas' },
+    { value: stats.totals.words, label: stats.totals.words === 1 ? 'palabra' : 'palabras' },
+  ];
+  return (
+    <section aria-labelledby="archive-totals-title" className="rounded-2xl bg-white/8 px-3 py-3" data-testid="archive-totals">
+      <h2 id="archive-totals-title" className="text-xs font-semibold text-white/60">
+        Tu archivo
+      </h2>
+      <dl className="mt-2 grid grid-cols-3 gap-2">
+        {items.map(({ value, label }) => (
+          <div key={label} className="flex min-w-0 flex-col" title={`${formatNumber(value)} ${label}`}>
+            <dt className="order-2 truncate text-xs font-medium text-white/60">{label}</dt>
+            <dd className="order-1 truncate text-base font-bold tabular-nums text-white">{formatNumber(value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

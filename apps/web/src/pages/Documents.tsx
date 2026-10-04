@@ -1,7 +1,8 @@
 import clsx from 'clsx';
-import { Download, FileScan, Plus, Search, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Download, FileScan, LayoutGrid, Plus, Search, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { DocTypeIcon } from '../components/DocTypeIcon';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Button, Card, EmptyState, Input, PageLoader } from '../components/ui';
 import { documentsToCsv, downloadFile, TemplateModal, useDocTemplates } from '../documents/shared';
@@ -50,7 +51,7 @@ export function DocumentsPage() {
     const known = templates.map((t) => ({ key: t.key, name: t.name, emoji: t.emoji }));
     const orphan = Object.keys(counts)
       .filter((k) => !known.some((t) => t.key === k))
-      .map((k) => ({ key: k, name: docs?.find((d) => d.templateKey === k)?.templateName ?? 'Otro', emoji: '📄' }));
+      .map((k) => ({ key: k, name: docs?.find((d) => d.templateKey === k)?.templateName ?? 'Otro', emoji: '' }));
     return [...known, ...orphan].filter((t) => counts[t.key]).sort((a, b) => (counts[b.key] ?? 0) - (counts[a.key] ?? 0));
   }, [templates, counts, docs]);
 
@@ -106,9 +107,9 @@ export function DocumentsPage() {
       {chips.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <div className="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filtrar por tipo">
-            <TypeChip selected={template === null} onClick={() => setTemplate(null)} label="Todos" count={total} />
+            <TypeChip selected={template === null} onClick={() => setTemplate(null)} label="Todos" icon={<LayoutGrid className="size-4 shrink-0" aria-hidden />} count={total} />
             {chips.map((c) => (
-              <TypeChip key={c.key} selected={template === c.key} onClick={() => setTemplate(template === c.key ? null : c.key)} emoji={c.emoji} label={c.name} count={counts[c.key]} />
+              <TypeChip key={c.key} selected={template === c.key} onClick={() => setTemplate(template === c.key ? null : c.key)} icon={<DocTypeIcon type={c.key} emoji={c.emoji} variant="inline" />} label={c.name} count={counts[c.key]} />
             ))}
           </div>
           {selected && docs && docs.length > 0 && (
@@ -147,7 +148,7 @@ export function DocumentsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {docs.map((d) => (
-            <DocumentCard key={d.id} doc={d} emoji={templates.find((t) => t.key === d.templateKey)?.emoji ?? '📄'} />
+            <DocumentCard key={d.id} doc={d} emoji={templates.find((t) => t.key === d.templateKey)?.emoji} />
           ))}
         </div>
       )}
@@ -162,9 +163,7 @@ export function DocumentsPage() {
         <div className="divide-y divide-swan sm:grid sm:grid-cols-2 sm:gap-x-6 sm:divide-y-0 xl:grid-cols-3">
           {templates.map((t) => (
             <div key={t.key} className="flex min-w-0 items-center gap-3 py-3 sm:border-b sm:border-swan">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-polar text-xl" aria-hidden>
-                {t.emoji}
-              </span>
+              <DocTypeIcon type={t.key} emoji={t.emoji} />
               <div className="min-w-0 flex-1">
                 <div className="truncate font-bold">{t.name}</div>
                 <div className="truncate text-xs font-medium text-hare">{t.fields.map((f) => f.label).join(' · ')}</div>
@@ -190,33 +189,31 @@ export function DocumentsPage() {
   );
 }
 
-function TypeChip({ selected, onClick, emoji, label, count }: { selected: boolean; onClick: () => void; emoji?: string; label: string; count?: number }) {
+function TypeChip({ selected, onClick, icon, label, count }: { selected: boolean; onClick: () => void; icon?: ReactNode; label: string; count?: number }) {
   return (
     <button
       type="button"
       aria-pressed={selected}
       onClick={onClick}
       className={clsx(
-        'inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border-0 px-3.5 py-2 text-sm font-bold transition duration-200 active:scale-[0.98]',
+        'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-0 px-3.5 py-2 text-sm font-bold transition duration-200 active:scale-[0.98]',
         selected ? 'bg-eel text-white' : 'bg-white text-wolf hover:bg-macaw-light hover:text-eel',
       )}
     >
-      {emoji && <span aria-hidden>{emoji}</span>}
+      {icon}
       {label}
       {count !== undefined && <span className={clsx('rounded-full px-1.5 text-xs', selected ? 'bg-white/15 text-white' : 'bg-polar text-wolf')}>{count}</span>}
     </button>
   );
 }
 
-function DocumentCard({ doc, emoji }: { doc: SavedDocument; emoji: string }) {
+function DocumentCard({ doc, emoji }: { doc: SavedDocument; emoji?: string }) {
   const filled = doc.fields.filter((f) => f.value.trim());
   return (
     <Link to={`/documentos/${doc.id}`} className="block">
       <Card interactive className="flex h-full flex-col p-4 sm:p-5">
         <div className="mb-3 flex items-center gap-3">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-macaw-light text-2xl" aria-hidden>
-            {emoji}
-          </span>
+          <DocTypeIcon type={doc.templateKey} emoji={emoji} size="lg" />
           <div className="min-w-0 flex-1">
             <div className="truncate font-bold">{doc.title}</div>
             <div className="truncate text-xs font-medium text-hare">
