@@ -90,14 +90,14 @@
 
 /* Liceo theme: colors sampled from the school crest (royal blue #3030c0, red #d81818, white, black). */
 :root[data-theme='liceo'] {
-  --color-brand: #23258f;
-  --color-brand-hover: #2e31a8;
+  --color-brand: #181a63;
+  --color-brand-hover: #22257c;
   --color-accent: #d81818;
   --color-accent-hover: #bb1414;
   --color-on-accent: #ffffff;
-  --color-macaw: #3a3cc6;
-  --color-macaw-hover: #4b4dd4;
-  --color-macaw-dark: #2a2cad;
+  --color-macaw: #2c2ea8;
+  --color-macaw-hover: #3739bb;
+  --color-macaw-dark: #23258f;
   --color-macaw-light: #e8e9fb;
   --color-macaw-ink: #15165c;
   --color-on-macaw: #ffffff;
