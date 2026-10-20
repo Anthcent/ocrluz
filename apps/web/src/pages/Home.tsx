@@ -91,10 +91,10 @@ export function HomePage() {
                   : 'Tu espacio está listo para capturar, organizar y encontrar información.'}
               </p>
               <div className="mt-4 grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-2 sm:mt-6 sm:flex sm:flex-wrap">
-                <Link to="/escanear" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-eel px-4 text-sm font-bold text-white transition-[transform,background-color] duration-200 hover:bg-eel-hover active:scale-[0.98] sm:px-5">
-                  <Camera className="size-5 shrink-0" /> Escanear hojas
+                <Link to="/escanear" className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-full bg-eel px-4 text-sm font-bold text-white transition-[transform,background-color] duration-200 hover:bg-eel-hover active:scale-[0.98] sm:px-5">
+                  <Camera className="size-5 shrink-0" /> <span className="truncate">Escanear hojas</span>
                 </Link>
-                <Link to="/documentos/nuevo" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-eel transition-[transform,background-color] duration-200 hover:bg-polar active:scale-[0.98] sm:px-5">
+                <Link to="/documentos/nuevo" className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-eel transition-[transform,background-color] duration-200 hover:bg-polar active:scale-[0.98] sm:px-5">
                   <FilePlus2 className="size-5 shrink-0" /> <span className="truncate">Nuevo documento</span>
                 </Link>
               </div>
