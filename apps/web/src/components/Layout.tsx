@@ -38,7 +38,7 @@ export function Layout() {
 
   return (
     <div className="min-h-dvh bg-polar lg:pl-[17.5rem]">
-      <aside className="fixed inset-y-4 left-4 z-40 hidden w-60 flex-col overflow-hidden rounded-[24px] bg-eel p-3 text-white shadow-floating lg:flex">
+      <aside className="fixed inset-y-4 left-4 z-40 hidden w-60 flex-col overflow-hidden rounded-[24px] bg-brand p-3 text-white shadow-floating lg:flex">
         <Logo className="px-2.5 pb-2 pt-2.5 text-white" />
         <nav aria-label="Principal" className="mt-4 flex flex-col gap-0.5">
           {NAV.map(({ to, label, icon: Icon, end }) => (
@@ -74,7 +74,7 @@ export function Layout() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2.5 rounded-2xl bg-white/[0.06] p-2">
-          <div aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-macaw text-sm font-bold text-eel">
+          <div aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-on-accent">
             {initial}
           </div>
           <div className="min-w-0 flex-1">
@@ -118,7 +118,7 @@ export function Layout() {
               className={({ isActive }) =>
                 clsx(
                   'flex size-11 items-center justify-center rounded-full shadow-surface transition-[background-color,transform] duration-200 active:scale-95 lg:hidden',
-                  isActive ? 'bg-eel text-white' : 'bg-white text-eel',
+                  isActive ? 'bg-brand text-white' : 'bg-white text-eel',
                 )
               }
             >
@@ -126,7 +126,7 @@ export function Layout() {
                 isActive ? (
                   <Settings className="size-5" strokeWidth={2} />
                 ) : (
-                  <span aria-hidden="true" className="relative flex size-8 items-center justify-center rounded-full bg-macaw text-sm font-bold text-eel">
+                  <span aria-hidden="true" className="relative flex size-8 items-center justify-center rounded-full bg-accent text-sm font-bold text-on-accent">
                     {initial}
                     <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-white text-eel ring-2 ring-white">
                       <Settings className="size-3" strokeWidth={2.5} />
@@ -143,7 +143,7 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <nav aria-label="Principal" className="pb-safe fixed inset-x-3 bottom-3 z-40 rounded-[22px] bg-eel shadow-floating lg:hidden">
+      <nav aria-label="Principal" className="pb-safe fixed inset-x-3 bottom-3 z-40 rounded-[22px] bg-brand shadow-floating lg:hidden">
         <div className="mx-auto grid h-[4.25rem] max-w-md grid-cols-5 items-stretch px-1">
           {MOBILE_NAV.map(({ to, label, icon: Icon, end }) => {
             const primary = to === '/escanear';
@@ -155,7 +155,7 @@ export function Layout() {
                       className={clsx(
                         'flex h-8 items-center justify-center rounded-full transition-[background-color,color,transform,width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-active:scale-95',
                         primary
-                          ? clsx('w-14 bg-macaw text-eel', isActive && 'ring-2 ring-white/85 ring-offset-2 ring-offset-eel')
+                          ? clsx('w-14 bg-accent text-on-accent', isActive && 'ring-2 ring-white/85 ring-offset-2 ring-offset-brand')
                           : clsx('w-12', isActive ? 'bg-white text-eel' : 'text-white/60'),
                       )}
                     >
@@ -184,7 +184,7 @@ function ContinueCard({ stats, className }: { stats: Stats | null; className?: s
         to="/escanear"
         className={clsx('flex items-center gap-2.5 rounded-2xl bg-white/[0.06] p-2 transition-colors duration-200 hover:bg-white/10', className)}
       >
-        <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-macaw text-eel">
+        <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent text-on-accent">
           <ScanLine className="size-[18px]" />
         </span>
         <span className="min-w-0">

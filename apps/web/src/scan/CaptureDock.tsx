@@ -122,7 +122,7 @@ function DockButton({
       className={clsx(
         'flex h-14 min-w-0 animate-swap-in flex-col items-center justify-center gap-0.5 rounded-2xl px-2 text-xs font-bold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.96] disabled:active:scale-100',
         tone === 'plain' && 'text-eel hover:bg-polar disabled:text-wolf',
-        tone === 'accent' && 'bg-macaw text-eel hover:bg-macaw-hover',
+        tone === 'accent' && 'bg-macaw text-on-macaw hover:bg-macaw-hover',
         tone === 'ink' && 'bg-eel text-white hover:bg-eel-hover',
       )}
     >

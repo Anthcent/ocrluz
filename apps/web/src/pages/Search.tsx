@@ -289,7 +289,7 @@ function FolderResults({ folder }: { folder: FolderHits }) {
   const style = GROUP_STYLES[folder.color];
   return (
     <section className="min-w-0 overflow-hidden rounded-2xl bg-white shadow-[0_1px_2px_rgba(41,36,68,0.06)]">
-      <Link to={`/archivo/carpeta/${folder.groupId}`} className="flex items-center gap-3 bg-macaw-light p-4 text-eel transition hover:bg-[#e6e0fd]">
+      <Link to={`/archivo/carpeta/${folder.groupId}`} className="flex items-center gap-3 bg-macaw-light p-4 text-eel transition hover:bg-polar-hover">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white text-macaw-dark">
           <Folder className="size-6" />
         </span>

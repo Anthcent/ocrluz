@@ -370,7 +370,7 @@ function BigAction({ color, icon, label, onClick }: { color: 'feather' | 'macaw'
       onClick={onClick}
       className={clsx(
         'flex min-h-28 flex-col items-center justify-center gap-2 rounded-2xl border-0 px-3 py-5 font-bold transition duration-200 active:scale-[0.98]',
-        color === 'feather' ? 'bg-eel text-white hover:bg-[#303138]' : 'bg-macaw text-eel hover:bg-[#b09eff]',
+        color === 'feather' ? 'bg-eel text-white hover:bg-eel-hover' : 'bg-macaw text-on-macaw hover:bg-macaw-hover',
       )}
     >
       {icon}

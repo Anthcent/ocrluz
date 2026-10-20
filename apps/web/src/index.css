@@ -24,6 +24,13 @@
   --color-beetle-dark: #5f49c8;
   --color-beetle-light: #eeeafe;
   --color-eel: #18191d;
+  /* Semantic tokens: themes override these instead of the raw palette. */
+  --color-brand: #18191d;
+  --color-brand-hover: #303138;
+  --color-accent: #a38ef9;
+  --color-accent-hover: #b09eff;
+  --color-on-accent: #18191d;
+  --color-on-macaw: #18191d;
   --color-wolf: #666b74;
   --color-hare: #7c818a;
   --color-swan: #dde0e4;
@@ -81,21 +88,27 @@
   }
 }
 
-/*
- * Tema «Liceo»: redefine solo el acento de marca (macaw/beetle, hoy violeta) por el azul
- * medio oscuro del escudo del liceo. Mantiene la misma relación de claridad entre las
- * variantes (-light/-dark/-ink) para que el contraste ya probado en toda la app siga
- * funcionando igual, solo cambia el matiz.
- */
+/* Liceo theme: colors sampled from the school crest (royal blue #3030c0, red #d81818, white, black). */
 :root[data-theme='liceo'] {
-  --color-macaw: #6fa8f5;
-  --color-macaw-dark: #1f4e8c;
-  --color-macaw-light: #e7f1fe;
-  --color-macaw-ink: #122a4d;
-  --color-macaw-hover: #8fbdf7;
-  --color-beetle: #6fa8f5;
-  --color-beetle-dark: #1f4e8c;
-  --color-beetle-light: #e7f1fe;
+  --color-brand: #23258f;
+  --color-brand-hover: #2e31a8;
+  --color-accent: #d81818;
+  --color-accent-hover: #bb1414;
+  --color-on-accent: #ffffff;
+  --color-macaw: #3a3cc6;
+  --color-macaw-hover: #4b4dd4;
+  --color-macaw-dark: #2a2cad;
+  --color-macaw-light: #e8e9fb;
+  --color-macaw-ink: #15165c;
+  --color-on-macaw: #ffffff;
+  --color-beetle: #3a3cc6;
+  --color-beetle-dark: #2a2cad;
+  --color-beetle-light: #e8e9fb;
+  --color-eel: #121330;
+  --color-eel-hover: #23258f;
+  --color-polar: #eef0fa;
+  --color-polar-hover: #e3e6f5;
+  --color-swan: #d8dcef;
 }
 
 @layer base {
@@ -119,7 +132,7 @@
     @apply bg-macaw-light;
   }
   :focus-visible {
-    outline: 3px solid color-mix(in srgb, #a38ef9 55%, transparent);
+    outline: 3px solid color-mix(in srgb, var(--color-macaw) 55%, transparent);
     outline-offset: 2px;
   }
   h1,

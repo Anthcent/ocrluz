@@ -58,7 +58,7 @@ export function AddSurface({
       <span
         className={clsx(
           'mb-5 flex size-16 items-center justify-center rounded-2xl transition-[transform,background-color,color] duration-200 ease-out-strong',
-          dragging ? 'scale-110 bg-macaw text-eel' : 'bg-macaw-light text-macaw-dark',
+          dragging ? 'scale-110 bg-macaw text-on-macaw' : 'bg-macaw-light text-macaw-dark',
         )}
       >
         {adding ? <LoaderCircle className="size-8 animate-spin" /> : <ImageUp className="size-8" />}

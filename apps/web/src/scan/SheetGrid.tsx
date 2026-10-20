@@ -502,7 +502,7 @@ function SheetCard({
               onClick={onRead}
               disabled={selecting}
               aria-label={`Leer la hoja ${n}`}
-              className="inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full bg-macaw px-2 text-sm font-bold text-eel transition-[transform,background-color] duration-150 ease-out hover:bg-macaw-hover active:scale-[0.97] disabled:opacity-50"
+              className="inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full bg-macaw px-2 text-sm font-bold text-on-macaw transition-[transform,background-color] duration-150 ease-out hover:bg-macaw-hover active:scale-[0.97] disabled:opacity-50"
             >
               <ScanText className="size-4 shrink-0" />
               <span className="truncate">{page.status === 'error' ? 'Reintentar' : 'Leer'}</span>

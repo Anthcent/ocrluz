@@ -284,7 +284,7 @@ function MoveOption({
       aria-pressed={selected}
       className={clsx(
         'flex min-h-12 w-full items-center gap-3 rounded-xl p-3 text-left font-bold transition-[transform,background-color,color,box-shadow] active:scale-[0.99]',
-        selected ? 'bg-macaw-light text-macaw-dark shadow-[inset_0_0_0_1px_#a38ef9]' : 'bg-polar text-eel hover:bg-white hover:shadow-[inset_0_0_0_1px_#dde0e4]',
+        selected ? 'bg-macaw-light text-macaw-dark shadow-[inset_0_0_0_1px_var(--color-macaw)]' : 'bg-polar text-eel hover:bg-white hover:shadow-[inset_0_0_0_1px_#dde0e4]',
       )}
     >
       <span className={clsx('flex size-10 shrink-0 items-center justify-center rounded-xl', iconClass)}>{icon}</span>
@@ -296,7 +296,7 @@ function MoveOption({
 function PageAction({ icon, label, shortLabel, onClick, disabled, compact, tone = 'ink' }: { icon: ReactNode; label: string; shortLabel?: string; onClick: () => void; disabled?: boolean; compact: boolean; tone?: 'ink' | 'violet' | 'mint' | 'amber' | 'danger' }) {
   const toneClass = {
     ink: 'bg-eel text-white hover:bg-[#303138]',
-    violet: 'bg-macaw-light text-macaw-dark hover:bg-macaw hover:text-eel',
+    violet: 'bg-macaw-light text-macaw-dark hover:bg-macaw hover:text-on-macaw',
     mint: 'bg-feather-light text-feather-dark hover:bg-feather',
     amber: 'bg-bee-light text-bee-dark hover:bg-bee',
     danger: 'bg-cardinal-light text-cardinal-dark hover:bg-cardinal hover:text-white',

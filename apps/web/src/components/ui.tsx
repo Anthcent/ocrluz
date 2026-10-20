@@ -6,7 +6,7 @@ type Variant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'warning' | 'plain
 
 const VARIANTS: Record<Variant, string> = {
   primary: 'bg-eel text-white hover:bg-eel-hover',
-  secondary: 'bg-macaw text-eel hover:bg-macaw-hover',
+  secondary: 'bg-macaw text-on-macaw hover:bg-macaw-hover',
   danger: 'bg-cardinal text-white hover:bg-cardinal-dark',
   warning: 'bg-bee text-eel hover:bg-bee-hover',
   ghost: 'bg-white text-eel shadow-[inset_0_0_0_1px_#dde0e4] hover:bg-polar',

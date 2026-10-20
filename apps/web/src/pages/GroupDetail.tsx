@@ -355,7 +355,7 @@ function QuickAction({ icon, label, onClick, disabled, tone = 'neutral' }: { ico
       className={clsx(
         'flex min-h-12 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition-[transform,background-color,color] duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40',
         tone === 'neutral' && 'bg-eel text-white hover:bg-[#303138]',
-        tone === 'violet' && 'bg-macaw-light text-macaw-dark hover:bg-macaw hover:text-eel',
+        tone === 'violet' && 'bg-macaw-light text-macaw-dark hover:bg-macaw hover:text-on-macaw',
         tone === 'danger' && 'bg-cardinal-light text-cardinal-dark hover:bg-cardinal hover:text-white',
       )}
     >
