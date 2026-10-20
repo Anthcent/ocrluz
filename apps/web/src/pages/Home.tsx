@@ -16,11 +16,13 @@ import {
   WifiOff,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
+import { SearchSuggest } from '../components/SearchSuggest';
 import { Button, EmptyState, PageLoader } from '../components/ui';
 import { api } from '../lib/api';
+import { PRESET_TEMPLATES } from '../lib/doc-templates';
 import { GROUP_STYLES } from '../lib/constants';
 import { formatNumber, timeAgo } from '../lib/format';
 import type { Scan, ScanEngine, Stats } from '../lib/types';
@@ -60,6 +62,8 @@ const SHORTCUTS: Shortcut[] = [
 
 const QUICK_SEARCHES = ['Cédula', 'Acta', 'Partida de nacimiento', 'Informe médico', 'Nómina', 'Inscripción'];
 
+const SEARCH_TERMS = PRESET_TEMPLATES.map((t) => t.name).filter((name) => name !== 'Documento general');
+
 const USAGE_KEY = 'ocryon:shortcut-usage';
 
 function readUsage(): Record<string, number> {
@@ -77,7 +81,6 @@ export function HomePage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<Stats | null>(null);
   const [failed, setFailed] = useState(false);
-  const [query, setQuery] = useState('');
   const [recentScans, setRecentScans] = useState<Scan[]>([]);
   const [looseScans, setLooseScans] = useState<Scan[]>([]);
   const [usage, setUsage] = useState(readUsage);
@@ -94,12 +97,6 @@ export function HomePage() {
     api.scans.list({ scope: 'all', limit: 6 }).then((r) => setRecentScans(r.scans)).catch(() => {});
     api.scans.list({ scope: 'individual', limit: 3 }).then((r) => setLooseScans(r.scans)).catch(() => {});
   }, []);
-
-  const search = (event: FormEvent) => {
-    event.preventDefault();
-    const value = query.trim();
-    if (value) navigate(`/buscar?q=${encodeURIComponent(value)}`);
-  };
 
   const recordUsage = (id: string) => {
     const next = { ...usage, [id]: (usage[id] ?? 0) + 1 };
@@ -185,29 +182,7 @@ export function HomePage() {
         </header>
 
         <div className="relative z-10 -mt-8 px-3 sm:px-6 lg:px-10">
-          <form
-            onSubmit={search}
-            role="search"
-            className="flex items-center gap-3 rounded-2xl bg-white p-2 pl-4 shadow-floating ring-2 ring-macaw/15 transition-shadow focus-within:ring-macaw sm:p-2.5 sm:pl-5"
-          >
-            <Search className="size-6 shrink-0 text-macaw-dark" />
-            <label htmlFor="dashboard-search" className="sr-only">
-              Buscar en todo tu archivo
-            </label>
-            <input
-              id="dashboard-search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Busca un nombre, una cédula o cualquier frase"
-              className="min-h-11 min-w-0 flex-1 bg-transparent text-base font-semibold text-eel outline-none placeholder:font-medium placeholder:text-wolf sm:text-lg"
-            />
-            <button
-              type="submit"
-              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl bg-accent px-4 text-sm font-bold text-on-accent transition-colors hover:bg-accent-hover sm:min-h-12 sm:px-6"
-            >
-              <span className="hidden sm:inline">Buscar</span> <ArrowRight className="size-5" />
-            </button>
-          </form>
+          <SearchSuggest terms={SEARCH_TERMS} />
           <div className="scrollbar-none -mx-3 mt-3 flex items-center gap-2 overflow-x-auto px-3 sm:mx-0 sm:flex-wrap sm:px-0">
             <span className="shrink-0 text-xs font-semibold text-wolf">Búsquedas rápidas:</span>
             {QUICK_SEARCHES.map((term) => (
