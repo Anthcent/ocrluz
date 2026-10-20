@@ -125,7 +125,7 @@ export function HomePage() {
           </div>
         </section>
 
-      <section aria-labelledby="recent-folders-title" className="xl:col-span-2 xl:row-start-3">
+      <section aria-labelledby="recent-folders-title" className="xl:col-span-2 xl:row-start-4">
         <div className="mb-3 flex items-end justify-between gap-4">
           <div>
             <h2 id="recent-folders-title" className="text-lg font-bold sm:text-xl">Carpetas recientes</h2>
@@ -216,7 +216,9 @@ export function HomePage() {
           </Link>
         </aside>
 
-      <div className="grid gap-4 xl:col-span-2 xl:row-start-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+      <WeeklyActivity week={stats.week} className="xl:col-span-2 xl:row-start-2" />
+
+      <div className="grid gap-4 xl:col-span-2 xl:row-start-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
         <section className="rounded-[20px] bg-white p-5 shadow-surface sm:rounded-[24px] sm:p-6">
           <div>
             <h2 className="text-xl font-bold">Panorama del archivo</h2>
@@ -288,6 +290,39 @@ function GettingStarted({ noKeys, className }: { noKeys: boolean; className?: st
         </div>
       ))}
     </div>
+  );
+}
+
+const DAY_LABEL = new Intl.DateTimeFormat('es', { weekday: 'short' });
+
+/** Gráfico de barras con las hojas escaneadas por día (últimos 7 días); dato real que ya traía el backend y no se mostraba. */
+function WeeklyActivity({ week, className }: { week: Stats['week']; className?: string }) {
+  const max = Math.max(1, ...week.map((d) => d.count));
+  const today = new Date().toISOString().slice(0, 10);
+  const summary = week.map((d) => `${DAY_LABEL.format(new Date(`${d.day}T00:00:00`))} ${d.count}`).join(', ');
+
+  return (
+    <section className={clsx('rounded-[20px] bg-white p-5 shadow-surface sm:rounded-[24px] sm:p-6', className)}>
+      <div>
+        <h2 className="text-xl font-bold">Actividad de la semana</h2>
+        <p className="mt-1 text-sm text-wolf">Hojas escaneadas por día, últimos 7 días.</p>
+      </div>
+      <div className="mt-6 flex h-32 items-end gap-2 sm:h-36 sm:gap-3" role="img" aria-label={`Hojas escaneadas por día: ${summary}`}>
+        {week.map((d) => {
+          const isToday = d.day === today;
+          const barHeight = d.count ? Math.max(8, Math.round((d.count / max) * 100)) : 3;
+          return (
+            <div key={d.day} aria-hidden="true" className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+              <span className={clsx('text-xs font-bold tabular-nums', d.count ? 'text-eel' : 'text-hare')}>{d.count}</span>
+              <div className="flex h-full w-full items-end">
+                <div className={clsx('w-full rounded-t-md', isToday ? 'bg-eel' : 'bg-macaw-dark')} style={{ height: `${barHeight}%` }} />
+              </div>
+              <span className={clsx('text-[11px] font-semibold capitalize', isToday ? 'text-eel' : 'text-wolf')}>{DAY_LABEL.format(new Date(`${d.day}T00:00:00`)).replace('.', '')}</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
