@@ -38,6 +38,7 @@ WORKDIR /app/apps/server
 COPY --from=deps --chown=node:node /app/node_modules /app/node_modules
 COPY --from=build --chown=node:node /app/apps/server/package.json ./package.json
 COPY --from=build --chown=node:node /app/apps/server/dist ./dist
+COPY --from=build --chown=node:node /app/apps/server/assets ./assets
 COPY --from=build --chown=node:node /app/apps/web/dist /app/apps/web/dist
 # Solo se usa si no hay DATABASE_URL (PostgreSQL embebido, sin persistencia salvo que se monte un volumen en /data).
 RUN mkdir -p /data && chown node:node /data

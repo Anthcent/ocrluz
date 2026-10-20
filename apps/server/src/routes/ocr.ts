@@ -14,7 +14,7 @@ import { getApiKey, loadSettingsRow } from '../services/settings.js';
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 // La imagen se mantiene solo en memoria durante la petición: nunca se escribe en disco.
-const upload = multer({
+export const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: config.maxImageBytes, files: 1 },
   fileFilter: (_req, file, cb) => {

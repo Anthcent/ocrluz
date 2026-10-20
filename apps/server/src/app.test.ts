@@ -18,7 +18,7 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => db?.close());
 beforeEach(async () => {
-  await db.run('TRUNCATE users, groups, scans, analyses, doc_templates, documents, settings RESTART IDENTITY CASCADE');
+  await db.run('TRUNCATE users, groups, scans, analyses, doc_templates, documents, final_summaries, settings RESTART IDENTITY CASCADE');
 });
 
 function setup() {
@@ -324,5 +324,49 @@ describe('utilidades', () => {
     expect(res.body.week).toHaveLength(7);
     expect(res.body.week.at(-1).count).toBe(1);
     expect(res.body).not.toHaveProperty('streak');
+  });
+});
+
+describe('resúmenes finales', () => {
+  it('crea, edita, exporta a Excel y recuerda los datos de la institución', async () => {
+    const { agent, post } = await registered();
+    const blank = (await agent.get('/api/final-summaries/new').query({ year: 'TERCERO' }).expect(200)).body.summary;
+    expect(blank.areas.map((a: { code: string }) => a.code)).toContain('BIO');
+
+    blank.institution.name = 'LICEO DE PRUEBA';
+    blank.course = { ...blank.course, section: 'B', plan: 'CIENCIA Y TECNOLOGÍA', planCode: '31060' };
+    blank.students = [{ id: 'V30000001', lastNames: 'GOMEZ', firstNames: 'ANA', birthPlace: 'TRUJILLO', state: 'TR', sex: 'F', birthDay: '01', birthMonth: '02', birthYear: '2010', grades: ['15', '9', '20', '18', '12', '10', '11', '14', '16', 'A'] }];
+    const created = (await post('/api/final-summaries', { summary: blank }).expect(201)).body;
+    expect(created.title).toBe('Resumen final · TERCERO «B»');
+
+    created.summary.students[0].grades[1] = '12';
+    const updated = await agent.put(`/api/final-summaries/${created.id}`).set('X-Requested-With', 'ocryon').send({ summary: created.summary }).expect(200);
+    expect(updated.body.summary.students[0].grades[1]).toBe('12');
+
+    const file = await agent.get(`/api/final-summaries/${created.id}/xlsx`).buffer(true).parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => cb(null, Buffer.concat(chunks)));
+    }).expect(200);
+    expect(file.headers['content-disposition']).toContain('RESUMEN_FINAL_REGULAR_TERCERO_B.xlsx');
+    expect((file.body as Buffer).subarray(0, 2).toString()).toBe('PK');
+
+    const next = (await agent.get('/api/final-summaries/new').expect(200)).body.summary;
+    expect(next.institution.name).toBe('LICEO DE PRUEBA');
+    expect(next.course.planCode).toBe('31060');
+    expect(next.students).toEqual([]);
+  });
+
+  it('rechaza más de 35 estudiantes y aísla los resúmenes entre usuarios', async () => {
+    const ana = await registered();
+    const blank = (await ana.agent.get('/api/final-summaries/new').expect(200)).body.summary;
+    const student = { id: 'V1', lastNames: 'A', firstNames: 'B', birthPlace: '', state: '', sex: 'M', birthDay: '', birthMonth: '', birthYear: '', grades: Array(10).fill('15') };
+    await ana.post('/api/final-summaries', { summary: { ...blank, students: Array(36).fill(student) } }).expect(400);
+    const { id } = (await ana.post('/api/final-summaries', { summary: blank }).expect(201)).body;
+
+    const beto = await registered('beto@example.com');
+    await beto.agent.get(`/api/final-summaries/${id}`).expect(404);
+    await beto.agent.get(`/api/final-summaries/${id}/xlsx`).expect(404);
+    expect((await beto.agent.get('/api/final-summaries').expect(200)).body.summaries).toEqual([]);
   });
 });
