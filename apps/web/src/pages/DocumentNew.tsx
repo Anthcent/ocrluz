@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { ArrowLeft, Camera, ChevronDown, FilePlus2, ImagePlus, PencilLine, Plus, ScanText, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, Camera, ChevronDown, FilePlus2, FileSpreadsheet, ImagePlus, PencilLine, Plus, ScanText, Sparkles, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LabeledProgress } from '../components/ActionTile';
@@ -20,6 +20,9 @@ import { useObjectUrl } from '../scan/useObjectUrl';
 import { useSettings } from '../settings/SettingsContext';
 
 type Step = 'tipo' | 'fotos' | 'leyendo' | 'formulario';
+
+/** Preset types with their own flow that fills the official form. */
+const OFFICIAL_FORMS: Record<string, string> = { resumen_final: '/resumenes/nuevo', revision: '/resumenes/nuevo?tipo=revision' };
 const STEP_INDEX: Record<Step, number> = { tipo: 0, fotos: 1, leyendo: 2, formulario: 3 };
 const STEP_SUBTITLE: Record<Step, string> = {
   tipo: 'Elige el tipo para saber qué datos buscar.',
@@ -65,6 +68,8 @@ export function DocumentNewPage() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   const chooseTemplate = (t: DocTemplate) => {
+    // These two have a dedicated flow that fills the official form and exports it to Excel.
+    if (OFFICIAL_FORMS[t.key]) return navigate(OFFICIAL_FORMS[t.key]);
     setTemplate(t);
     setStep('fotos');
   };
@@ -190,7 +195,13 @@ export function DocumentNewPage() {
               >
                 <DocTypeIcon type={t.key} emoji={t.emoji} size="lg" className="mb-3" />
                 <span className="font-bold leading-tight">{t.name}</span>
-                <span className="mt-1 line-clamp-2 text-xs font-medium text-hare">{t.description || `${t.fields.length} campos`}</span>
+                {OFFICIAL_FORMS[t.key] ? (
+                  <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-feather-light px-2 py-0.5 text-[11px] font-bold text-feather-dark">
+                    <FileSpreadsheet className="size-3" /> Formato oficial · Excel
+                  </span>
+                ) : (
+                  <span className="mt-1 line-clamp-2 text-xs font-medium text-hare">{t.description || `${t.fields.length} campos`}</span>
+                )}
               </button>
             ))}
             <button

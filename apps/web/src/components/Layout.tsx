@@ -15,7 +15,7 @@ const NAV = [
   { to: '/escanear', label: 'Escanear', icon: ScanLine },
   { to: '/archivo', label: 'Archivo', icon: Archive },
   { to: '/documentos', label: 'Documentos', icon: FileScan },
-  { to: '/resumenes', label: 'Resúmenes', icon: FileSpreadsheet },
+  { to: '/resumenes', label: 'Resumen final', icon: FileSpreadsheet },
   { to: '/buscar', label: 'Buscar', icon: Search },
   { to: '/ajustes', label: 'Ajustes', icon: Settings },
 ];

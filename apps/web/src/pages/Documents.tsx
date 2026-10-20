@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Download, FileScan, LayoutGrid, Plus, Search, Trash2, X } from 'lucide-react';
+import { Download, FileScan, LayoutGrid, Plus, Search, Trash2, X, FileSpreadsheet } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { DocTypeIcon } from '../components/DocTypeIcon';
@@ -88,12 +88,20 @@ export function DocumentsPage() {
           </HeaderChip>
         }
         actions={
-          <Link
-            to="/documentos/nuevo"
-            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-eel px-5 text-sm font-bold text-white transition duration-200 hover:bg-eel-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-macaw/35 max-sm:flex-1"
-          >
-            <Plus className="size-5" /> Nuevo documento
-          </Link>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <Link
+              to="/resumenes"
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-accent px-5 text-sm font-bold text-on-accent transition duration-200 hover:bg-accent-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-macaw/35 max-sm:flex-1"
+            >
+              <FileSpreadsheet className="size-5" /> Resumen final (Excel)
+            </Link>
+            <Link
+              to="/documentos/nuevo"
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-eel px-5 text-sm font-bold text-white transition duration-200 hover:bg-eel-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-macaw/35 max-sm:flex-1"
+            >
+              <Plus className="size-5" /> Nuevo documento
+            </Link>
+          </div>
         }
       />
 

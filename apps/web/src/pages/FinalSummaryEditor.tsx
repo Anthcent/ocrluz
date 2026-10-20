@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import { AlertTriangle, Camera, Download, FilePlus2, FileSpreadsheet, ImagePlus, PenLine, Save, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { BackLink, PageHeader } from '../components/PageHeader';
 import { Button, Modal, PageLoader, ProgressBar } from '../components/ui';
@@ -37,6 +37,8 @@ function mergePage(current: FinalSummary, page: FinalSummary): FinalSummary {
 
 export function FinalSummaryEditorPage() {
   const params = useParams();
+  const [search] = useSearchParams();
+  const revision = search.get('tipo') === 'revision';
   const navigate = useNavigate();
   const { toast, confirm } = useFeedback();
   const existingId = params.id ? Number(params.id) : null;
@@ -54,12 +56,12 @@ export function FinalSummaryEditorPage() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const request = existingId ? api.finalSummaries.get(existingId).then((r) => r.summary) : api.finalSummaries.blank('PRIMERO').then((r) => r.summary);
+    const request = existingId ? api.finalSummaries.get(existingId).then((r) => r.summary) : api.finalSummaries.blank('PRIMERO').then((r) => ({ ...r.summary, evaluationType: revision ? ('REVISIÓN' as const) : r.summary.evaluationType }));
     request.then(setSummary).catch((err) => {
       toast(errorMessage(err), 'error');
       navigate('/resumenes');
     });
-  }, [existingId, navigate, toast]);
+  }, [existingId, navigate, toast, revision]);
 
   const photoUrls = useRef<string[]>([]);
   useEffect(() => () => photoUrls.current.forEach((url) => URL.revokeObjectURL(url)), []);
@@ -168,7 +170,7 @@ export function FinalSummaryEditorPage() {
         <PageHeader
           back={<BackLink to="/resumenes">Resúmenes finales</BackLink>}
           icon={<FileSpreadsheet />}
-          title="Nuevo resumen final"
+          title={revision ? "Nuevo resumen de revisión" : "Nuevo resumen final"}
           subtitle="Toma una foto del formato y la app llenará la tabla con OCR.space."
         />
         {pickers}

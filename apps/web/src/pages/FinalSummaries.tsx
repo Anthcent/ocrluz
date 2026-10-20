@@ -30,8 +30,8 @@ export function FinalSummariesPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         icon={<FileSpreadsheet />}
-        title="Resúmenes finales"
-        subtitle="Escanea el formato oficial, revísalo en digital y descárgalo en Excel listo para imprimir."
+        title="Resumen final (formato oficial)"
+        subtitle="Toma una foto del Resumen Final del Rendimiento Estudiantil: se llena el mismo formato y lo descargas en Excel listo para imprimir."
         actions={newButton}
       />
 
