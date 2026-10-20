@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../app.js';
 import { openDatabase } from '../../db/index.js';
 import { createCipher } from '../../lib/crypto.js';
-import { computeTotals, emptySummary, gradeOutcome, type FinalSummary } from './model.js';
+import { computeTotals, emptySummary, finalSummarySchema, gradeOutcome, type FinalSummary } from './model.js';
 import { parseFinalSummaryPage, type OverlayWord } from './parse.js';
 import { buildFinalSummaryXlsx } from './xlsx.js';
 
@@ -164,7 +164,18 @@ describe('parseFinalSummaryPage', () => {
 
 describe('totals', () => {
   it('counts like the official files: «*» is not enrolled, letters A–C pass and D–E fail', () => {
-    expect(['15', '9', 'A', 'D', '*', '', 'I', 'NC'].map(gradeOutcome)).toEqual(['approved', 'failed', 'approved', 'failed', 'none', 'none', 'absent', 'notTaken']);
+    expect(['15', '9', 'A', 'D', '*', '', 'I', 'NC', '25', '0'].map(gradeOutcome)).toEqual([
+      'approved',
+      'failed',
+      'approved',
+      'failed',
+      'none',
+      'none',
+      'absent',
+      'notTaken',
+      'none',
+      'none',
+    ]);
     const totals = computeTotals(STUDENTS);
     expect(totals[0]).toEqual({ enrolled: 3, absent: 0, approved: 2, failed: 1, notTaken: 0 });
     expect(totals[9]).toEqual({ enrolled: 3, absent: 0, approved: 2, failed: 1, notTaken: 0 });
@@ -242,4 +253,44 @@ describe('POST /api/final-summaries/scan', () => {
     expect(res.body.summary.students).toEqual(STUDENTS);
     expect(res.body.summary.course).toMatchObject({ year: 'PRIMERO', section: 'D' });
   }, 60_000);
+});
+
+describe('finalSummarySchema', () => {
+  it('keeps only the characters each field can hold and cuts it to length', () => {
+    const dirty = {
+      ...emptySummary('PRIMERO'),
+      schoolYear: '2025 - 2026x',
+      institution: { ...emptySummary().institution, phone: '0272-236.37.88', directorId: 'v-11.131.352', code: 'od-1184 2118' },
+      course: { plan: 'Ciencia y Tecnología', planCode: '31.060', year: 'primero', section: '"d"' },
+      students: [
+        {
+          id: 'v 34.256.276',
+          lastNames: 'Gómez3 Pérez<script>',
+          firstNames: 'ANA  SOFÍA',
+          birthPlace: 'Trujillo 2',
+          state: 'tr.',
+          sex: 'female',
+          birthDay: '1o7',
+          birthMonth: '07',
+          birthYear: '2012abc',
+          grades: ['16 ', ' 9', 'x20', '18', '1-2', '10', '11', '14', '16', 'a'],
+        },
+      ],
+    };
+    const clean = finalSummarySchema.parse(dirty);
+    expect(clean.schoolYear).toBe('2025-2026');
+    expect(clean.institution).toMatchObject({ phone: '02722363788', directorId: 'V11131352', code: 'OD11842118' });
+    expect(clean.course).toEqual({ plan: 'CIENCIA Y TECNOLOGÍA', planCode: '31060', year: 'PRIMERO', section: 'D' });
+    expect(clean.students[0]).toMatchObject({
+      id: 'V34256276',
+      lastNames: 'GÓMEZ PÉREZSCRIPT',
+      firstNames: 'ANA SOFÍA',
+      birthPlace: 'TRUJILLO',
+      state: 'TR',
+      sex: 'F',
+      birthDay: '17',
+      birthYear: '2012',
+    });
+    expect(clean.students[0].grades).toEqual(['16', '9', 'X2', '18', '12', '10', '11', '14', '16', 'A']);
+  });
 });

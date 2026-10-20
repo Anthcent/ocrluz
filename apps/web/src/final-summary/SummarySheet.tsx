@@ -2,7 +2,8 @@ import clsx from 'clsx';
 import { Plus, X } from 'lucide-react';
 import type { InputHTMLAttributes, KeyboardEvent, ReactNode } from 'react';
 import type { FinalSummary, FinalSummaryStudent } from '../lib/types';
-import { AREA_COUNT, computeTotals, COURSE_YEARS, emptyStudent, gradeOutcome, isInvalidGrade, MAX_STUDENTS } from './model';
+import { AREA_COUNT, computeTotals, COURSE_YEARS, emptyStudent, gradeOutcome, MAX_STUDENTS } from './model';
+import { FIELD_LABELS, gradeRule, RULES, STUDENT_RULES, type FieldRule } from './validation';
 
 const LOWER_AREAS: [string, string][] = [
   ['BAT', 'Biología, Ambiente y Tecnología'],
@@ -21,13 +22,14 @@ function areasForYear(summary: FinalSummary, year: string) {
   );
 }
 
-const STUDENT_COLUMNS: { key: Exclude<keyof FinalSummaryStudent, 'grades'>; label: string; width: string; upper?: boolean; center?: boolean }[] = [
-  { key: 'id', label: 'Cédula', width: 'w-[6.5rem]', upper: true },
-  { key: 'lastNames', label: 'Apellidos', width: 'w-[9.5rem]', upper: true },
-  { key: 'firstNames', label: 'Nombres', width: 'w-[9.5rem]', upper: true },
-  { key: 'birthPlace', label: 'Lugar de nac.', width: 'w-[6.5rem]', upper: true },
-  { key: 'state', label: 'EF', width: 'w-9', upper: true, center: true },
-  { key: 'sex', label: 'Sexo', width: 'w-9', upper: true, center: true },
+type StudentKey = Exclude<keyof FinalSummaryStudent, 'grades'>;
+const STUDENT_COLUMNS: { key: StudentKey; label: string; width: string; center?: boolean }[] = [
+  { key: 'id', label: 'Cédula', width: 'w-[6.5rem]' },
+  { key: 'lastNames', label: 'Apellidos', width: 'w-[9.5rem]' },
+  { key: 'firstNames', label: 'Nombres', width: 'w-[9.5rem]' },
+  { key: 'birthPlace', label: 'Lugar de nac.', width: 'w-[6.5rem]' },
+  { key: 'state', label: 'EF', width: 'w-9', center: true },
+  { key: 'sex', label: 'Sexo', width: 'w-9', center: true },
   { key: 'birthDay', label: 'Día', width: 'w-9', center: true },
   { key: 'birthMonth', label: 'Mes', width: 'w-9', center: true },
   { key: 'birthYear', label: 'Año', width: 'w-12', center: true },
@@ -41,25 +43,41 @@ const TOTAL_LABELS: [keyof ReturnType<typeof computeTotals>[number], string][] =
   ['notTaken', 'No cursantes'],
 ];
 
-function Cell({ className, upper, ...props }: InputHTMLAttributes<HTMLInputElement> & { upper?: boolean }) {
+type CellProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'> & {
+  value: string;
+  onValue: (value: string) => void;
+  rule: FieldRule;
+  field: string;
+  error?: string;
+};
+
+/** Grid input that only accepts what its rule allows and shows the rule's message when the value is wrong. */
+function Cell({ value, onValue, rule, field, error, className, ...props }: CellProps) {
   return (
     <input
       {...props}
-      onChange={(e) => {
-        if (upper) e.target.value = e.target.value.toUpperCase();
-        props.onChange?.(e);
-      }}
+      value={value}
+      onChange={(e) => onValue(rule.sanitize(e.target.value).slice(0, rule.maxLength))}
+      maxLength={rule.maxLength}
+      inputMode={rule.inputMode}
+      data-field={field}
+      aria-invalid={error ? true : undefined}
+      title={error}
       spellCheck={false}
       autoComplete="off"
-      className={clsx('h-7 w-full min-w-0 bg-transparent px-1 text-[12px] font-semibold text-eel outline-none transition-colors placeholder:text-hare/60 focus:bg-macaw-light', className)}
+      className={clsx(
+        'h-7 w-full min-w-0 bg-transparent px-1 text-[12px] font-semibold text-eel outline-none transition-colors placeholder:text-hare/60 focus:bg-macaw-light',
+        error && 'ring-1 ring-inset ring-cardinal',
+        className,
+      )}
     />
   );
 }
 
-function Labeled({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+function Labeled({ label, children, className, error }: { label: string; children: ReactNode; className?: string; error?: string }) {
   return (
-    <label className={clsx('flex min-w-0 items-center gap-1.5 border-b border-eel/25 pb-0.5', className)}>
-      <span className="shrink-0 text-[11px] font-bold text-wolf">{label}</span>
+    <label className={clsx('flex min-w-0 items-center gap-1.5 border-b pb-0.5', error ? 'border-cardinal' : 'border-eel/25', className)}>
+      <span className={clsx('shrink-0 text-[11px] font-bold', error ? 'text-cardinal-dark' : 'text-wolf')}>{label}</span>
       {children}
     </label>
   );
@@ -71,7 +89,9 @@ function moveFocus(event: KeyboardEvent<HTMLTableSectionElement>) {
   const row = Number(input.dataset.row);
   const col = Number(input.dataset.col);
   if (Number.isNaN(row) || Number.isNaN(col)) return;
-  const delta = { ArrowDown: [1, 0], Enter: [1, 0], ArrowUp: [-1, 0] }[event.key] ?? (event.key === 'ArrowRight' && input.selectionStart === input.value.length ? [0, 1] : event.key === 'ArrowLeft' && input.selectionStart === 0 ? [0, -1] : null);
+  const delta =
+    { ArrowDown: [1, 0], Enter: [1, 0], ArrowUp: [-1, 0] }[event.key] ??
+    (event.key === 'ArrowRight' && input.selectionStart === input.value.length ? [0, 1] : event.key === 'ArrowLeft' && input.selectionStart === 0 ? [0, -1] : null);
   if (!delta) return;
   const next = event.currentTarget.querySelector<HTMLInputElement>(`input[data-row="${row + delta[0]}"][data-col="${col + delta[1]}"]`);
   if (next) {
@@ -81,20 +101,25 @@ function moveFocus(event: KeyboardEvent<HTMLTableSectionElement>) {
   }
 }
 
-export function SummarySheet({ summary, onChange }: { summary: FinalSummary; onChange: (next: FinalSummary) => void }) {
+export function SummarySheet({ summary, onChange, errors }: { summary: FinalSummary; onChange: (next: FinalSummary) => void; errors: Record<string, string> }) {
   const set = (patch: Partial<FinalSummary>) => onChange({ ...summary, ...patch });
   const setInstitution = (key: keyof FinalSummary['institution'], value: string) => set({ institution: { ...summary.institution, [key]: value } });
   const setCourse = (key: keyof FinalSummary['course'], value: string) =>
     set({ course: { ...summary.course, [key]: value }, ...(key === 'year' ? { areas: areasForYear(summary, value) } : {}) });
   const setStudent = (index: number, patch: Partial<FinalSummaryStudent>) =>
     set({ students: summary.students.map((s, i) => (i === index ? { ...s, ...patch } : s)) });
-  const setGrade = (index: number, area: number, value: string) =>
-    setStudent(index, { grades: summary.students[index].grades.map((g, a) => (a === area ? value.toUpperCase().trim() : g)) });
+  const setGrade = (index: number, area: number, value: string) => setStudent(index, { grades: summary.students[index].grades.map((g, a) => (a === area ? value : g)) });
   const setArea = (index: number, key: keyof FinalSummary['areas'][number], value: string) =>
     set({ areas: summary.areas.map((a, i) => (i === index ? { ...a, [key]: value } : a)) });
 
   const totals = computeTotals(summary.students);
   const inst = summary.institution;
+
+  const header = (label: string, field: string, value: string, onValue: (v: string) => void, rule: FieldRule, className?: string, placeholder?: string) => (
+    <Labeled label={label} className={className} error={errors[field]}>
+      <Cell field={field} value={value} onValue={onValue} rule={rule} error={errors[field]} placeholder={placeholder} aria-label={label.replace(/:$/, '')} />
+    </Labeled>
+  );
 
   return (
     <div className="overflow-x-auto rounded-2xl bg-white shadow-surface ring-1 ring-swan">
@@ -105,9 +130,7 @@ export function SummarySheet({ summary, onChange }: { summary: FinalSummary; onC
         </div>
 
         <div className="mt-4 grid grid-cols-[1fr_1.2fr_1fr] gap-x-6 gap-y-2">
-          <Labeled label="I. Año Escolar:">
-            <Cell value={summary.schoolYear} onChange={(e) => set({ schoolYear: e.target.value })} placeholder="2025-2026" />
-          </Labeled>
+          {header('I. Año Escolar:', 'schoolYear', summary.schoolYear, (v) => set({ schoolYear: v }), RULES.schoolYear, undefined, '2025-2026')}
           <Labeled label="Tipo de Evaluación:">
             <select
               value={summary.evaluationType}
@@ -118,40 +141,20 @@ export function SummarySheet({ summary, onChange }: { summary: FinalSummary; onC
               <option value="REVISIÓN">REVISIÓN</option>
             </select>
           </Labeled>
-          <Labeled label="Mes y Año:">
-            <Cell upper value={summary.monthYear} onChange={(e) => set({ monthYear: e.target.value })} placeholder="JULIO 2026" />
-          </Labeled>
+          {header('Mes y Año:', 'monthYear', summary.monthYear, (v) => set({ monthYear: v }), RULES.monthYear, undefined, 'JULIO 2026')}
         </div>
 
         <p className="mt-5 text-[12px] font-bold">II. Datos de la Institución Educativa:</p>
         <div className="mt-1.5 grid grid-cols-6 gap-x-4 gap-y-2">
-          <Labeled label="Código:" className="col-span-2">
-            <Cell upper value={inst.code} onChange={(e) => setInstitution('code', e.target.value)} />
-          </Labeled>
-          <Labeled label="Epónimo:" className="col-span-4">
-            <Cell upper value={inst.name} onChange={(e) => setInstitution('name', e.target.value)} />
-          </Labeled>
-          <Labeled label="Dirección:" className="col-span-4">
-            <Cell upper value={inst.address} onChange={(e) => setInstitution('address', e.target.value)} />
-          </Labeled>
-          <Labeled label="Teléfono:" className="col-span-2">
-            <Cell value={inst.phone} onChange={(e) => setInstitution('phone', e.target.value)} />
-          </Labeled>
-          <Labeled label="Municipio:" className="col-span-2">
-            <Cell upper value={inst.municipality} onChange={(e) => setInstitution('municipality', e.target.value)} />
-          </Labeled>
-          <Labeled label="Entidad Federal:" className="col-span-2">
-            <Cell upper value={inst.state} onChange={(e) => setInstitution('state', e.target.value)} />
-          </Labeled>
-          <Labeled label="CDCEE:" className="col-span-2">
-            <Cell upper value={inst.cdcee} onChange={(e) => setInstitution('cdcee', e.target.value)} />
-          </Labeled>
-          <Labeled label="Director(a):" className="col-span-4">
-            <Cell upper value={inst.director} onChange={(e) => setInstitution('director', e.target.value)} />
-          </Labeled>
-          <Labeled label="Cédula:" className="col-span-2">
-            <Cell upper value={inst.directorId} onChange={(e) => setInstitution('directorId', e.target.value)} />
-          </Labeled>
+          {header('Código:', 'institution.code', inst.code, (v) => setInstitution('code', v), RULES.institutionCode, 'col-span-2')}
+          {header('Epónimo:', 'institution.name', inst.name, (v) => setInstitution('name', v), RULES.text, 'col-span-4')}
+          {header('Dirección:', 'institution.address', inst.address, (v) => setInstitution('address', v), RULES.text, 'col-span-4')}
+          {header('Teléfono:', 'institution.phone', inst.phone, (v) => setInstitution('phone', v), RULES.phone, 'col-span-2')}
+          {header('Municipio:', 'institution.municipality', inst.municipality, (v) => setInstitution('municipality', v), RULES.place, 'col-span-2')}
+          {header('Entidad Federal:', 'institution.state', inst.state, (v) => setInstitution('state', v), RULES.place, 'col-span-2')}
+          {header('CDCEE:', 'institution.cdcee', inst.cdcee, (v) => setInstitution('cdcee', v), RULES.place, 'col-span-2')}
+          {header('Director(a):', 'institution.director', inst.director, (v) => setInstitution('director', v), RULES.names, 'col-span-4')}
+          {header('Cédula:', 'institution.directorId', inst.directorId, (v) => setInstitution('directorId', v), RULES.personId, 'col-span-2')}
         </div>
 
         <div className="mt-5 flex items-end justify-between text-[12px] font-bold">
@@ -186,40 +189,40 @@ export function SummarySheet({ summary, onChange }: { summary: FinalSummary; onC
             {summary.students.map((student, index) => (
               <tr key={index} className="group">
                 <td className="border border-eel/40 text-center font-semibold text-wolf">{String(index + 1).padStart(2, '0')}</td>
-                {STUDENT_COLUMNS.map((c, col) => (
-                  <td key={c.key} className="border border-eel/40 p-0">
-                    <Cell
-                      upper={c.upper}
-                      data-row={index}
-                      data-col={col}
-                      aria-label={`${c.label} del estudiante ${index + 1}`}
-                      value={student[c.key]}
-                      onChange={(e) => setStudent(index, { [c.key]: e.target.value })}
-                      className={c.center ? 'text-center' : undefined}
-                    />
-                  </td>
-                ))}
-                {student.grades.map((grade, area) => {
-                  const outcome = gradeOutcome(grade);
-                  const invalid = isInvalidGrade(grade);
+                {STUDENT_COLUMNS.map((c, col) => {
+                  const field = `students.${index}.${c.key}`;
                   return (
-                    <td
-                      key={area}
-                      className={clsx(
-                        'border border-eel/40 p-0',
-                        outcome === 'failed' && 'bg-cardinal-light',
-                        invalid && 'bg-bee-light',
-                        !grade && 'bg-bee-light/60',
-                      )}
-                    >
+                    <td key={c.key} className={clsx('border border-eel/40 p-0', errors[field] && 'bg-cardinal-light/60')}>
                       <Cell
+                        field={field}
+                        rule={STUDENT_RULES[c.key]}
+                        error={errors[field]}
+                        data-row={index}
+                        data-col={col}
+                        aria-label={`${FIELD_LABELS[c.key]} del estudiante ${index + 1}`}
+                        value={student[c.key]}
+                        onValue={(v) => setStudent(index, { [c.key]: v })}
+                        className={c.center ? 'text-center' : undefined}
+                      />
+                    </td>
+                  );
+                })}
+                {student.grades.map((grade, area) => {
+                  const field = `students.${index}.grades.${area}`;
+                  const error = errors[field];
+                  const failed = !error && gradeOutcome(grade) === 'failed';
+                  return (
+                    <td key={area} className={clsx('border border-eel/40 p-0', !grade ? 'bg-bee-light' : error ? 'bg-cardinal-light/60' : failed && 'bg-cardinal-light')}>
+                      <Cell
+                        field={field}
+                        rule={gradeRule(area)}
+                        error={error}
                         data-row={index}
                         data-col={STUDENT_COLUMNS.length + area}
                         aria-label={`${summary.areas[area].code} del estudiante ${index + 1}`}
-                        aria-invalid={invalid || undefined}
                         value={grade}
-                        onChange={(e) => setGrade(index, area, e.target.value)}
-                        className={clsx('text-center tabular-nums', outcome === 'failed' && 'text-cardinal-dark', grade === '*' && 'text-hare')}
+                        onValue={(v) => setGrade(index, area, v)}
+                        className={clsx('text-center tabular-nums', failed && 'text-cardinal-dark', grade === '*' && 'text-hare')}
                       />
                     </td>
                   );
@@ -258,14 +261,19 @@ export function SummarySheet({ summary, onChange }: { summary: FinalSummary; onC
             ))}
           </tfoot>
         </table>
-        <button
-          type="button"
-          disabled={summary.students.length >= MAX_STUDENTS}
-          onClick={() => set({ students: [...summary.students, emptyStudent()] })}
-          className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-macaw-dark transition-colors hover:bg-macaw-light disabled:text-hare"
-        >
-          <Plus className="size-4" /> Agregar estudiante ({summary.students.length}/{MAX_STUDENTS})
-        </button>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <button
+            type="button"
+            disabled={summary.students.length >= MAX_STUDENTS}
+            onClick={() => set({ students: [...summary.students, emptyStudent()] })}
+            className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-macaw-dark transition-colors hover:bg-macaw-light disabled:text-hare"
+          >
+            <Plus className="size-4" /> Agregar estudiante ({summary.students.length}/{MAX_STUDENTS})
+          </button>
+          <p className="text-[11px] text-wolf">
+            Notas: 1 a 20 · {summary.areas[AREA_COUNT - 1]?.code || 'última área'} con literal A–E · <b>*</b> no la cursa · <b>I</b> inasistente · <b>NC</b> no cursante
+          </p>
+        </div>
 
         <div className="mt-5 grid grid-cols-[minmax(0,1fr)_17rem] gap-6">
           <div>
@@ -284,18 +292,21 @@ export function SummarySheet({ summary, onChange }: { summary: FinalSummary; onC
                 {summary.areas.map((area, i) => (
                   <tr key={i}>
                     <td className="border border-eel/40 text-center font-semibold text-wolf">{i + 1}</td>
-                    <td className="border border-eel/40 p-0">
-                      <Cell upper value={area.code} onChange={(e) => setArea(i, 'code', e.target.value)} className="text-center" aria-label={`Código del área ${i + 1}`} />
-                    </td>
-                    <td className="border border-eel/40 p-0">
-                      <Cell value={area.name} onChange={(e) => setArea(i, 'name', e.target.value)} aria-label={`Nombre del área ${i + 1}`} />
-                    </td>
-                    <td className="border border-eel/40 p-0">
-                      <Cell upper value={area.teacher} onChange={(e) => setArea(i, 'teacher', e.target.value)} aria-label={`Profesor de ${area.code}`} />
-                    </td>
-                    <td className="border border-eel/40 p-0">
-                      <Cell upper value={area.teacherId} onChange={(e) => setArea(i, 'teacherId', e.target.value)} aria-label={`Cédula del profesor de ${area.code}`} />
-                    </td>
+                    {(
+                      [
+                        ['code', RULES.areaCode, `Código del área ${i + 1}`, 'text-center'],
+                        ['name', RULES.areaName, `Nombre del área ${i + 1}`, undefined],
+                        ['teacher', RULES.names, `Profesor de ${area.code}`, undefined],
+                        ['teacherId', RULES.personId, `Cédula del profesor de ${area.code}`, undefined],
+                      ] as const
+                    ).map(([key, rule, label, className]) => {
+                      const field = `areas.${i}.${key}`;
+                      return (
+                        <td key={key} className={clsx('border border-eel/40 p-0', errors[field] && 'bg-cardinal-light/60')}>
+                          <Cell field={field} rule={rule} error={errors[field]} value={area[key]} onValue={(v) => setArea(i, key, v)} className={className} aria-label={label} />
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -305,16 +316,14 @@ export function SummarySheet({ summary, onChange }: { summary: FinalSummary; onC
           <div>
             <p className="text-[12px] font-bold">VI. Identificación del Curso:</p>
             <div className="mt-1.5 space-y-2.5 rounded-lg border border-eel/40 p-3">
-              <Labeled label="Plan de estudio:">
-                <Cell upper value={summary.course.plan} onChange={(e) => setCourse('plan', e.target.value)} />
-              </Labeled>
-              <Labeled label="Código:">
-                <Cell value={summary.course.planCode} onChange={(e) => setCourse('planCode', e.target.value)} />
-              </Labeled>
-              <Labeled label="Año cursado:">
+              {header('Plan de estudio:', 'course.plan', summary.course.plan, (v) => setCourse('plan', v), RULES.text)}
+              {header('Código:', 'course.planCode', summary.course.planCode, (v) => setCourse('planCode', v), RULES.planCode)}
+              <Labeled label="Año cursado:" error={errors['course.year']}>
                 <select
                   value={summary.course.year}
                   onChange={(e) => setCourse('year', e.target.value)}
+                  data-field="course.year"
+                  aria-label="Año cursado"
                   className="h-7 w-full bg-transparent px-1 text-[12px] font-bold outline-none focus:bg-macaw-light"
                 >
                   <option value="">—</option>
@@ -325,9 +334,7 @@ export function SummarySheet({ summary, onChange }: { summary: FinalSummary; onC
                   ))}
                 </select>
               </Labeled>
-              <Labeled label="Sección:">
-                <Cell upper maxLength={2} value={summary.course.section} onChange={(e) => setCourse('section', e.target.value)} />
-              </Labeled>
+              {header('Sección:', 'course.section', summary.course.section, (v) => setCourse('section', v), RULES.section)}
               <div className="flex items-center justify-between pt-1 text-[11px] font-bold">
                 <span className="text-wolf">N° de estudiantes</span>
                 <span className="text-sm tabular-nums">{summary.students.length}</span>
@@ -340,7 +347,8 @@ export function SummarySheet({ summary, onChange }: { summary: FinalSummary; onC
           <span className="text-[12px] font-bold">VII. Observaciones:</span>
           <textarea
             value={summary.observations}
-            onChange={(e) => set({ observations: e.target.value })}
+            onChange={(e) => set({ observations: e.target.value.slice(0, 1000) })}
+            maxLength={1000}
             rows={2}
             className="mt-1.5 w-full resize-y rounded-lg border border-eel/40 bg-transparent p-2 text-[12px] font-semibold outline-none focus:bg-macaw-light"
           />
@@ -348,9 +356,7 @@ export function SummarySheet({ summary, onChange }: { summary: FinalSummary; onC
 
         <div className="mt-4 grid grid-cols-2 gap-6">
           <div className="space-y-2">
-            <Labeled label="VIII. Fecha de Remisión:">
-              <Cell value={summary.remissionDate} onChange={(e) => set({ remissionDate: e.target.value })} placeholder="31-07-2026" />
-            </Labeled>
+            {header('VIII. Fecha de Remisión:', 'remissionDate', summary.remissionDate, (v) => set({ remissionDate: v }), RULES.date, undefined, '31-07-2026')}
             <p className="pt-1 text-[11px] font-bold text-wolf">Director(a)</p>
             <p className="text-[12px] font-semibold">{inst.director || '—'}</p>
             <p className="text-[12px] font-semibold text-wolf">{inst.directorId || '—'}</p>

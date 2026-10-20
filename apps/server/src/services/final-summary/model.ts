@@ -30,47 +30,73 @@ export function defaultAreas(courseYear: string) {
 
 export const KNOWN_AREA_CODES = new Set([...LOWER_AREAS, ...UPPER_AREAS].map((a) => a.code));
 
-const text = (max: number) => z.string().trim().max(max).default('');
+/*
+ * Every field keeps only the characters its kind of data can hold and is cut to its length,
+ * so OCR noise never reaches the database or the Excel file. Format checks that need the whole
+ * value (real dates, grade ranges) are reported to the user by the editor instead of rejected here.
+ */
+const field = (allowed: RegExp, max: number, upper = true) =>
+  z
+    .string()
+    .max(2000)
+    .default('')
+    .transform((value) => (upper ? value.toUpperCase() : value).replace(allowed, '').replace(/\s+/g, ' ').trim().slice(0, max));
+
+const LETTERS = /[^A-ZÁÉÍÓÚÜÑ .'-]/g;
+const DIGITS = /\D/g;
+const ID = /[^VE0-9]/g;
+const TEXT = /[^A-ZÁÉÍÓÚÜÑ0-9 .,#º°/-]/g;
 
 const studentSchema = z.object({
-  id: text(20),
-  lastNames: text(80),
-  firstNames: text(80),
-  birthPlace: text(60),
-  state: text(6),
-  sex: text(2),
-  birthDay: text(2),
-  birthMonth: text(2),
-  birthYear: text(4),
-  grades: z.array(text(4)).length(AREA_COUNT),
+  id: field(ID, 12),
+  lastNames: field(LETTERS, 60),
+  firstNames: field(LETTERS, 60),
+  birthPlace: field(LETTERS, 40),
+  state: field(/[^A-Z]/g, 3),
+  sex: field(/[^MF]/g, 1),
+  birthDay: field(DIGITS, 2),
+  birthMonth: field(DIGITS, 2),
+  birthYear: field(DIGITS, 4),
+  grades: z.array(field(/[^0-9A-Z*]/g, 2)).length(AREA_COUNT),
 });
 
-const areaSchema = z.object({ code: text(8), name: text(80), teacher: text(80), teacherId: text(20) });
+const areaSchema = z.object({
+  code: field(/[^A-Z]/g, 4),
+  name: field(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ,.]/g, 80, false),
+  teacher: field(LETTERS, 80),
+  teacherId: field(ID, 10),
+});
+
+const emptyInstitution = { code: '', name: '', address: '', phone: '', municipality: '', state: '', cdcee: '', director: '', directorId: '' };
 
 export const finalSummarySchema = z.object({
   evaluationType: z.enum(['FINAL', 'REVISIÓN']).default('FINAL'),
-  schoolYear: text(20),
-  monthYear: text(30),
+  schoolYear: field(/[^\d-]/g, 9),
+  monthYear: field(/[^A-Z0-9 ]/g, 15),
   institution: z
     .object({
-      code: text(30),
-      name: text(120),
-      address: text(200),
-      phone: text(30),
-      municipality: text(60),
-      state: text(60),
-      cdcee: text(60),
-      director: text(120),
-      directorId: text(20),
+      code: field(/[^A-Z0-9]/g, 12),
+      name: field(TEXT, 120),
+      address: field(TEXT, 200),
+      phone: field(DIGITS, 11),
+      municipality: field(LETTERS, 60),
+      state: field(LETTERS, 60),
+      cdcee: field(LETTERS, 60),
+      director: field(LETTERS, 120),
+      directorId: field(ID, 10),
     })
-    .default({ code: '', name: '', address: '', phone: '', municipality: '', state: '', cdcee: '', director: '', directorId: '' }),
+    .default(emptyInstitution),
   course: z
-    .object({ plan: text(80), planCode: text(20), year: text(20), section: text(4) })
+    .object({ plan: field(TEXT, 80), planCode: field(DIGITS, 6), year: field(/[^A-Z]/g, 10), section: field(/[^A-Z]/g, 1) })
     .default({ plan: '', planCode: '', year: '', section: '' }),
   areas: z.array(areaSchema).length(AREA_COUNT),
   students: z.array(studentSchema).max(MAX_STUDENTS, `El formato admite hasta ${MAX_STUDENTS} estudiantes por página`),
-  observations: text(1000),
-  remissionDate: text(20),
+  observations: z
+    .string()
+    .max(1000)
+    .default('')
+    .transform((v) => v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim()),
+  remissionDate: field(/[^\d-]/g, 10),
 });
 
 export type FinalSummary = z.infer<typeof finalSummarySchema>;
@@ -92,7 +118,8 @@ export function gradeOutcome(raw: string): GradeOutcome {
   if (!value || value === '*') return 'none';
   if (value === 'I' || value === 'IN') return 'absent';
   if (value === 'NC') return 'notTaken';
-  if (/^\d{1,2}$/.test(value)) return Number(value) >= 10 ? 'approved' : 'failed';
+  // Out-of-range numbers are typos the editor flags; they must not count in the totals.
+  if (/^\d{1,2}$/.test(value)) return Number(value) < 1 || Number(value) > 20 ? 'none' : Number(value) >= 10 ? 'approved' : 'failed';
   if (/^[ABC]$/.test(value)) return 'approved';
   if (/^[DE]$/.test(value)) return 'failed';
   return 'none';

@@ -12,7 +12,8 @@ export function gradeOutcome(raw: string): GradeOutcome {
   if (!value || value === '*') return 'none';
   if (value === 'I' || value === 'IN') return 'absent';
   if (value === 'NC') return 'notTaken';
-  if (/^\d{1,2}$/.test(value)) return Number(value) >= 10 ? 'approved' : 'failed';
+  // Out-of-range numbers are typos the editor flags; they must not count in the totals.
+  if (/^\d{1,2}$/.test(value)) return Number(value) < 1 || Number(value) > 20 ? 'none' : Number(value) >= 10 ? 'approved' : 'failed';
   if (/^[ABC]$/.test(value)) return 'approved';
   if (/^[DE]$/.test(value)) return 'failed';
   return 'none';
@@ -39,11 +40,6 @@ export function computeTotals(students: FinalSummaryStudent[]): AreaTotals[] {
   });
 }
 
-/** A value the form cannot hold: anything but 1–20, A–E, «*», I, IN or NC. */
-export function isInvalidGrade(raw: string) {
-  const value = raw.trim().toUpperCase();
-  return value !== '' && !/^(\*|[A-E]|I|IN|NC)$/.test(value) && !(/^\d{1,2}$/.test(value) && Number(value) >= 1 && Number(value) <= 20);
-}
 
 export function emptyStudent(): FinalSummaryStudent {
   return { id: '', lastNames: '', firstNames: '', birthPlace: '', state: '', sex: '', birthDay: '', birthMonth: '', birthYear: '', grades: Array(AREA_COUNT).fill('') };

@@ -1,12 +1,13 @@
 import clsx from 'clsx';
-import { AlertTriangle, Camera, Download, FilePlus2, FileSpreadsheet, ImagePlus, PenLine, Save, Trash2, Upload, X } from 'lucide-react';
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { AlertTriangle, Camera, CheckCircle2, ChevronDown, Download, FilePlus2, FileSpreadsheet, ImagePlus, PenLine, Save, Trash2, Upload, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { BackLink, PageHeader } from '../components/PageHeader';
 import { Button, Modal, PageLoader, ProgressBar } from '../components/ui';
 import { MAX_STUDENTS, summaryTitle } from '../final-summary/model';
 import { SummarySheet } from '../final-summary/SummarySheet';
+import { validateSummary, type Issue } from '../final-summary/validation';
 import { api } from '../lib/api';
 import { prepareImage } from '../lib/image';
 import type { FinalSummary } from '../lib/types';
@@ -54,6 +55,9 @@ export function FinalSummaryEditorPage() {
   const [started, setStarted] = useState(existingId !== null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const issues = useMemo(() => (summary ? validateSummary(summary) : []), [summary]);
+  // First message wins when a field has several problems.
+  const errors = useMemo(() => Object.fromEntries([...issues].reverse().map((i) => [i.field, i.message])), [issues]);
 
   useEffect(() => {
     const request = existingId ? api.finalSummaries.get(existingId).then((r) => r.summary) : api.finalSummaries.blank('PRIMERO').then((r) => ({ ...r.summary, evaluationType: revision ? ('REVISIÓN' as const) : r.summary.evaluationType }));
@@ -135,6 +139,15 @@ export function FinalSummaryEditorPage() {
   };
 
   const download = async () => {
+    if (
+      issues.length &&
+      !(await confirm({
+        title: 'Hay datos por revisar',
+        message: `${issues.length} ${issues.length === 1 ? 'dato no cumple' : 'datos no cumplen'} el formato. Se exportará tal como está; ¿descargar igual?`,
+        confirmLabel: 'Descargar igual',
+      }))
+    )
+      return;
     const target = dirty || !id ? await save() : id;
     if (!target) return;
     const link = document.createElement('a');
@@ -272,7 +285,8 @@ export function FinalSummaryEditorPage() {
       )}
 
       <p className="mb-2 text-xs font-semibold text-wolf lg:hidden">Desliza la hoja hacia los lados para ver todas las columnas.</p>
-      <SummarySheet summary={summary} onChange={update} />
+      <IssuesPanel issues={issues} />
+      <SummarySheet summary={summary} onChange={update} errors={errors} />
 
       <div className="fixed inset-x-3 bottom-24 z-30 mx-auto flex max-w-xl items-center gap-2 rounded-full bg-white/95 p-1.5 shadow-floating ring-1 ring-swan backdrop-blur lg:bottom-6 lg:left-[19rem]">
         <span className={clsx('min-w-0 flex-1 truncate pl-3 text-sm font-semibold', dirty ? 'text-bee-dark' : 'text-wolf')}>
@@ -289,6 +303,47 @@ export function FinalSummaryEditorPage() {
       <Modal open={!!viewing} onClose={() => setViewing(null)} title={viewing?.name ?? ''} wide>
         {viewing && <img src={viewing.url} alt={viewing.name} className="max-h-[75vh] w-full rounded-xl object-contain" />}
       </Modal>
+    </div>
+  );
+}
+
+/** Lists every field that breaks the form rules; choosing one jumps to that cell. */
+function IssuesPanel({ issues }: { issues: Issue[] }) {
+  const [open, setOpen] = useState(false);
+  if (!issues.length) {
+    return (
+      <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-feather-dark">
+        <CheckCircle2 className="size-4" /> Todos los datos cumplen el formato.
+      </p>
+    );
+  }
+  const focus = (field: string) => {
+    const input = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
+    input?.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    input?.focus({ preventScroll: true });
+  };
+  return (
+    <div className="mb-3 overflow-hidden rounded-2xl bg-white shadow-surface ring-1 ring-cardinal/40">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+        <AlertTriangle className="size-5 shrink-0 text-cardinal-dark" />
+        <span className="min-w-0 flex-1 text-sm font-bold text-eel">
+          {issues.length} {issues.length === 1 ? 'dato por revisar' : 'datos por revisar'}
+          <span className="ml-2 font-semibold text-wolf">Las celdas con borde rojo no cumplen el formato.</span>
+        </span>
+        <ChevronDown className={clsx('size-5 shrink-0 text-wolf transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <ul className="max-h-64 divide-y divide-swan overflow-y-auto border-t border-swan">
+          {issues.map((issue, i) => (
+            <li key={`${issue.field}-${i}`}>
+              <button type="button" onClick={() => focus(issue.field)} className="flex w-full flex-col items-start px-4 py-2 text-left hover:bg-snow sm:flex-row sm:items-center sm:gap-3">
+                <span className="shrink-0 text-sm font-bold text-eel sm:w-64 sm:truncate">{issue.label}</span>
+                <span className="text-sm text-cardinal-dark">{issue.message}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
