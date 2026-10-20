@@ -73,7 +73,7 @@ export function HomePage() {
 
   return (
     <div className="grid gap-5 lg:gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(19rem,0.65fr)]">
-        <section className="animate-header-in overflow-hidden rounded-[20px] bg-macaw sm:rounded-[24px] p-4 text-eel sm:p-7 lg:p-8 xl:col-start-1 xl:row-start-1">
+        <section className="animate-header-in overflow-hidden rounded-[20px] bg-feather sm:rounded-[24px] p-4 text-eel sm:p-7 lg:p-8 xl:col-start-1 xl:row-start-1">
           <div className="grid h-full gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.8fr)] lg:items-end lg:gap-8">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
@@ -81,11 +81,11 @@ export function HomePage() {
                   {firstName.charAt(0).toUpperCase() || <ScanLine className="size-6" />}
                 </span>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-macaw-ink">Centro de trabajo</div>
+                  <div className="text-sm font-semibold text-feather-dark">Centro de trabajo</div>
                   <h1 className="truncate text-[1.625rem] font-bold leading-[1.1] tracking-[-0.03em] sm:text-4xl">¡Hola, {firstName}!</h1>
                 </div>
               </div>
-              <p className="mt-3 max-w-lg text-[0.9375rem] font-medium text-macaw-ink sm:mt-4 sm:text-base">
+              <p className="mt-3 max-w-lg text-[0.9375rem] font-medium text-feather-dark sm:mt-4 sm:text-base">
                 {weekTotal > 0
                   ? `${weekTotal} ${weekTotal === 1 ? 'hoja escaneada' : 'hojas escaneadas'} esta semana. Tu archivo ya tiene ${formatNumber(stats.totals.words)} palabras.`
                   : 'Tu espacio está listo para capturar, organizar y encontrar información.'}
@@ -271,27 +271,20 @@ export function HomePage() {
 /** Reemplaza al TotalsStrip (todo en cero) la primera vez que se abre el panel: explica cómo funciona en vez de mostrar ceros. */
 function GettingStarted({ noKeys, className }: { noKeys: boolean; className?: string }) {
   const steps = [
-    { icon: Camera, title: 'Escaneá tus hojas', detail: 'Con la cámara o subiendo fotos, de a una o en lote.' },
-    {
-      icon: ScanLine,
-      title: 'Se reconoce el texto',
-      detail: noKeys ? 'Tesseract funciona sin conexión; sumá OCR.space o Gemini en Ajustes para más precisión.' : 'Con el motor que elijas: OCR.space, Gemini o Tesseract.',
-    },
-    { icon: FolderOpen, title: 'Organizá y buscá', detail: 'Agrupá en carpetas y encontrá cualquier palabra después.' },
+    { icon: Camera, title: 'Escaneá', detail: 'Cámara o fotos, de a una o en lote.' },
+    { icon: ScanLine, title: 'Reconocé', detail: noKeys ? 'Tesseract funciona sin conexión.' : 'Con el motor que elijas.' },
+    { icon: FolderOpen, title: 'Organizá', detail: 'Agrupá en carpetas y buscá después.' },
   ];
   return (
-    <div className={clsx('grid gap-2 sm:grid-cols-3 sm:gap-3', className)}>
+    <div className={clsx('grid grid-cols-3 gap-1.5 sm:gap-2', className)}>
       {steps.map(({ icon: Icon, title, detail }, index) => (
-        <div key={title} className="flex items-start gap-3 rounded-2xl bg-white/70 p-3">
-          <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-eel">
-            {index + 1}
+        <div key={title} className="flex min-w-0 flex-col gap-1 rounded-xl bg-white/70 p-2 sm:p-2.5" title={detail}>
+          <span className="flex items-center gap-1 text-xs font-bold text-eel sm:text-sm">
+            <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center rounded-full bg-white text-[10px]">{index + 1}</span>
+            <Icon className="size-3.5 shrink-0" />
           </span>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-sm font-bold text-eel">
-              <Icon className="size-4 shrink-0" /> {title}
-            </div>
-            <p className="mt-0.5 text-xs leading-snug text-macaw-ink">{detail}</p>
-          </div>
+          <span className="truncate text-xs font-bold text-eel sm:text-sm">{title}</span>
+          <span className="hidden truncate text-[11px] leading-snug text-feather-dark sm:block">{detail}</span>
         </div>
       ))}
     </div>
