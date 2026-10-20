@@ -73,7 +73,7 @@ export function HomePage() {
 
   return (
     <div className="grid gap-5 lg:gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(19rem,0.65fr)]">
-        <section className="animate-header-in overflow-hidden rounded-[20px] bg-feather sm:rounded-[24px] p-4 text-eel sm:p-7 lg:p-8 xl:col-start-1 xl:row-start-1">
+        <section className="animate-header-in overflow-hidden rounded-[20px] bg-eel sm:rounded-[24px] p-4 text-white sm:p-7 lg:p-8 xl:col-start-1 xl:row-start-1">
           <div className="grid h-full gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.8fr)] lg:items-end lg:gap-8">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
@@ -81,17 +81,17 @@ export function HomePage() {
                   {firstName.charAt(0).toUpperCase() || <ScanLine className="size-6" />}
                 </span>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-feather-dark">Centro de trabajo</div>
+                  <div className="text-sm font-semibold text-white/65">Centro de trabajo</div>
                   <h1 className="truncate text-[1.625rem] font-bold leading-[1.1] tracking-[-0.03em] sm:text-4xl">¡Hola, {firstName}!</h1>
                 </div>
               </div>
-              <p className="mt-3 max-w-lg text-[0.9375rem] font-medium text-feather-dark sm:mt-4 sm:text-base">
+              <p className="mt-3 max-w-lg text-[0.9375rem] font-medium text-white/70 sm:mt-4 sm:text-base">
                 {weekTotal > 0
                   ? `${weekTotal} ${weekTotal === 1 ? 'hoja escaneada' : 'hojas escaneadas'} esta semana. Tu archivo ya tiene ${formatNumber(stats.totals.words)} palabras.`
                   : 'Tu espacio está listo para capturar, organizar y encontrar información.'}
               </p>
               <div className="mt-4 grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-2 sm:mt-6 sm:flex sm:flex-wrap">
-                <Link to="/escanear" className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-full bg-eel px-4 text-sm font-bold text-white transition-[transform,background-color] duration-200 hover:bg-eel-hover active:scale-[0.98] sm:px-5">
+                <Link to="/escanear" className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-full bg-macaw px-4 text-sm font-bold text-eel transition-[transform,background-color] duration-200 hover:bg-macaw-hover active:scale-[0.98] sm:px-5">
                   <Camera className="size-5 shrink-0" /> <span className="truncate">Escanear hojas</span>
                 </Link>
                 <Link to="/documentos/nuevo" className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-eel transition-[transform,background-color] duration-200 hover:bg-polar active:scale-[0.98] sm:px-5">
@@ -284,7 +284,7 @@ function GettingStarted({ noKeys, className }: { noKeys: boolean; className?: st
             <Icon className="size-3.5 shrink-0" />
           </span>
           <span className="truncate text-xs font-bold text-eel sm:text-sm">{title}</span>
-          <span className="hidden truncate text-[11px] leading-snug text-feather-dark sm:block">{detail}</span>
+          <span className="hidden truncate text-[11px] leading-snug text-wolf sm:block">{detail}</span>
         </div>
       ))}
     </div>
