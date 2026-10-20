@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock3,
   FilePlus2,
+  FileText,
   Files,
   Gauge,
   FolderOpen,
@@ -24,7 +25,7 @@ import { Button, EmptyState, PageLoader } from '../components/ui';
 import { api } from '../lib/api';
 import { GROUP_STYLES } from '../lib/constants';
 import { formatNumber, timeAgo } from '../lib/format';
-import type { Engine, Stats } from '../lib/types';
+import type { Engine, Scan, Stats } from '../lib/types';
 import { useScanSession } from '../scan/ScanSession';
 import { useSettings } from '../settings/SettingsContext';
 
@@ -38,6 +39,8 @@ export function HomePage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
+  const [recentScans, setRecentScans] = useState<Scan[]>([]);
+  const [looseScans, setLooseScans] = useState<Scan[]>([]);
 
   const load = () => {
     setFailed(false);
@@ -47,6 +50,10 @@ export function HomePage() {
       .catch(() => setFailed(true));
   };
   useEffect(load, []);
+  useEffect(() => {
+    api.scans.list({ scope: 'all', limit: 5 }).then((r) => setRecentScans(r.scans)).catch(() => {});
+    api.scans.list({ scope: 'individual', limit: 3 }).then((r) => setLooseScans(r.scans)).catch(() => {});
+  }, []);
 
   const search = (event: FormEvent) => {
     event.preventDefault();
@@ -216,7 +223,10 @@ export function HomePage() {
           </Link>
         </aside>
 
-      <WeeklyActivity week={stats.week} className="xl:col-span-2 xl:row-start-2" />
+      <div className="grid gap-4 xl:col-span-2 xl:row-start-2 xl:grid-cols-2">
+        <RecentActivity scans={recentScans} />
+        <UnorganizedCard count={stats.totals.individual} scans={looseScans} />
+      </div>
 
       <div className="grid gap-4 xl:col-span-2 xl:row-start-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
         <section className="rounded-[20px] bg-white p-5 shadow-surface sm:rounded-[24px] sm:p-6">
@@ -293,35 +303,76 @@ function GettingStarted({ noKeys, className }: { noKeys: boolean; className?: st
   );
 }
 
-const DAY_LABEL = new Intl.DateTimeFormat('es', { weekday: 'short' });
-
-/** Gráfico de barras con las hojas escaneadas por día (últimos 7 días); dato real que ya traía el backend y no se mostraba. */
-function WeeklyActivity({ week, className }: { week: Stats['week']; className?: string }) {
-  const max = Math.max(1, ...week.map((d) => d.count));
-  const today = new Date().toISOString().slice(0, 10);
-  const summary = week.map((d) => `${DAY_LABEL.format(new Date(`${d.day}T00:00:00`))} ${d.count}`).join(', ');
-
+/** Lo último escaneado en todo el archivo (no solo carpetas): da acceso directo a seguir donde quedaste. */
+function RecentActivity({ scans }: { scans: Scan[] }) {
   return (
-    <section className={clsx('rounded-[20px] bg-white p-5 shadow-surface sm:rounded-[24px] sm:p-6', className)}>
-      <div>
-        <h2 className="text-xl font-bold">Actividad de la semana</h2>
-        <p className="mt-1 text-sm text-wolf">Hojas escaneadas por día, últimos 7 días.</p>
+    <section className="rounded-[20px] bg-white p-5 shadow-surface sm:rounded-[24px] sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">Última actividad</h2>
+          <p className="mt-1 text-sm text-wolf">Lo último que escaneaste.</p>
+        </div>
+        <Clock3 className="size-6 text-macaw-dark" />
       </div>
-      <div className="mt-6 flex h-32 items-end gap-2 sm:h-36 sm:gap-3" role="img" aria-label={`Hojas escaneadas por día: ${summary}`}>
-        {week.map((d) => {
-          const isToday = d.day === today;
-          const barHeight = d.count ? Math.max(8, Math.round((d.count / max) * 100)) : 3;
-          return (
-            <div key={d.day} aria-hidden="true" className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-              <span className={clsx('text-xs font-bold tabular-nums', d.count ? 'text-eel' : 'text-hare')}>{d.count}</span>
-              <div className="flex h-full w-full items-end">
-                <div className={clsx('w-full rounded-t-md', isToday ? 'bg-eel' : 'bg-macaw-dark')} style={{ height: `${barHeight}%` }} />
-              </div>
-              <span className={clsx('text-[11px] font-semibold capitalize', isToday ? 'text-eel' : 'text-wolf')}>{DAY_LABEL.format(new Date(`${d.day}T00:00:00`)).replace('.', '')}</span>
-            </div>
-          );
-        })}
+      {scans.length ? (
+        <ul className="mt-2 divide-y divide-swan">
+          {scans.map((s) => (
+            <li key={s.id}>
+              <Link to={s.groupId ? `/archivo/carpeta/${s.groupId}` : `/escaneo/${s.id}`} className="group flex items-center gap-3 py-3">
+                <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-polar text-eel">
+                  <FileText className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-bold text-eel">{s.title || 'Sin título'}</span>
+                  <span className="block truncate text-sm text-wolf">
+                    {s.groupTitle ? `En ${s.groupTitle}` : 'Suelto'} · {timeAgo(s.createdAt)}
+                  </span>
+                </span>
+                <ArrowRight className="size-4 shrink-0 text-hare transition-transform group-hover:translate-x-0.5 group-hover:text-eel" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 text-sm text-wolf">Todavía no escaneaste nada.</p>
+      )}
+    </section>
+  );
+}
+
+/** Hojas sueltas (sin carpeta): lo que queda pendiente de organizar, con acceso directo a cada una. */
+function UnorganizedCard({ count, scans }: { count: number; scans: Scan[] }) {
+  return (
+    <section className="rounded-[20px] bg-white p-5 shadow-surface sm:rounded-[24px] sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">Sin organizar</h2>
+          <p className="mt-1 text-sm text-wolf">{count ? `${count} ${count === 1 ? 'hoja suelta' : 'hojas sueltas'}, sin carpeta.` : 'Todo está en carpetas.'}</p>
+        </div>
+        <FolderOpen className="size-6 text-bee-dark" />
       </div>
+      {count ? (
+        <>
+          <ul className="mt-2 divide-y divide-swan">
+            {scans.map((s) => (
+              <li key={s.id}>
+                <Link to={`/escaneo/${s.id}`} className="group flex items-center gap-3 py-3">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-bold text-eel">{s.title || 'Sin título'}</span>
+                    <span className="block truncate text-sm text-wolf">{timeAgo(s.createdAt)}</span>
+                  </span>
+                  <ArrowRight className="size-4 shrink-0 text-hare transition-transform group-hover:translate-x-0.5 group-hover:text-eel" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <Link to="/archivo?vista=individuales" className="mt-3 flex items-center justify-between rounded-xl bg-polar px-4 py-3 text-sm font-semibold text-eel transition hover:bg-polar-hover">
+            Ver todos los sueltos <ArrowRight className="size-4" />
+          </Link>
+        </>
+      ) : (
+        <p className="mt-4 text-sm text-wolf">Buen trabajo manteniendo el archivo organizado.</p>
+      )}
     </section>
   );
 }
