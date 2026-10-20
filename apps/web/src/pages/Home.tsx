@@ -121,18 +121,11 @@ export function HomePage() {
   if (!stats) return <PageLoader />;
 
   const noKeys = loaded && !settings.keys.ocrspace.configured && !settings.keys.gemini.configured;
-  const weekTotal = stats.week.reduce((sum, day) => sum + day.count, 0);
   const firstName = user?.name.split(' ')[0] ?? '';
   const hasUsage = Object.values(usage).some((count) => count > 0);
   const shortcuts = SHORTCUTS.map((s, index) => ({ ...s, index, count: usage[s.id] ?? 0 }))
     .sort((a, b) => b.count - a.count || a.index - b.index)
     .slice(0, 5);
-
-  const summary = weekTotal
-    ? `Esta semana escaneaste ${weekTotal} ${weekTotal === 1 ? 'hoja' : 'hojas'} y tu archivo ya suma ${formatNumber(stats.totals.words)} palabras buscables.`
-    : stats.totals.scans
-      ? 'Esta semana todavía no escaneaste nada. Tu archivo te espera.'
-      : 'Tu espacio está listo: escanea tu primera hoja para empezar.';
 
   const nextStep: { icon: LucideIcon; text: string; action: string; to: string } = pages.length
     ? { icon: Layers, text: `Tienes ${pages.length} ${pages.length === 1 ? 'hoja' : 'hojas'} en el lote sin archivar.`, action: 'Continuar', to: '/escanear' }
@@ -154,16 +147,14 @@ export function HomePage() {
     <div className="space-y-5 lg:space-y-6">
       <div>
         <header className="animate-header-in relative overflow-hidden rounded-2xl bg-brand text-white">
-          <div className="grid gap-6 px-5 pb-14 pt-6 sm:px-8 sm:pb-16 sm:pt-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-10 lg:px-10">
+          <div className="grid gap-4 px-5 pb-12 pt-5 sm:px-7 sm:pb-14 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8 lg:px-9">
             <div className="min-w-0">
               <p className="inline-flex items-center gap-2 text-sm font-semibold text-white/70">
                 <span aria-hidden="true" className="h-0.5 w-6 rounded-full bg-accent" />
                 {capitalize(TODAY_LABEL.format(new Date()))}
               </p>
-              <h1 className="mt-2 truncate text-[1.875rem] font-bold leading-tight tracking-[-0.03em] sm:text-[2.5rem]">Hola, {firstName}</h1>
-              <p className="mt-2 max-w-xl text-[0.9375rem] text-white/75 sm:text-base">{summary}</p>
-
-              <div className="mt-5 flex max-w-xl items-center gap-3 rounded-xl bg-white/10 p-2 pl-3 ring-1 ring-white/15">
+              <h1 className="mt-1 truncate text-[1.75rem] font-bold leading-tight tracking-[-0.03em] sm:text-[2.125rem]">Hola, {firstName}</h1>
+              <div className="mt-3 flex max-w-xl items-center gap-3 rounded-xl bg-white/10 p-1.5 pl-3 ring-1 ring-white/15">
                 <NextIcon className="size-5 shrink-0 text-white/80" />
                 <p className="min-w-0 flex-1 text-sm font-semibold">{nextStep.text}</p>
                 <Link to={nextStep.to} className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg bg-white px-3 text-sm font-bold text-brand transition-colors hover:bg-polar">
@@ -171,24 +162,24 @@ export function HomePage() {
                 </Link>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:flex">
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:flex">
                 <Link
                   to="/escanear"
                   onClick={() => recordUsage('scan')}
-                  className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-bold text-on-accent transition-[transform,background-color] duration-200 hover:bg-accent-hover active:scale-[0.98]"
+                  className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-bold text-on-accent transition-[transform,background-color] duration-200 hover:bg-accent-hover active:scale-[0.98]"
                 >
                   <Camera className="size-5 shrink-0" /> <span className="truncate">Escanear</span>
                 </Link>
                 <Link
                   to="/documentos/nuevo"
                   onClick={() => recordUsage('new-doc')}
-                  className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl bg-white/10 px-5 text-sm font-bold text-white ring-1 ring-white/25 transition-[transform,background-color] duration-200 hover:bg-white/15 active:scale-[0.98]"
+                  className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl bg-white/10 px-5 text-sm font-bold text-white ring-1 ring-white/25 transition-[transform,background-color] duration-200 hover:bg-white/15 active:scale-[0.98]"
                 >
                   <FilePlus2 className="size-5 shrink-0" /> <span className="truncate">Nuevo documento</span>
                 </Link>
               </div>
             </div>
-            <ScanIllustration className="hidden w-60 lg:block xl:w-72" />
+            <ScanIllustration className="hidden w-44 lg:block xl:w-52" />
           </div>
           <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-accent" />
         </header>
