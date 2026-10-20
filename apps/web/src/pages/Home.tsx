@@ -98,8 +98,11 @@ export function HomePage() {
                   <FilePlus2 className="size-5 shrink-0" /> <span className="truncate">Nuevo documento</span>
                 </Link>
               </div>
-              <TotalsStrip stats={stats} className="mt-4 sm:mt-6" />
-              {!stats.totals.scans && <p className="mt-2 text-sm font-medium text-macaw-ink">Aún no hay nada archivado: tu primera hoja empezará a sumar aquí.</p>}
+              {stats.totals.scans ? (
+                <TotalsStrip stats={stats} className="mt-4 sm:mt-6" />
+              ) : (
+                <GettingStarted noKeys={noKeys} className="mt-5 sm:mt-6" />
+              )}
             </div>
 
             <form onSubmit={search} className="hidden rounded-2xl bg-white p-3 shadow-[0_8px_18px_rgba(48,37,105,0.10)] sm:block">
@@ -261,6 +264,36 @@ export function HomePage() {
         </section>
       </div>
 
+    </div>
+  );
+}
+
+/** Reemplaza al TotalsStrip (todo en cero) la primera vez que se abre el panel: explica cómo funciona en vez de mostrar ceros. */
+function GettingStarted({ noKeys, className }: { noKeys: boolean; className?: string }) {
+  const steps = [
+    { icon: Camera, title: 'Escaneá tus hojas', detail: 'Con la cámara o subiendo fotos, de a una o en lote.' },
+    {
+      icon: ScanLine,
+      title: 'Se reconoce el texto',
+      detail: noKeys ? 'Tesseract funciona sin conexión; sumá OCR.space o Gemini en Ajustes para más precisión.' : 'Con el motor que elijas: OCR.space, Gemini o Tesseract.',
+    },
+    { icon: FolderOpen, title: 'Organizá y buscá', detail: 'Agrupá en carpetas y encontrá cualquier palabra después.' },
+  ];
+  return (
+    <div className={clsx('grid gap-2 sm:grid-cols-3 sm:gap-3', className)}>
+      {steps.map(({ icon: Icon, title, detail }, index) => (
+        <div key={title} className="flex items-start gap-3 rounded-2xl bg-white/70 p-3">
+          <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-eel">
+            {index + 1}
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-sm font-bold text-eel">
+              <Icon className="size-4 shrink-0" /> {title}
+            </div>
+            <p className="mt-0.5 text-xs leading-snug text-macaw-ink">{detail}</p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
