@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { AnalysisPanel } from '../components/AnalysisPanel';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { BackLink, HeaderChip, PageHeader } from '../components/PageHeader';
+import { TextWithTables } from '../components/TextWithTables';
 import { Button, Card, EmptyState, Input, Modal, PageLoader, Segmented, Textarea } from '../components/ui';
 import { api } from '../lib/api';
 import { ENGINE_LABEL, GROUP_STYLES, LANGUAGES } from '../lib/constants';
@@ -192,8 +193,12 @@ export function ScanDetailPage() {
               </Card>
             ) : (
               <Card className="relative min-h-[55vh] px-5 py-7 sm:px-10 sm:py-12">
-                <article className="mx-auto max-w-[72ch] whitespace-pre-line text-base leading-relaxed sm:text-lg" aria-label="Texto escaneado">
-                  {scan.text || <span className="text-hare">Este escaneo no tiene texto.</span>}
+                <article aria-label="Texto escaneado">
+                  {scan.text ? (
+                    <TextWithTables text={scan.text} className="mx-auto max-w-[72ch] text-base leading-relaxed sm:text-lg" />
+                  ) : (
+                    <span className="mx-auto block max-w-[72ch] text-base leading-relaxed text-hare sm:text-lg">Este escaneo no tiene texto.</span>
+                  )}
                 </article>
               </Card>
             ))}

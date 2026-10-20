@@ -7,6 +7,7 @@ import { formatNumber } from '../lib/format';
 import { stripPageLabel } from '../lib/page-number';
 import type { Group } from '../lib/types';
 import { LabeledProgress } from './ActionTile';
+import { TextWithTables } from './TextWithTables';
 import { Button } from './ui';
 
 interface ViewerPage {
@@ -209,9 +210,11 @@ function Sheet({ page, n, direction }: { page: ViewerPage; n: number; direction:
         {page.wordCount !== undefined && <span className="shrink-0">{formatNumber(page.wordCount)} pal.</span>}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 sm:px-10">
-        <p className="whitespace-pre-line text-base leading-relaxed text-eel">
-          {stripPageLabel(page.text, page.pageLabel ?? '') || <span className="text-hare">Hoja sin texto.</span>}
-        </p>
+        {stripPageLabel(page.text, page.pageLabel ?? '') ? (
+          <TextWithTables text={stripPageLabel(page.text, page.pageLabel ?? '')} className="text-base leading-relaxed text-eel" />
+        ) : (
+          <p className="text-base leading-relaxed text-eel"><span className="text-hare">Hoja sin texto.</span></p>
+        )}
       </div>
       <div className="px-6 pb-4 text-center text-sm tabular-nums text-wolf sm:px-10 sm:pb-6">pág. {printed}</div>
     </article>

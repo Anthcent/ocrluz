@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { ArrowLeft, ArrowRight, FileText, Rows3 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { LabeledProgress } from './ActionTile';
+import { TextWithTables } from './TextWithTables';
 import { Button, Card } from './ui';
 
 interface ReaderPage {
@@ -71,12 +72,14 @@ export function Reader({ pages }: { pages: ReaderPage[] }) {
               {pages.map((p, i) => (
                 <section key={p.id}>
                   <div className="mb-3 text-xs font-semibold text-wolf">Hoja {i + 1}</div>
-                  <p className="whitespace-pre-line">{p.text}</p>
+                  <TextWithTables text={p.text} />
                 </section>
               ))}
             </div>
+          ) : page.text ? (
+            <TextWithTables text={page.text} className="min-h-[40vh]" />
           ) : (
-            <p className="min-h-[40vh] whitespace-pre-line">{page.text || <span className="text-hare">Esta hoja no tiene texto.</span>}</p>
+            <p className="min-h-[40vh]"><span className="text-hare">Esta hoja no tiene texto.</span></p>
           )}
         </article>
       </Card>

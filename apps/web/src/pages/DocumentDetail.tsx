@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { DocTypeIcon } from '../components/DocTypeIcon';
 import { BackLink, HeaderChip, PageHeader } from '../components/PageHeader';
+import { TextWithTables } from '../components/TextWithTables';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Badge, Button, Card, Input, PageLoader } from '../components/ui';
 import { DocFieldsForm, documentsToCsv, downloadFile, useDocTemplates } from '../documents/shared';
@@ -136,7 +137,9 @@ export function DocumentDetailPage() {
             Texto leído
             <ChevronDown className="size-5 transition group-open:rotate-180" />
           </summary>
-          <pre className="max-h-96 overflow-auto whitespace-pre-wrap px-4 pb-4 text-sm leading-relaxed text-wolf">{doc.text}</pre>
+          <div className="max-h-96 overflow-auto px-4 pb-4">
+            <TextWithTables text={doc.text} className="text-sm leading-relaxed text-wolf" />
+          </div>
         </details>
       )}
 

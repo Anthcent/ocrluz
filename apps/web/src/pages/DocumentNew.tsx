@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { LabeledProgress } from '../components/ActionTile';
 import { DocTypeIcon } from '../components/DocTypeIcon';
 import { PageHeader } from '../components/PageHeader';
+import { TextWithTables } from '../components/TextWithTables';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { Badge, Button, Card, Input, ProgressBar, Segmented, Toggle } from '../components/ui';
 import { DocFieldsForm, TemplateModal, useDocTemplates } from '../documents/shared';
@@ -320,7 +321,9 @@ export function DocumentNewPage() {
                 Texto leído
                 <ChevronDown className="size-5 transition group-open:rotate-180" />
               </summary>
-              <pre className="max-h-80 overflow-auto whitespace-pre-wrap px-4 pb-4 text-sm leading-relaxed text-wolf">{text}</pre>
+              <div className="max-h-80 overflow-auto px-4 pb-4">
+                <TextWithTables text={text} className="text-sm leading-relaxed text-wolf" />
+              </div>
             </details>
           )}
           <div className="sticky bottom-24 z-10 rounded-full bg-white/90 p-1.5 shadow-[0_12px_32px_rgba(30,27,48,0.16)] lg:bottom-4">
