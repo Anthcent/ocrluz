@@ -58,6 +58,8 @@ const SHORTCUTS: Shortcut[] = [
   { id: 'settings', to: '/ajustes', label: 'Ajustes', icon: Settings2, tone: 'gray' },
 ];
 
+const QUICK_SEARCHES = ['Cédula', 'Acta', 'Partida de nacimiento', 'Informe médico', 'Nómina', 'Inscripción'];
+
 const USAGE_KEY = 'ocryon:shortcut-usage';
 
 function readUsage(): Record<string, number> {
@@ -127,57 +129,108 @@ export function HomePage() {
     .slice(0, 5);
 
   const summary = weekTotal
-    ? `Esta semana escaneaste ${weekTotal} ${weekTotal === 1 ? 'hoja' : 'hojas'}.`
+    ? `Esta semana escaneaste ${weekTotal} ${weekTotal === 1 ? 'hoja' : 'hojas'} y tu archivo ya suma ${formatNumber(stats.totals.words)} palabras buscables.`
     : stats.totals.scans
-      ? 'Esta semana todavía no escaneaste nada.'
+      ? 'Esta semana todavía no escaneaste nada. Tu archivo te espera.'
       : 'Tu espacio está listo: escanea tu primera hoja para empezar.';
+
+  const nextStep: { icon: LucideIcon; text: string; action: string; to: string } = pages.length
+    ? { icon: Layers, text: `Tienes ${pages.length} ${pages.length === 1 ? 'hoja' : 'hojas'} en el lote sin archivar.`, action: 'Continuar', to: '/escanear' }
+    : !stats.totals.scans
+      ? { icon: Camera, text: 'Escanea tu primera hoja: con la cámara o subiendo una foto.', action: 'Empezar', to: '/escanear' }
+      : stats.totals.individual
+        ? {
+            icon: FolderOpen,
+            text: `${stats.totals.individual} ${stats.totals.individual === 1 ? 'hoja suelta espera' : 'hojas sueltas esperan'} una carpeta.`,
+            action: 'Organizar',
+            to: '/archivo?vista=individuales',
+          }
+        : noKeys
+          ? { icon: Settings2, text: 'Configura OCR.space o Gemini para leer con más precisión.', action: 'Configurar', to: '/ajustes' }
+          : { icon: CheckCircle2, text: 'Todo al día. Encuentra cualquier dato con el buscador.', action: 'Buscar', to: '/buscar' };
+  const NextIcon = nextStep.icon;
 
   return (
     <div className="space-y-5 lg:space-y-6">
-      <header className="animate-header-in flex flex-col gap-4 pt-2 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-macaw-dark">{capitalize(TODAY_LABEL.format(new Date()))}</p>
-          <h1 className="mt-1 truncate text-[1.75rem] font-bold leading-tight tracking-[-0.03em] sm:text-4xl">Hola, {firstName}</h1>
-          <p className="mt-1 text-wolf">{summary}</p>
-        </div>
-        <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
-          <Link
-            to="/escanear"
-            onClick={() => recordUsage('scan')}
-            className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-bold text-on-accent transition-[transform,background-color] duration-200 hover:bg-accent-hover active:scale-[0.98]"
-          >
-            <Camera className="size-5 shrink-0" /> <span className="truncate">Escanear</span>
-          </Link>
-          <Link
-            to="/documentos/nuevo"
-            onClick={() => recordUsage('new-doc')}
-            className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-eel ring-1 ring-swan transition-[transform,background-color] duration-200 hover:bg-polar active:scale-[0.98]"
-          >
-            <FilePlus2 className="size-5 shrink-0" /> <span className="truncate">Nuevo documento</span>
-          </Link>
-        </div>
-      </header>
+      <div>
+        <header className="animate-header-in relative overflow-hidden rounded-2xl bg-brand text-white">
+          <div className="grid gap-6 px-5 pb-14 pt-6 sm:px-8 sm:pb-16 sm:pt-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-10 lg:px-10">
+            <div className="min-w-0">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-white/70">
+                <span aria-hidden="true" className="h-0.5 w-6 rounded-full bg-accent" />
+                {capitalize(TODAY_LABEL.format(new Date()))}
+              </p>
+              <h1 className="mt-2 truncate text-[1.875rem] font-bold leading-tight tracking-[-0.03em] sm:text-[2.5rem]">Hola, {firstName}</h1>
+              <p className="mt-2 max-w-xl text-[0.9375rem] text-white/75 sm:text-base">{summary}</p>
 
-      <form
-        onSubmit={search}
-        role="search"
-        className="flex items-center gap-3 rounded-2xl bg-white p-2 pl-4 shadow-surface ring-1 ring-swan transition-shadow focus-within:ring-2 focus-within:ring-macaw"
-      >
-        <Search className="size-5 shrink-0 text-macaw-dark" />
-        <label htmlFor="dashboard-search" className="sr-only">
-          Buscar en todo tu archivo
-        </label>
-        <input
-          id="dashboard-search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Busca un nombre, una cédula o cualquier frase del texto"
-          className="min-w-0 flex-1 bg-transparent py-2.5 text-[0.9375rem] font-medium text-eel outline-none placeholder:text-wolf"
-        />
-        <button type="submit" className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-bold text-white transition-colors hover:bg-brand-hover">
-          <span className="hidden sm:inline">Buscar</span> <ArrowRight className="size-4" />
-        </button>
-      </form>
+              <div className="mt-5 flex max-w-xl items-center gap-3 rounded-xl bg-white/10 p-2 pl-3 ring-1 ring-white/15">
+                <NextIcon className="size-5 shrink-0 text-white/80" />
+                <p className="min-w-0 flex-1 text-sm font-semibold">{nextStep.text}</p>
+                <Link to={nextStep.to} className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg bg-white px-3 text-sm font-bold text-brand transition-colors hover:bg-polar">
+                  {nextStep.action} <ArrowRight className="size-4" />
+                </Link>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:flex">
+                <Link
+                  to="/escanear"
+                  onClick={() => recordUsage('scan')}
+                  className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-bold text-on-accent transition-[transform,background-color] duration-200 hover:bg-accent-hover active:scale-[0.98]"
+                >
+                  <Camera className="size-5 shrink-0" /> <span className="truncate">Escanear</span>
+                </Link>
+                <Link
+                  to="/documentos/nuevo"
+                  onClick={() => recordUsage('new-doc')}
+                  className="inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl bg-white/10 px-5 text-sm font-bold text-white ring-1 ring-white/25 transition-[transform,background-color] duration-200 hover:bg-white/15 active:scale-[0.98]"
+                >
+                  <FilePlus2 className="size-5 shrink-0" /> <span className="truncate">Nuevo documento</span>
+                </Link>
+              </div>
+            </div>
+            <ScanIllustration className="hidden w-60 lg:block xl:w-72" />
+          </div>
+          <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-accent" />
+        </header>
+
+        <div className="relative z-10 -mt-8 px-3 sm:px-6 lg:px-10">
+          <form
+            onSubmit={search}
+            role="search"
+            className="flex items-center gap-3 rounded-2xl bg-white p-2 pl-4 shadow-floating ring-2 ring-macaw/15 transition-shadow focus-within:ring-macaw sm:p-2.5 sm:pl-5"
+          >
+            <Search className="size-6 shrink-0 text-macaw-dark" />
+            <label htmlFor="dashboard-search" className="sr-only">
+              Buscar en todo tu archivo
+            </label>
+            <input
+              id="dashboard-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Busca un nombre, una cédula o cualquier frase"
+              className="min-h-11 min-w-0 flex-1 bg-transparent text-base font-semibold text-eel outline-none placeholder:font-medium placeholder:text-wolf sm:text-lg"
+            />
+            <button
+              type="submit"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl bg-accent px-4 text-sm font-bold text-on-accent transition-colors hover:bg-accent-hover sm:min-h-12 sm:px-6"
+            >
+              <span className="hidden sm:inline">Buscar</span> <ArrowRight className="size-5" />
+            </button>
+          </form>
+          <div className="scrollbar-none -mx-3 mt-3 flex items-center gap-2 overflow-x-auto px-3 sm:mx-0 sm:flex-wrap sm:px-0">
+            <span className="shrink-0 text-xs font-semibold text-wolf">Búsquedas rápidas:</span>
+            {QUICK_SEARCHES.map((term) => (
+              <Link
+                key={term}
+                to={`/buscar?q=${encodeURIComponent(term)}`}
+                className="shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-eel ring-1 ring-swan transition-colors hover:bg-macaw-light hover:text-macaw-dark hover:ring-macaw/30"
+              >
+                {term}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-swan shadow-surface ring-1 ring-swan lg:grid-cols-4">
         <Kpi to="/archivo" icon={FolderOpen} tone="violet" value={stats.totals.groups} label={stats.totals.groups === 1 ? 'Carpeta' : 'Carpetas'} />
@@ -235,6 +288,30 @@ export function HomePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ScanIllustration({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 240 170" aria-hidden="true" className={className}>
+      <rect x="62" y="18" width="118" height="146" rx="10" fill="#fff" fillOpacity="0.08" transform="rotate(-8 121 91)" />
+      <rect x="70" y="12" width="118" height="146" rx="10" fill="#fff" fillOpacity="0.14" transform="rotate(5 129 85)" />
+      <rect x="64" y="10" width="118" height="148" rx="10" fill="#fff" />
+      <rect x="80" y="28" width="52" height="8" rx="4" fill="var(--color-brand)" />
+      <rect x="80" y="46" width="86" height="5" rx="2.5" fill="var(--color-swan)" />
+      <rect x="80" y="58" width="74" height="5" rx="2.5" fill="var(--color-swan)" />
+      <rect x="80" y="70" width="82" height="5" rx="2.5" fill="var(--color-swan)" />
+      <rect x="80" y="90" width="40" height="22" rx="4" fill="var(--color-macaw-light)" />
+      <rect x="124" y="90" width="42" height="22" rx="4" fill="var(--color-macaw-light)" />
+      <rect x="80" y="116" width="40" height="22" rx="4" fill="var(--color-polar)" />
+      <rect x="124" y="116" width="42" height="22" rx="4" fill="var(--color-polar)" />
+      <g className="motion-safe:animate-scan-sweep">
+        <rect x="56" y="38" width="134" height="14" fill="var(--color-accent)" fillOpacity="0.14" />
+        <rect x="56" y="44" width="134" height="2.5" rx="1.25" fill="var(--color-accent)" />
+      </g>
+      <circle cx="184" cy="146" r="17" fill="var(--color-feather)" />
+      <path d="m176 146 6 6 10-12" fill="none" stroke="var(--color-feather-dark)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 

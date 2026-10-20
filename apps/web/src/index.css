@@ -55,6 +55,17 @@
   --animate-pop-in: pop-in 220ms var(--ease-out-strong) backwards;
   --animate-fade-in: fade-in 180ms ease-out backwards;
   --animate-header-in: header-in 240ms var(--ease-out-strong) backwards;
+  --animate-scan-sweep: scan-sweep 3.2s ease-in-out infinite;
+
+  @keyframes scan-sweep {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(84px);
+    }
+  }
 
   @keyframes card-in {
     from {
