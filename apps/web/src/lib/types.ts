@@ -136,3 +136,66 @@ export interface CustomTemplate {
   fields: { key: string; label: string; type: import('./doc-templates').FieldType }[];
   createdAt: string;
 }
+
+export interface FinalSummaryStudent {
+  id: string;
+  lastNames: string;
+  firstNames: string;
+  birthPlace: string;
+  state: string;
+  sex: string;
+  birthDay: string;
+  birthMonth: string;
+  birthYear: string;
+  /** One value per area: 1–20, a letter A–E for the last area, or «*» when the student does not take it. */
+  grades: string[];
+}
+
+export interface FinalSummaryArea {
+  code: string;
+  name: string;
+  teacher: string;
+  teacherId: string;
+}
+
+/** «Resumen Final del Rendimiento Estudiantil»: the official end-of-year grade form, one page. */
+export interface FinalSummary {
+  evaluationType: 'FINAL' | 'REVISIÓN';
+  schoolYear: string;
+  monthYear: string;
+  institution: {
+    code: string;
+    name: string;
+    address: string;
+    phone: string;
+    municipality: string;
+    state: string;
+    cdcee: string;
+    director: string;
+    directorId: string;
+  };
+  course: { plan: string; planCode: string; year: string; section: string };
+  areas: FinalSummaryArea[];
+  students: FinalSummaryStudent[];
+  observations: string;
+  remissionDate: string;
+}
+
+export interface SavedFinalSummary {
+  id: number;
+  title: string;
+  summary: FinalSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinalSummaryListItem {
+  id: number;
+  title: string;
+  evaluationType: FinalSummary['evaluationType'];
+  schoolYear: string;
+  course: FinalSummary['course'];
+  students: number;
+  createdAt: string;
+  updatedAt: string;
+}

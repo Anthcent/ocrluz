@@ -9,6 +9,8 @@ import { CatalogPage } from './pages/Catalog';
 import { DocumentDetailPage } from './pages/DocumentDetail';
 import { DocumentNewPage } from './pages/DocumentNew';
 import { DocumentsPage } from './pages/Documents';
+import { FinalSummariesPage } from './pages/FinalSummaries';
+import { FinalSummaryEditorPage } from './pages/FinalSummaryEditor';
 import { GroupDetailPage } from './pages/GroupDetail';
 import { HomePage } from './pages/Home';
 import { ScanDetailPage } from './pages/ScanDetail';
@@ -59,6 +61,9 @@ function PrivateApp() {
             <Route path="documentos" element={<DocumentsPage />} />
             <Route path="documentos/nuevo" element={<DocumentNewPage />} />
             <Route path="documentos/:id" element={<DocumentDetailPage />} />
+            <Route path="resumenes" element={<FinalSummariesPage />} />
+            <Route path="resumenes/nuevo" element={<FinalSummaryEditorPage key="nuevo" />} />
+            <Route path="resumenes/:id" element={<FinalSummaryEditorPage />} />
             <Route path="buscar" element={<SearchPage />} />
             <Route path="ajustes" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

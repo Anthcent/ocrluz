@@ -7,6 +7,7 @@ import {
   Cpu,
   FilePlus2,
   Files,
+  FileSpreadsheet,
   FileText,
   FolderOpen,
   Layers,
@@ -53,6 +54,7 @@ interface Shortcut {
 const SHORTCUTS: Shortcut[] = [
   { id: 'scan', to: '/escanear', label: 'Escanear hojas', icon: Camera, tone: 'violet' },
   { id: 'new-doc', to: '/documentos/nuevo', label: 'Nuevo documento', icon: FilePlus2, tone: 'mint' },
+  { id: 'final-summary', to: '/resumenes/nuevo', label: 'Resumen final', icon: FileSpreadsheet, tone: 'red' },
   { id: 'search', to: '/buscar', label: 'Buscar en el archivo', icon: Search, tone: 'amber' },
   { id: 'archive', to: '/archivo', label: 'Abrir archivo', icon: Archive, tone: 'violet' },
   { id: 'loose', to: '/archivo?vista=individuales', label: 'Hojas sueltas', icon: FileText, tone: 'red' },

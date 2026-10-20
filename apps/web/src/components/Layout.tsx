@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Archive, Eye, FileScan, FolderOpen, House, Layers, LogOut, Plus, ScanLine, Search, Settings } from 'lucide-react';
+import { Archive, Eye, FileScan, FileSpreadsheet, FolderOpen, House, Layers, LogOut, Plus, ScanLine, Search, Settings } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
@@ -15,6 +15,7 @@ const NAV = [
   { to: '/escanear', label: 'Escanear', icon: ScanLine },
   { to: '/archivo', label: 'Archivo', icon: Archive },
   { to: '/documentos', label: 'Documentos', icon: FileScan },
+  { to: '/resumenes', label: 'Resúmenes', icon: FileSpreadsheet },
   { to: '/buscar', label: 'Buscar', icon: Search },
   { to: '/ajustes', label: 'Ajustes', icon: Settings },
 ];

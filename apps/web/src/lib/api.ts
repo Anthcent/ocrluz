@@ -3,7 +3,10 @@ import type {
   CustomTemplate,
   DocField,
   SavedDocument,
+  SavedFinalSummary,
   Engine,
+  FinalSummary,
+  FinalSummaryListItem,
   Group,
   GroupInput,
   Scan,
@@ -155,5 +158,20 @@ export const api = {
     saveOffline: (targetType: 'group' | 'scan', targetId: number, content: object) =>
       request<{ analysis: Analysis }>('/analyses/offline', { method: 'POST', json: { targetType, targetId, content } }),
     remove: (id: number) => request<void>(`/analyses/${id}`, { method: 'DELETE' }),
+  },
+  finalSummaries: {
+    list: () => request<{ summaries: FinalSummaryListItem[] }>('/final-summaries'),
+    blank: (year: string) => request<{ summary: FinalSummary }>(`/final-summaries/new${qs({ year })}`),
+    /** Reads one photographed page; `onUpload` reports the image upload (0 to 1). */
+    scan: (image: Blob, onUpload?: (fraction: number) => void) => {
+      const form = new FormData();
+      form.append('image', image, 'resumen.jpg');
+      return uploadWithProgress<{ summary: FinalSummary; warnings: string[]; words: number; ms: number }>('/final-summaries/scan', form, onUpload);
+    },
+    get: (id: number) => request<SavedFinalSummary>(`/final-summaries/${id}`),
+    create: (summary: FinalSummary) => request<SavedFinalSummary>('/final-summaries', { method: 'POST', json: { summary } }),
+    update: (id: number, summary: FinalSummary) => request<SavedFinalSummary>(`/final-summaries/${id}`, { method: 'PUT', json: { summary } }),
+    remove: (id: number) => request<void>(`/final-summaries/${id}`, { method: 'DELETE' }),
+    xlsxUrl: (id: number) => `/api/final-summaries/${id}/xlsx`,
   },
 };

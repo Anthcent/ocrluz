@@ -1,5 +1,9 @@
 import { strFromU8, unzipSync } from 'fflate';
-import { describe, expect, it } from 'vitest';
+import request from 'supertest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+import { createApp } from '../../app.js';
+import { openDatabase } from '../../db/index.js';
+import { createCipher } from '../../lib/crypto.js';
 import { computeTotals, emptySummary, gradeOutcome, type FinalSummary } from './model.js';
 import { parseFinalSummaryPage, type OverlayWord } from './parse.js';
 import { buildFinalSummaryXlsx } from './xlsx.js';
@@ -200,4 +204,42 @@ describe('buildFinalSummaryXlsx', () => {
     const summary = { ...emptySummary(), students: Array(36).fill(STUDENTS[0]) };
     expect(() => buildFinalSummaryXlsx(summary)).toThrow();
   });
+});
+
+describe('POST /api/final-summaries/scan', () => {
+  let close: (() => Promise<void>) | undefined;
+  afterAll(async () => {
+    vi.restoreAllMocks();
+    await close?.();
+  });
+
+  it('sends the photo to OCR.space with word positions and returns the parsed form', async () => {
+    const db = await openDatabase({});
+    close = () => db.close();
+    const app = createApp({ db, cipher: createCipher('test-secret-key-123456'), jwtSecret: 'test-jwt-secret-123456', secureCookies: false, fallbackKeys: { ocrspace: 'server-key', gemini: '' } });
+    const agent = request.agent(app);
+    await agent.post('/api/auth/register').set('X-Requested-With', 'ocryon').send({ name: 'Ana', email: 'ana@example.com', password: 'secreto123' }).expect(201);
+
+    const overlay = photo(formEntries(STUDENTS), { scale: 20, dx: 50, dy: -60, angle: 0.006 });
+    const realFetch = globalThis.fetch;
+    const sent: FormData[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      if (!String(url).includes('ocr.space')) return realFetch(url, init);
+      sent.push(init!.body as FormData);
+      const Lines = overlay.map((w) => ({ LineText: w.text, Words: [{ WordText: w.text, Left: w.left, Top: w.top, Width: w.width, Height: w.height }] }));
+      return new Response(JSON.stringify({ ParsedResults: [{ ParsedText: HEADER_TEXT, TextOverlay: { Lines } }], IsErroredOnProcessing: false }), { status: 200 });
+    });
+
+    const res = await agent
+      .post('/api/final-summaries/scan')
+      .set('X-Requested-With', 'ocryon')
+      .attach('image', Buffer.from([0xff, 0xd8, 0xff, 0xd9]), { filename: 'hoja.jpg', contentType: 'image/jpeg' })
+      .expect(200);
+
+    expect(sent[0].get('isOverlayRequired')).toBe('true');
+    expect(sent[0].get('OCREngine')).toBe('2');
+    expect(res.body.warnings).toEqual([]);
+    expect(res.body.summary.students).toEqual(STUDENTS);
+    expect(res.body.summary.course).toMatchObject({ year: 'PRIMERO', section: 'D' });
+  }, 60_000);
 });
