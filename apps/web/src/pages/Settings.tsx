@@ -1,4 +1,4 @@
-import { CircleCheck, Settings as SettingsIcon, ExternalLink, KeyRound, LogOut, ShieldCheck, SlidersHorizontal, Trash2, UserRound } from 'lucide-react';
+import { CircleCheck, Settings as SettingsIcon, ExternalLink, KeyRound, LogOut, Palette, ShieldCheck, SlidersHorizontal, Trash2, UserRound } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { errorMessage, useFeedback } from '../components/feedback';
@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { ENGINES, LANGUAGES } from '../lib/constants';
 import type { Engine, KeyStatus } from '../lib/types';
 import { useSettings } from '../settings/SettingsContext';
+import { THEME_LABEL, THEMES, useTheme, type ThemeName } from '../theme/ThemeContext';
 
 function Section({ icon, title, subtitle, children }: { icon: ReactNode; title: string; subtitle: string; children: ReactNode }) {
   return (
@@ -27,6 +28,7 @@ function Section({ icon, title, subtitle, children }: { icon: ReactNode; title: 
 export function SettingsPage() {
   const { user, logout } = useAuth();
   const { settings, setSettings } = useSettings();
+  const { theme, setTheme } = useTheme();
   const { toast } = useFeedback();
 
   const update = async (patch: Parameters<typeof api.settings.update>[0], message = 'Ajustes guardados') => {
@@ -70,6 +72,12 @@ export function SettingsPage() {
                 </Field>
               </div>
             </div>
+          </Section>
+
+          <Section icon={<Palette />} title="Apariencia" subtitle="Elige el tema de color de la aplicación.">
+            <Field label="Tema">
+              <Segmented<ThemeName> value={theme} onChange={setTheme} options={THEMES.map((t) => ({ value: t, label: THEME_LABEL[t] }))} />
+            </Field>
           </Section>
 
           <Section icon={<SlidersHorizontal />} title="Preferencias de escaneo" subtitle="Valores predeterminados al abrir el escáner.">

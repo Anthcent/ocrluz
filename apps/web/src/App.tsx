@@ -17,6 +17,7 @@ import { SearchPage } from './pages/Search';
 import { SettingsPage } from './pages/Settings';
 import { ScanSessionProvider } from './scan/ScanSession';
 import { SettingsProvider, useSettings } from './settings/SettingsContext';
+import { ThemeProvider } from './theme/ThemeContext';
 
 function SessionWithDefaults({ children }: { children: ReactNode }) {
   const { settings } = useSettings();
@@ -93,12 +94,14 @@ function Root() {
 
 export function App() {
   return (
-    <BrowserRouter>
-      <FeedbackProvider>
-        <AuthProvider>
-          <Root />
-        </AuthProvider>
-      </FeedbackProvider>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <FeedbackProvider>
+          <AuthProvider>
+            <Root />
+          </AuthProvider>
+        </FeedbackProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }

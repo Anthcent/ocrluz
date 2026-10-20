@@ -81,6 +81,23 @@
   }
 }
 
+/*
+ * Tema «Liceo»: redefine solo el acento de marca (macaw/beetle, hoy violeta) por el azul
+ * medio oscuro del escudo del liceo. Mantiene la misma relación de claridad entre las
+ * variantes (-light/-dark/-ink) para que el contraste ya probado en toda la app siga
+ * funcionando igual, solo cambia el matiz.
+ */
+:root[data-theme='liceo'] {
+  --color-macaw: #6fa8f5;
+  --color-macaw-dark: #1f4e8c;
+  --color-macaw-light: #e7f1fe;
+  --color-macaw-ink: #122a4d;
+  --color-macaw-hover: #8fbdf7;
+  --color-beetle: #6fa8f5;
+  --color-beetle-dark: #1f4e8c;
+  --color-beetle-light: #e7f1fe;
+}
+
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
