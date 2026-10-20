@@ -94,7 +94,7 @@ export function Layout() {
 
       <header className="sticky top-0 z-30 bg-polar/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:px-6 lg:h-16 lg:px-8">
-          <Link to="/" aria-label="Ocryon, ir al inicio" className="-ml-1 rounded-xl p-1 lg:hidden">
+          <Link to="/" aria-label="LJAA, ir al inicio" className="-ml-1 rounded-xl p-1 lg:hidden">
             <Logo compact />
           </Link>
           <div className="ml-auto flex items-center gap-2" data-testid="top-stats">

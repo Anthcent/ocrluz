@@ -32,7 +32,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   return (
     <div className="grid min-h-dvh bg-polar lg:grid-cols-[minmax(20rem,0.85fr)_minmax(28rem,1.15fr)]">
       <section className="hidden flex-col justify-between bg-eel p-10 text-white lg:flex xl:p-14">
-        <Link to="/" className="text-2xl font-bold tracking-[-0.025em]">Ocryon</Link>
+        <Link to="/" className="text-2xl font-bold tracking-[-0.025em]">LJAA</Link>
         <div className="max-w-md">
           <div className="mb-6 flex gap-2" aria-hidden="true">
             <span className="h-2 w-14 rounded-full bg-macaw" />
@@ -48,7 +48,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
       <main className="flex items-center justify-center px-4 py-10 sm:px-8 lg:py-16">
         <div className="w-full max-w-md rounded-[24px] bg-white p-6 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:p-8">
           <Link to="/" className="mb-10 inline-flex items-center gap-2 text-lg font-bold text-eel lg:hidden">
-            <span className="size-3 rounded-full bg-macaw" /> Ocryon
+            <span className="size-3 rounded-full bg-macaw" /> LJAA
           </Link>
           <div className="mb-8">
             <h1 className="text-3xl font-bold leading-tight text-eel">{isLogin ? '¡Hola de nuevo!' : 'Crea tu cuenta'}</h1>

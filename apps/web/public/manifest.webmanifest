@@ -1,6 +1,6 @@
 {
-  "name": "Ocryon",
-  "short_name": "Ocryon",
+  "name": "LJAA",
+  "short_name": "LJAA",
   "description": "Escanea documentos con la cámara (actas, cédulas, partidas de nacimiento, fichas de inscripción, informes médicos, sábanas de notas, nóminas y más) y conviértelos en texto buscable.",
   "start_url": "/",
   "display": "standalone",

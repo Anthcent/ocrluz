@@ -16,7 +16,7 @@ export function Logo({ className, compact }: { className?: string; compact?: boo
   return (
     <div className={clsx('flex items-center text-eel', compact ? 'gap-1.5' : 'gap-2', className)}>
       <Mascot className={compact ? 'size-8' : 'size-9'} />
-      <span className={clsx('font-bold tracking-[-0.04em] text-current', compact ? 'text-[1.375rem]' : 'text-2xl')}>ocryon</span>
+      <span className={clsx('font-bold tracking-[-0.04em] text-current', compact ? 'text-[1.375rem]' : 'text-2xl')}>LJAA</span>
     </div>
   );
 }
