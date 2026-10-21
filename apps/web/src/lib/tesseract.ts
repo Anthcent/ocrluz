@@ -43,6 +43,33 @@ async function getWorker(lang: string) {
   return current.worker;
 }
 
+export interface LayoutWord {
+  text: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** On-device OCR that also returns every word with its box, for forms parsed by position. */
+export async function tesseractRecognizeLayout(image: Blob, language: string, progress?: ProgressFn): Promise<{ text: string; words: LayoutWord[] }> {
+  onProgress = progress ?? null;
+  try {
+    const worker = await getWorker(language);
+    const { data } = await worker.recognize(image, {}, { blocks: true, text: true });
+    const words = (data.blocks ?? []).flatMap((block) =>
+      block.paragraphs.flatMap((paragraph) =>
+        paragraph.lines.flatMap((line) =>
+          line.words.map((w) => ({ text: w.text, left: w.bbox.x0, top: w.bbox.y0, width: w.bbox.x1 - w.bbox.x0, height: w.bbox.y1 - w.bbox.y0 })),
+        ),
+      ),
+    );
+    return { text: data.text, words: words.filter((w) => w.text.trim()) };
+  } finally {
+    onProgress = null;
+  }
+}
+
 /** OCR en el propio dispositivo: la imagen nunca sale del navegador. */
 export async function tesseractRecognize(image: Blob, language: string, progress?: ProgressFn): Promise<string> {
   onProgress = progress ?? null;

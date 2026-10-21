@@ -1,7 +1,7 @@
 import clsx from 'clsx';
-import { AlertTriangle, Camera, CheckCircle2, ChevronDown, Download, FilePlus2, FileSpreadsheet, ImagePlus, PenLine, Save, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, ChevronDown, Download, FilePlus2, FileSpreadsheet, ImagePlus, PenLine, Save, ScanText, Settings2, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { BackLink, PageHeader } from '../components/PageHeader';
 import { Button, Modal, PageLoader, ProgressBar } from '../components/ui';
@@ -11,6 +11,8 @@ import { validateSummary, type Issue } from '../final-summary/validation';
 import { api } from '../lib/api';
 import { prepareFormImage } from '../final-summary/prepare';
 import { prepareImage } from '../lib/image';
+import { tesseractRecognizeLayout } from '../lib/tesseract';
+import { useSettings } from '../settings/SettingsContext';
 import type { FinalSummary } from '../lib/types';
 
 interface Photo {
@@ -54,6 +56,9 @@ export function FinalSummaryEditorPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [viewing, setViewing] = useState<Photo | null>(null);
   const [started, setStarted] = useState(existingId !== null);
+  const [lastEngine, setLastEngine] = useState<{ engine: 'ocrspace' | 'tesseract'; reason: string } | null>(null);
+  const { settings } = useSettings();
+  const ocrSpaceReady = settings.keys.ocrspace.configured && navigator.onLine;
   const cameraInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const issues = useMemo(() => (summary ? validateSummary(summary) : []), [summary]);
@@ -95,17 +100,42 @@ export function FinalSummaryEditorPage() {
       // Let the label paint before the pixel work blocks the thread for a moment.
       await new Promise((resolve) => setTimeout(resolve, 30));
       const image = await prepareFormImage(file);
-      let current = 0.08;
-      const result = await api.finalSummaries.scan(image, (fraction) => {
-        current = 0.08 + fraction * 0.32;
-        setScan({ progress: current, label: 'Subiendo la foto…' });
-        if (fraction >= 1 && !timer) {
-          timer = setInterval(() => {
-            current += (0.95 - current) * 0.05;
-            setScan({ progress: current, label: 'OCR.space está leyendo la tabla…' });
-          }, 200);
+
+      // OCR.space first when it has a key and there is a connection; on-device Tesseract otherwise or if it fails.
+      let result: { summary: FinalSummary; warnings: string[] } | null = null;
+      let engine: 'ocrspace' | 'tesseract' = 'tesseract';
+      let fallbackReason = ocrSpaceReady ? '' : 'OCR.space no está configurado';
+      if (ocrSpaceReady) {
+        try {
+          let current = 0.08;
+          result = await api.finalSummaries.scan(image, (fraction) => {
+            current = 0.08 + fraction * 0.32;
+            setScan({ progress: current, label: 'Subiendo la foto a OCR.space…' });
+            if (fraction >= 1 && !timer) {
+              timer = setInterval(() => {
+                current += (0.95 - current) * 0.05;
+                setScan({ progress: current, label: 'OCR.space está leyendo la tabla…' });
+              }, 200);
+            }
+          });
+          engine = 'ocrspace';
+        } catch (err) {
+          // Without a connection there is nothing to retry online; other failures fall back too, with the reason.
+          fallbackReason = `OCR.space falló: ${errorMessage(err)}`;
+        } finally {
+          clearInterval(timer);
+          timer = undefined;
         }
-      });
+      }
+      if (!result) {
+        setScan({ progress: 0.1, label: 'Leyendo la tabla en el dispositivo (Tesseract)…' });
+        const read = await tesseractRecognizeLayout(image, settings.ocrLanguage, (value, label) =>
+          setScan({ progress: 0.1 + value * 0.8, label: `${label.replace('…', '')} en el dispositivo…` }),
+        );
+        setScan({ progress: 0.93, label: 'Ubicando los datos en el formato…' });
+        result = await api.finalSummaries.parse(read.text, read.words);
+      }
+      setLastEngine({ engine, reason: fallbackReason });
       const url = URL.createObjectURL(preview);
       photoUrls.current.push(url);
       setPhotos((list) => [...list, { url, name: `Página ${list.length + 1}` }]);
@@ -114,7 +144,11 @@ export function FinalSummaryEditorPage() {
       setWarnings(result.warnings);
       setStarted(true);
       const added = merged.students.length - summary.students.length;
-      toast(added > 0 ? `Se leyeron ${added} ${added === 1 ? 'estudiante' : 'estudiantes'}. Revisa los datos.` : 'No se encontraron estudiantes nuevos en la foto', added > 0 ? 'success' : 'error');
+      const via = engine === 'ocrspace' ? 'con OCR.space' : 'en el dispositivo';
+      toast(
+        added > 0 ? `Se leyeron ${added} ${added === 1 ? 'estudiante' : 'estudiantes'} ${via}. Revisa los datos.` : `No se encontraron estudiantes nuevos en la foto (${via})`,
+        added > 0 ? 'success' : 'error',
+      );
     } catch (err) {
       toast(errorMessage(err), 'error');
     } finally {
@@ -222,6 +256,7 @@ export function FinalSummaryEditorPage() {
                 <span className="font-bold">Subir imagen</span>
               </button>
             </div>
+            <EngineNotice ready={ocrSpaceReady} configured={settings.keys.ocrspace.configured} />
             <div className="rounded-2xl bg-white p-5 shadow-surface ring-1 ring-swan">
               <p className="font-bold text-eel">Para que se lea bien</p>
               <ul className="mt-2 space-y-1.5 text-sm text-wolf">
@@ -276,6 +311,13 @@ export function FinalSummaryEditorPage() {
             <X className="size-4" />
           </button>
         </div>
+      )}
+
+      {lastEngine && (
+        <p className={clsx('mb-3 flex items-start gap-2 text-sm font-semibold', lastEngine.engine === 'ocrspace' ? 'text-feather-dark' : 'text-bee-dark')}>
+          <ScanText className="mt-0.5 size-4 shrink-0" />
+          {lastEngine.engine === 'ocrspace' ? 'Leído con OCR.space.' : `Leído en el dispositivo con Tesseract${lastEngine.reason ? ` (${lastEngine.reason})` : ''}.`}
+        </p>
       )}
 
       {photos.length > 0 && (
@@ -348,6 +390,31 @@ function IssuesPanel({ issues }: { issues: Issue[] }) {
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+/** Which engine the next photo will go through: OCR.space when it is set up, the device otherwise. */
+function EngineNotice({ ready, configured }: { ready: boolean; configured: boolean }) {
+  if (ready) {
+    return (
+      <p className="flex items-start gap-2 rounded-2xl bg-feather-light p-4 text-sm font-semibold text-feather-dark">
+        <ScanText className="mt-0.5 size-4 shrink-0" /> Se leerá con OCR.space. Si no responde, se usará Tesseract en el dispositivo.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-bee-light p-4 text-sm font-semibold text-bee-dark">
+      <ScanText className="size-4 shrink-0" />
+      <span className="min-w-0 flex-1">
+        {configured ? 'Sin conexión: ' : 'OCR.space no está activo: '}
+        se leerá con Tesseract en el dispositivo, que es más lento y menos preciso.
+      </span>
+      {!configured && (
+        <Link to="/ajustes" className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-eel hover:bg-polar">
+          <Settings2 className="size-3.5" /> Activar OCR.space
+        </Link>
       )}
     </div>
   );

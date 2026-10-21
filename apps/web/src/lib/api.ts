@@ -168,6 +168,9 @@ export const api = {
       form.append('image', image, 'resumen.jpg');
       return uploadWithProgress<{ summary: FinalSummary; warnings: string[]; words: number; ms: number }>('/final-summaries/scan', form, onUpload);
     },
+    /** Parses a page already read on the device (word boxes from Tesseract). */
+    parse: (text: string, words: { text: string; left: number; top: number; width: number; height: number }[]) =>
+      request<{ summary: FinalSummary; warnings: string[]; words: number }>('/final-summaries/parse', { method: 'POST', json: { text, words } }),
     get: (id: number) => request<SavedFinalSummary>(`/final-summaries/${id}`),
     create: (summary: FinalSummary) => request<SavedFinalSummary>('/final-summaries', { method: 'POST', json: { summary } }),
     update: (id: number, summary: FinalSummary) => request<SavedFinalSummary>(`/final-summaries/${id}`, { method: 'PUT', json: { summary } }),

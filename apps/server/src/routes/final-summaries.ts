@@ -88,6 +88,15 @@ export function finalSummariesRouter(ctx: AppContext) {
     },
   );
 
+  /** Same parser for pages read on the device (Tesseract) when OCR.space is not available. */
+  router.post('/parse', async (req, res) => {
+    const userId = currentUser(req).id;
+    const word = z.object({ text: z.string().max(100), left: z.number().finite(), top: z.number().finite(), width: z.number().finite().nonnegative(), height: z.number().finite().nonnegative() });
+    const { text, words } = z.object({ text: z.string().max(50_000).default(''), words: z.array(word).max(8000) }).parse(req.body);
+    const { summary, warnings } = parseFinalSummaryPage(text, words);
+    res.json({ summary: await withDefaults(userId, summary), warnings, words: words.length });
+  });
+
   router.post('/', async (req, res) => {
     const userId = currentUser(req).id;
     const summary = finalSummarySchema.parse(req.body?.summary);

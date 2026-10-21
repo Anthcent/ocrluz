@@ -295,6 +295,12 @@ describe('POST /api/final-summaries/scan', () => {
     expect(res.body.warnings).toEqual([]);
     expect(res.body.summary.students).toEqual(STUDENTS);
     expect(res.body.summary.course).toMatchObject({ year: 'PRIMERO', section: 'D' });
+
+    // Pages read on the device (Tesseract) send their words; the same parser places them.
+    const words = photo(formEntries(STUDENTS), { scale: 18, dx: 0, dy: 0, angle: 0 });
+    const parsed = await agent.post('/api/final-summaries/parse').set('X-Requested-With', 'ocryon').send({ text: HEADER_TEXT, words }).expect(200);
+    expect(parsed.body.summary.students).toEqual(STUDENTS);
+    await agent.post('/api/final-summaries/parse').set('X-Requested-With', 'ocryon').send({ text: '', words: [{ text: 'x', left: 'a' }] }).expect(400);
   }, 60_000);
 });
 
