@@ -155,10 +155,53 @@ describe('parseFinalSummaryPage', () => {
     expect(warnings.join(' ')).toContain('9 de los 10');
   });
 
-  it('explains what went wrong when the area header is missing', () => {
+  it('explains what went wrong when there is no table in the photo', () => {
     const { summary, warnings } = parseFinalSummaryPage('texto suelto', photo([{ text: 'hola', u: 10, row: 20 }], { scale: 10, dx: 0, dy: 0, angle: 0 }));
     expect(summary.students).toEqual([]);
-    expect(warnings[0]).toContain('fila de áreas');
+    expect(warnings[0]).toContain('No se encontró la tabla');
+  });
+
+  it('reads a tilted photo where each row drifts more than a row height across the page', () => {
+    // 1.7°: over the width of the table the right end of a row sits more than one row higher.
+    const { summary } = parseFinalSummaryPage(HEADER_TEXT, photo(formEntries(STUDENTS), { scale: 24, dx: 80, dy: 300, angle: -0.03 }));
+    expect(summary.students).toEqual(STUDENTS);
+  });
+
+  it('finds the header through OCR noise and ignores a stray look-alike code', () => {
+    const entries = formEntries(STUDENTS);
+    const noisy: Record<string, string> = { EF: 'EF|', BAT: 'BAT)', QU: 'QUÍ', MA: 'Ma', ITP: 'IP' };
+    for (const e of entries) if (e.row === 16 && noisy[e.text]) e.text = noisy[e.text];
+    entries.push({ text: 'mr', u: mid('BI') + 3, row: 16 });
+    const { summary, warnings } = parseFinalSummaryPage(HEADER_TEXT, photo(entries, { scale: 20, dx: 0, dy: 0, angle: 0.01 }));
+    expect(warnings).toEqual([]);
+    expect(summary.students).toEqual(STUDENTS);
+  });
+
+  it('still places the columns from each row when the area header is unreadable', () => {
+    const entries = formEntries(STUDENTS).filter((e) => e.row !== 16 && e.row !== 13 && e.row !== 15);
+    const { summary, warnings } = parseFinalSummaryPage(HEADER_TEXT, photo(entries, { scale: 22, dx: 40, dy: 0, angle: 0.008 }));
+    expect(summary.students.map((s) => s.grades)).toEqual(STUDENTS.map((s) => s.grades));
+    expect(summary.students.map((s) => s.lastNames)).toEqual(STUDENTS.map((s) => s.lastNames));
+    expect(warnings.join(' ')).toContain('No se leyó la fila de áreas');
+  });
+
+  it('cleans table rules, misread id prefixes, places and lost Ñ', () => {
+    const entries = formEntries(STUDENTS);
+    const swap = (row: number, from: string, to: string) => (entries.find((e) => e.row === row && e.text === from)!.text = to);
+    swap(17, 'V30000001', 'YV30000001');
+    swap(18, 'V30000002', '130000002');
+    swap(17, 'TR', '|TR]');
+    swap(18, '2013', '2013)');
+    swap(19, '25', '[25]');
+    swap(18, 'VALERA', 'VALEPA');
+    swap(19, 'TRUJILLO', 'TRWILLO');
+    swap(19, 'LINARES', 'BRICENO');
+    const { summary } = parseFinalSummaryPage(HEADER_TEXT, photo(entries, { scale: 20, dx: 0, dy: 0, angle: 0 }));
+    const [a, b, c] = summary.students;
+    expect([a.id, b.id]).toEqual(['V30000001', 'V30000002']);
+    expect([a.state, b.birthYear, c.birthDay]).toEqual(['TR', '2013', '25']);
+    expect([b.birthPlace, c.birthPlace]).toEqual(['VALERA', 'TRUJILLO']);
+    expect(c.lastNames).toBe('BRICEÑO');
   });
 });
 

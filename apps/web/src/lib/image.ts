@@ -18,7 +18,7 @@ function context(canvas: HTMLCanvasElement) {
  * Encodes a canvas as JPEG under the OCR size limit, lowering quality first and then
  * resolution until it fits.
  */
-async function encodeUnderLimit(source: HTMLCanvasElement): Promise<Blob> {
+export async function encodeUnderLimit(source: HTMLCanvasElement): Promise<Blob> {
   let scale = 1;
   let quality = 0.9;
   for (let attempt = 0; attempt < 8; attempt++) {

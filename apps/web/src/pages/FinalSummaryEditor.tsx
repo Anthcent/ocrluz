@@ -9,6 +9,7 @@ import { MAX_STUDENTS, summaryTitle } from '../final-summary/model';
 import { SummarySheet } from '../final-summary/SummarySheet';
 import { validateSummary, type Issue } from '../final-summary/validation';
 import { api } from '../lib/api';
+import { prepareFormImage } from '../final-summary/prepare';
 import { prepareImage } from '../lib/image';
 import type { FinalSummary } from '../lib/types';
 
@@ -89,10 +90,14 @@ export function FinalSummaryEditorPage() {
     setScan({ progress: 0.03, label: 'Preparando la foto…' });
     let timer: ReturnType<typeof setInterval> | undefined;
     try {
-      const image = await prepareImage(file);
-      let current = 0.05;
+      const preview = await prepareImage(file);
+      setScan({ progress: 0.05, label: 'Limpiando las líneas de la tabla…' });
+      // Let the label paint before the pixel work blocks the thread for a moment.
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const image = await prepareFormImage(file);
+      let current = 0.08;
       const result = await api.finalSummaries.scan(image, (fraction) => {
-        current = 0.05 + fraction * 0.35;
+        current = 0.08 + fraction * 0.32;
         setScan({ progress: current, label: 'Subiendo la foto…' });
         if (fraction >= 1 && !timer) {
           timer = setInterval(() => {
@@ -101,7 +106,7 @@ export function FinalSummaryEditorPage() {
           }, 200);
         }
       });
-      const url = URL.createObjectURL(image);
+      const url = URL.createObjectURL(preview);
       photoUrls.current.push(url);
       setPhotos((list) => [...list, { url, name: `Página ${list.length + 1}` }]);
       const merged = mergePage(summary, result.summary);
