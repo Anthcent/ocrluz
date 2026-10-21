@@ -15,7 +15,7 @@ let onProgress: ProgressFn | null = null;
 function logger(m: { status: string; progress: number }) {
   if (!onProgress) return;
   if (m.status === 'recognizing text') onProgress(0.15 + 0.85 * m.progress, 'Leyendo texto…');
-  else onProgress(0.02 + 0.13 * m.progress, 'Preparando Tesseract…');
+  else onProgress(0.02 + 0.13 * m.progress, 'Preparando el OCR local…');
 }
 
 async function getWorker(lang: string) {

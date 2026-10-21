@@ -57,7 +57,7 @@ export async function getApiKey(ctx: AppContext, userId: number, provider: Provi
   const own = decryptOrEmpty(ctx, provider === 'ocrspace' ? row.ocrspace_key_enc : row.gemini_key_enc);
   const key = own || ctx.fallbackKeys[provider];
   if (!key) {
-    const name = provider === 'ocrspace' ? 'OCR.space' : 'Gemini';
+    const name = provider === 'ocrspace' ? 'el OCR en la nube' : 'Gemini';
     throw new HttpError(412, `Configura tu API key de ${name} en Ajustes`, 'missing_api_key');
   }
   return key;

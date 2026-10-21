@@ -10,6 +10,7 @@ import { SummarySheet } from '../final-summary/SummarySheet';
 import { validateSummary, type Issue } from '../final-summary/validation';
 import { api } from '../lib/api';
 import { prepareFormImage } from '../final-summary/prepare';
+import { CLOUD_OCR } from '../lib/constants';
 import { prepareImage } from '../lib/image';
 import { tesseractRecognizeLayout } from '../lib/tesseract';
 import { useSettings } from '../settings/SettingsContext';
@@ -104,31 +105,31 @@ export function FinalSummaryEditorPage() {
       // OCR.space first when it has a key and there is a connection; on-device Tesseract otherwise or if it fails.
       let result: { summary: FinalSummary; warnings: string[] } | null = null;
       let engine: 'ocrspace' | 'tesseract' = 'tesseract';
-      let fallbackReason = ocrSpaceReady ? '' : 'OCR.space no está configurado';
+      let fallbackReason = ocrSpaceReady ? '' : `el ${CLOUD_OCR} no está configurado`;
       if (ocrSpaceReady) {
         try {
           let current = 0.08;
           result = await api.finalSummaries.scan(image, (fraction) => {
             current = 0.08 + fraction * 0.32;
-            setScan({ progress: current, label: 'Subiendo la foto a OCR.space…' });
+            setScan({ progress: current, label: `Subiendo la foto al ${CLOUD_OCR}…` });
             if (fraction >= 1 && !timer) {
               timer = setInterval(() => {
                 current += (0.95 - current) * 0.05;
-                setScan({ progress: current, label: 'OCR.space está leyendo la tabla…' });
+                setScan({ progress: current, label: `El ${CLOUD_OCR} está leyendo la tabla…` });
               }, 200);
             }
           });
           engine = 'ocrspace';
         } catch (err) {
           // Without a connection there is nothing to retry online; other failures fall back too, with the reason.
-          fallbackReason = `OCR.space falló: ${errorMessage(err)}`;
+          fallbackReason = `el ${CLOUD_OCR} falló: ${errorMessage(err)}`;
         } finally {
           clearInterval(timer);
           timer = undefined;
         }
       }
       if (!result) {
-        setScan({ progress: 0.1, label: 'Leyendo la tabla en el dispositivo (Tesseract)…' });
+        setScan({ progress: 0.1, label: 'Leyendo la tabla con el OCR local…' });
         const read = await tesseractRecognizeLayout(image, settings.ocrLanguage, (value, label) =>
           setScan({ progress: 0.1 + value * 0.8, label: `${label.replace('…', '')} en el dispositivo…` }),
         );
@@ -144,7 +145,7 @@ export function FinalSummaryEditorPage() {
       setWarnings(result.warnings);
       setStarted(true);
       const added = merged.students.length - summary.students.length;
-      const via = engine === 'ocrspace' ? 'con OCR.space' : 'en el dispositivo';
+      const via = engine === 'ocrspace' ? `con el ${CLOUD_OCR}` : 'con el OCR local';
       toast(
         added > 0 ? `Se leyeron ${added} ${added === 1 ? 'estudiante' : 'estudiantes'} ${via}. Revisa los datos.` : `No se encontraron estudiantes nuevos en la foto (${via})`,
         added > 0 ? 'success' : 'error',
@@ -223,7 +224,7 @@ export function FinalSummaryEditorPage() {
           back={<BackLink to="/resumenes">Resúmenes finales</BackLink>}
           icon={<FileSpreadsheet />}
           title={revision ? "Nuevo resumen de revisión" : "Nuevo resumen final"}
-          subtitle="Toma una foto del formato y la app llenará la tabla con OCR.space."
+          subtitle="Toma una foto del formato y la app llenará la tabla."
         />
         {pickers}
         {scan ? (
@@ -316,7 +317,7 @@ export function FinalSummaryEditorPage() {
       {lastEngine && (
         <p className={clsx('mb-3 flex items-start gap-2 text-sm font-semibold', lastEngine.engine === 'ocrspace' ? 'text-feather-dark' : 'text-bee-dark')}>
           <ScanText className="mt-0.5 size-4 shrink-0" />
-          {lastEngine.engine === 'ocrspace' ? 'Leído con OCR.space.' : `Leído en el dispositivo con Tesseract${lastEngine.reason ? ` (${lastEngine.reason})` : ''}.`}
+          {lastEngine.engine === 'ocrspace' ? `Leído con el ${CLOUD_OCR}.` : `Leído con el OCR local${lastEngine.reason ? ` (${lastEngine.reason})` : ''}.`}
         </p>
       )}
 
@@ -400,7 +401,7 @@ function EngineNotice({ ready, configured }: { ready: boolean; configured: boole
   if (ready) {
     return (
       <p className="flex items-start gap-2 rounded-2xl bg-feather-light p-4 text-sm font-semibold text-feather-dark">
-        <ScanText className="mt-0.5 size-4 shrink-0" /> Se leerá con OCR.space. Si no responde, se usará Tesseract en el dispositivo.
+        <ScanText className="mt-0.5 size-4 shrink-0" /> Se leerá con el {CLOUD_OCR}. Si no responde, se usará el OCR local de tu dispositivo.
       </p>
     );
   }
@@ -408,12 +409,12 @@ function EngineNotice({ ready, configured }: { ready: boolean; configured: boole
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-bee-light p-4 text-sm font-semibold text-bee-dark">
       <ScanText className="size-4 shrink-0" />
       <span className="min-w-0 flex-1">
-        {configured ? 'Sin conexión: ' : 'OCR.space no está activo: '}
-        se leerá con Tesseract en el dispositivo, que es más lento y menos preciso.
+        {configured ? 'Sin conexión: ' : `El ${CLOUD_OCR} no está activo: `}
+        se leerá con el OCR local de tu dispositivo, que es más lento y menos preciso.
       </span>
       {!configured && (
         <Link to="/ajustes" className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-eel hover:bg-polar">
-          <Settings2 className="size-3.5" /> Activar OCR.space
+          <Settings2 className="size-3.5" /> Activar {CLOUD_OCR}
         </Link>
       )}
     </div>

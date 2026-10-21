@@ -24,13 +24,13 @@ import { SearchSuggest } from '../components/SearchSuggest';
 import { Button, EmptyState, PageLoader } from '../components/ui';
 import { api } from '../lib/api';
 import { PRESET_TEMPLATES } from '../lib/doc-templates';
-import { GROUP_STYLES } from '../lib/constants';
+import { CLOUD_OCR, GROUP_STYLES, LOCAL_OCR } from '../lib/constants';
 import { formatNumber, timeAgo } from '../lib/format';
 import type { Scan, ScanEngine, Stats } from '../lib/types';
 import { useScanSession } from '../scan/ScanSession';
 import { useSettings } from '../settings/SettingsContext';
 
-const ENGINE_LABEL: Record<ScanEngine, string> = { ocrspace: 'OCR.space', gemini: 'Gemini', tesseract: 'Tesseract', manual: 'Manual' };
+const ENGINE_LABEL: Record<ScanEngine, string> = { ocrspace: CLOUD_OCR, gemini: 'Gemini', tesseract: LOCAL_OCR, manual: 'Manual' };
 const TODAY_LABEL = new Intl.DateTimeFormat('es', { weekday: 'long', day: 'numeric', month: 'long' });
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -138,7 +138,7 @@ export function HomePage() {
             to: '/archivo?vista=individuales',
           }
         : noKeys
-          ? { icon: Settings2, text: 'Configura OCR.space o Gemini para leer con más precisión.', action: 'Configurar', to: '/ajustes' }
+          ? { icon: Settings2, text: `Configura el ${CLOUD_OCR} o Gemini para leer con más precisión.`, action: 'Configurar', to: '/ajustes' }
           : { icon: CheckCircle2, text: 'Todo al día. Encuentra cualquier dato con el buscador.', action: 'Buscar', to: '/buscar' };
   const NextIcon = nextStep.icon;
 
@@ -250,7 +250,7 @@ export function HomePage() {
                 to="/escanear"
               />
               <StatusRow ok icon={Cpu} label="Motor predeterminado" value={ENGINE_LABEL[settings.defaultEngine]} to="/ajustes" />
-              <StatusRow ok={!noKeys} icon={Settings2} label="OCR en la nube" value={noKeys ? 'Falta configurar una clave' : 'Disponible'} to="/ajustes" />
+              <StatusRow ok={!noKeys} icon={Settings2} label={CLOUD_OCR} value={noKeys ? 'Falta configurar una clave' : 'Disponible'} to="/ajustes" />
             </ul>
           </Panel>
         </div>

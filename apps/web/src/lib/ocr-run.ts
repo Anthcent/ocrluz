@@ -8,7 +8,7 @@ import type { Engine } from './types';
  */
 export async function runOcr(image: Blob, engine: Engine, language: string, onProgress: (value: number, label: string) => void): Promise<string> {
   if (engine === 'tesseract') return tesseractRecognize(image, language, onProgress);
-  if (!navigator.onLine) throw new ApiError(0, 'Sin conexión: usa Tesseract para escanear sin internet', 'offline');
+  if (!navigator.onLine) throw new ApiError(0, 'Sin conexión: usa OCR local para escanear sin internet', 'offline');
 
   let current = 0.02;
   let processing = false;

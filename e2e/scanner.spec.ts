@@ -11,7 +11,7 @@ async function openStep(page: Page, title: '¿Dónde se guarda?' | '¿Cómo esca
   if ((await header.getAttribute('aria-expanded')) === 'false') await header.click();
 }
 
-async function chooseEngine(page: Page, name: 'OCR.space' | 'Gemini' | 'Tesseract') {
+async function chooseEngine(page: Page, name: 'OCR en la nube' | 'Gemini' | 'OCR local') {
   await openStep(page, '¿Cómo escanear?');
   await page.getByRole('button', { name: new RegExp(`^${name.replace('.', '\\.')}`) }).click();
 }
@@ -22,11 +22,11 @@ test.describe('Escáner', () => {
     await page.goto('/escanear');
     // Visible incluso con el paso plegado.
     await expect(page.getByText(/sin API key/i).locator('visible=true').first()).toBeVisible();
-    await chooseEngine(page, 'Tesseract');
-    await expect(page.getByText('Para usar OCR.space necesitas su API key')).toBeHidden();
+    await chooseEngine(page, 'OCR local');
+    await expect(page.getByText('OCR en la nube no tiene clave configurada')).toBeHidden();
   });
 
-  test('modo manual con OCR.space: escanear, revisar en el visor, reordenar, quitar y guardar individuales', async ({ page }) => {
+  test('modo manual con OCR en la nube: escanear, revisar en el visor, reordenar, quitar y guardar individuales', async ({ page }) => {
     await signUp(page);
     await updateSettings(page, { ocrspaceKey: 'clave-de-prueba-123' });
     await page.goto('/escanear');
@@ -259,7 +259,7 @@ test.describe('Escáner', () => {
     await page.goto('/escanear');
     await upload(page, [pageImage(1), pageImage(2)]);
     await page.getByRole('button', { name: 'Escanear (2)' }).click();
-    await expect(cards(page).nth(0).getByText('La API key de OCR.space no es válida')).toBeVisible();
+    await expect(cards(page).nth(0).getByText('La API key del OCR en la nube no es válida')).toBeVisible();
     // La segunda no se intenta: vuelve a quedar pendiente.
     await expect(cards(page).nth(1).getByText('Sin escanear')).toBeVisible();
     await expect(page.getByRole('button', { name: /^Guardar/ })).toBeDisabled();
@@ -308,11 +308,11 @@ test.describe('Escáner', () => {
     await expect(cards(page)).toHaveCount(2);
   });
 
-  test('Tesseract reconoce el texto en el propio dispositivo', async ({ page }) => {
+  test('El OCR local reconoce el texto en el propio dispositivo', async ({ page }) => {
     test.setTimeout(120_000);
     await signUp(page);
     await page.goto('/escanear');
-    await chooseEngine(page, 'Tesseract');
+    await chooseEngine(page, 'OCR local');
     await upload(page, [pageImage(1)]);
     await page.getByRole('button', { name: 'Escanear (1)' }).click();
     await expect(cards(page).nth(0).getByText('Listo')).toBeVisible({ timeout: 90_000 });

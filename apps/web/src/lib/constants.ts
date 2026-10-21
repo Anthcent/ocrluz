@@ -9,16 +9,20 @@ export const LANGUAGES: { code: string; label: string }[] = [
   { code: 'ita', label: 'Italiano' },
 ];
 
+/** Names users see. Internal ids stay `ocrspace` / `tesseract` so saved scans and keys keep working. */
+export const CLOUD_OCR = 'OCR en la nube';
+export const LOCAL_OCR = 'OCR local';
+
 export const ENGINES: Record<Engine, { label: string; description: string; online: boolean }> = {
-  ocrspace: { label: 'OCR.space', description: 'Rápido y preciso. Requiere internet y API key.', online: true },
+  ocrspace: { label: CLOUD_OCR, description: 'Rápido y preciso. Requiere internet y una API key.', online: true },
   gemini: { label: 'Gemini', description: 'IA de Google: la mejor calidad en páginas difíciles.', online: true },
-  tesseract: { label: 'Tesseract', description: 'Funciona en tu dispositivo, sin enviar la imagen.', online: false },
+  tesseract: { label: LOCAL_OCR, description: 'Funciona en tu dispositivo, sin enviar la imagen.', online: false },
 };
 
 export const ENGINE_LABEL: Record<string, string> = {
-  ocrspace: 'OCR.space',
+  ocrspace: CLOUD_OCR,
   gemini: 'Gemini',
-  tesseract: 'Tesseract',
+  tesseract: LOCAL_OCR,
   manual: 'Manual',
 };
 

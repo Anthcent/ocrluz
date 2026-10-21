@@ -18,20 +18,20 @@ async function callOcrSpace(image: Buffer, mimeType: string, apiKey: string, opt
       signal: AbortSignal.timeout(90_000),
     });
   } catch {
-    throw new HttpError(502, 'No se pudo conectar con OCR.space', 'provider_unreachable');
+    throw new HttpError(502, 'No se pudo conectar con el OCR en la nube', 'provider_unreachable');
   }
 
   const body = (await res.json().catch(() => null)) as any;
   if (res.status === 403 || res.status === 401) {
-    throw new HttpError(400, 'La API key de OCR.space no es válida', 'invalid_api_key');
+    throw new HttpError(400, 'La API key del OCR en la nube no es válida', 'invalid_api_key');
   }
   if (!res.ok || !body) {
     const detail = typeof body === 'string' ? body : body?.ErrorMessage;
-    throw new HttpError(502, `OCR.space respondió con un error${detail ? `: ${detail}` : ''}`, 'provider_error');
+    throw new HttpError(502, `El OCR en la nube respondió con un error${detail ? `: ${detail}` : ''}`, 'provider_error');
   }
   if (body.IsErroredOnProcessing) {
     const detail = [body.ErrorMessage].flat().filter(Boolean).join(' ');
-    throw new HttpError(422, `OCR.space no pudo procesar la imagen${detail ? `: ${detail}` : ''}`, 'provider_error');
+    throw new HttpError(422, `El OCR en la nube no pudo procesar la imagen${detail ? `: ${detail}` : ''}`, 'provider_error');
   }
   return body.ParsedResults ?? [];
 }

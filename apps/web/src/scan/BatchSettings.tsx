@@ -415,7 +415,7 @@ function EngineSection(props: EngineState) {
             <Link to="/ajustes" className="font-bold text-macaw-dark underline decoration-macaw/50 underline-offset-2">
               Añadir la clave en Ajustes
             </Link>{' '}
-            o cambia a Tesseract, que no la necesita.
+            o cambia a OCR local, que no la necesita.
           </span>
         </p>
       )}

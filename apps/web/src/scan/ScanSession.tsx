@@ -125,7 +125,7 @@ export function ScanSessionProvider({
     (async () => {
       try {
         if (engine !== 'tesseract' && !navigator.onLine) {
-          throw new ApiError(0, 'Sin internet: elige Tesseract para leer sin conexión', 'offline');
+          throw new ApiError(0, 'Sin internet: elige OCR local para leer sin conexión', 'offline');
         }
         let text: string;
         if (engine === 'tesseract') {

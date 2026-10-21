@@ -57,15 +57,15 @@ test.describe('Ajustes', () => {
     await page.goto('/ajustes');
     await expect(page.getByText('Sin configurar')).toHaveCount(2);
 
-    const ocrInput = page.getByLabel('API key de OCR.space');
+    const ocrInput = page.getByLabel('API key de OCR en la nube');
     await ocrInput.fill('K1234567890XYZW');
     await ocrInput.locator('xpath=ancestor::form').getByRole('button', { name: 'Guardar' }).click();
-    await expectToast(page, 'Clave de OCR.space guardada');
+    await expectToast(page, 'Clave del OCR en la nube guardada');
     await expect(page.getByText('••••XYZW')).toBeVisible();
     await expect(ocrInput).toHaveValue('');
 
     await ocrInput.locator('xpath=ancestor::form').getByRole('button', { name: 'Probar' }).click();
-    await expectToast(page, /OCR.space funciona correctamente/);
+    await expectToast(page, /OCR en la nube funciona correctamente/);
 
     // Una clave inválida se detecta al probarla.
     const geminiInput = page.getByLabel('API key de Gemini');

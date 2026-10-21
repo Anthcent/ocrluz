@@ -5,7 +5,7 @@ import { errorMessage, useFeedback } from '../components/feedback';
 import { PageHeader } from '../components/PageHeader';
 import { Badge, Button, Field, Input, Segmented, Select, Toggle } from '../components/ui';
 import { api } from '../lib/api';
-import { ENGINES, LANGUAGES } from '../lib/constants';
+import { CLOUD_OCR, ENGINES, LANGUAGES } from '../lib/constants';
 import type { Engine, KeyStatus } from '../lib/types';
 import { useSettings } from '../settings/SettingsContext';
 import { THEME_LABEL, THEMES, useTheme, type ThemeName } from '../theme/ThemeContext';
@@ -52,11 +52,11 @@ export function SettingsPage() {
             <div className="divide-y divide-swan">
               <ApiKeyEditor
                 provider="ocrspace"
-                name="OCR.space"
+                name={CLOUD_OCR}
                 status={settings.keys.ocrspace}
                 help="https://ocr.space/ocrapi/freekey"
                 helpLabel="Obtener una clave gratis"
-                onSave={(key) => update({ ocrspaceKey: key }, key ? 'Clave de OCR.space guardada' : 'Clave eliminada')}
+                onSave={(key) => update({ ocrspaceKey: key }, key ? `Clave del ${CLOUD_OCR} guardada` : 'Clave eliminada')}
               />
               <ApiKeyEditor
                 provider="gemini"
