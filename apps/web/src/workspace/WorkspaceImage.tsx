@@ -80,12 +80,26 @@ export const WorkspaceImage = Node.create({
   },
 });
 
-type Gesture = { kind: 'move' | 'resize'; startX: number; startY: number; attrs: WorkspaceImageAttrs; area: number; direction: 1 | -1 };
+type Gesture = {
+  kind: 'move' | 'resize';
+  startX: number;
+  startY: number;
+  attrs: WorkspaceImageAttrs;
+  /** Width of the box the image is laid out in: the page, or a table cell. */
+  area: number;
+  direction: 1 | -1;
+  moved: boolean;
+};
+
+const DRAG_THRESHOLD = 4;
 
 function ImageView({ node, selected, updateAttributes, deleteNode, editor, getPos }: ReactNodeViewProps) {
   const attrs = node.attrs as WorkspaceImageAttrs;
   const [draft, setDraft] = useState<Partial<WorkspaceImageAttrs> | null>(null);
+  /** Visual offset while dragging an image that sits in the text flow. */
+  const [shift, setShift] = useState<{ x: number; y: number } | null>(null);
   const gesture = useRef<Gesture | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   const view = { ...attrs, ...draft };
 
   const select = () => {
@@ -93,49 +107,94 @@ function ImageView({ node, selected, updateAttributes, deleteNode, editor, getPo
     if (typeof pos === 'number') editor.chain().setNodeSelection(pos).run();
   };
 
-  const areaWidth = () => (editor.view.dom as HTMLElement).clientWidth || 1;
+  /** Positioned box a free-floating image is placed in: a table cell, or the page. */
+  const container = () => (boxRef.current?.parentElement?.offsetParent as HTMLElement | null) ?? (editor.view.dom as HTMLElement);
 
   const start = (kind: Gesture['kind'], e: ReactPointerEvent, direction: 1 | -1 = 1) => {
     if (!editor.isEditable) return;
     e.preventDefault();
+    e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
-    gesture.current = { kind, startX: e.clientX, startY: e.clientY, attrs, area: areaWidth(), direction };
+    const area = attrs.wrap === 'front' ? container().clientWidth : boxRef.current?.parentElement?.parentElement?.clientWidth;
+    gesture.current = { kind, startX: e.clientX, startY: e.clientY, attrs, area: area || 1, direction, moved: false };
   };
 
   const onImagePointerDown = (e: ReactPointerEvent) => {
     // First tap only selects, so touch users can still scroll past images.
     if (!selected) return select();
-    if (attrs.wrap === 'front') start('move', e);
+    start('move', e);
   };
 
   const onPointerMove = (e: ReactPointerEvent) => {
     const g = gesture.current;
     if (!g) return;
-    const dx = ((e.clientX - g.startX) / g.area) * 100;
-    if (g.kind === 'move') {
-      setDraft({ x: clamp(g.attrs.x + dx, 0, 100 - g.attrs.width), y: Math.max(0, g.attrs.y + e.clientY - g.startY) });
-    } else {
+    const px = e.clientX - g.startX;
+    const py = e.clientY - g.startY;
+    if (!g.moved && Math.hypot(px, py) < DRAG_THRESHOLD) return;
+    g.moved = true;
+    const dx = (px / g.area) * 100;
+    if (g.kind === 'resize') {
       const grow = g.attrs.wrap !== 'front' && g.attrs.align === 'center' ? dx * 2 : dx * g.direction;
       const maxWidth = g.attrs.wrap === 'front' ? 100 - g.attrs.x : 100;
       setDraft({ width: clamp(g.attrs.width + grow, MIN_WIDTH, maxWidth) });
+    } else if (g.attrs.wrap === 'front') {
+      setDraft({ x: clamp(g.attrs.x + dx, 0, 100 - g.attrs.width), y: Math.max(0, g.attrs.y + py) });
+    } else {
+      setShift({ x: px, y: py });
     }
   };
 
-  const onPointerUp = () => {
-    if (!gesture.current) return;
+  const onPointerUp = (e: ReactPointerEvent) => {
+    const g = gesture.current;
+    if (!g) return;
     gesture.current = null;
-    if (draft) updateAttributes(draft);
+    if (g.moved && g.kind === 'move' && g.attrs.wrap !== 'front') relocate(e.clientX, e.clientY);
+    else if (draft) updateAttributes(draft);
     setDraft(null);
+    setShift(null);
+  };
+
+  /**
+   * Moves an in-flow image to where it was dropped: next to the paragraph under the pointer
+   * (inside a table cell if dropped there). The side of the drop picks its alignment, so the
+   * text wraps around it on the other side.
+   */
+  const relocate = (clientX: number, clientY: number) => {
+    const from = getPos();
+    const hit = editor.view.posAtCoords({ left: clientX, top: clientY });
+    if (typeof from !== 'number' || !hit) return;
+
+    const { state } = editor;
+    const $hit = state.doc.resolve(hit.pos);
+    let target = hit.pos;
+    if ($hit.parent.isTextblock && $hit.depth > 0) {
+      const block = editor.view.nodeDOM($hit.before($hit.depth)) as HTMLElement | null;
+      const rect = block?.getBoundingClientRect();
+      target = rect && clientY > rect.top + rect.height / 2 ? $hit.after($hit.depth) : $hit.before($hit.depth);
+    }
+
+    const column = container().getBoundingClientRect();
+    const ratio = (clientX - column.left) / column.width;
+    const align: ImageAlign = attrs.wrap === 'square' ? (ratio < 0.5 ? 'left' : 'right') : ratio < 1 / 3 ? 'left' : ratio > 2 / 3 ? 'right' : 'center';
+
+    if (target >= from && target <= from + node.nodeSize) {
+      updateAttributes({ align });
+      return;
+    }
+    const tr = state.tr.delete(from, from + node.nodeSize);
+    const insertAt = tr.mapping.map(target);
+    tr.insert(insertAt, node.type.create({ ...attrs, align }));
+    editor.view.dispatch(tr);
+    editor.commands.setNodeSelection(insertAt);
   };
 
   const setWrap = (wrap: ImageWrap) => {
     if (wrap === 'front') {
       // Keep the image roughly where it was shown when it becomes free-floating.
-      const el = editor.view.nodeDOM(getPos() ?? 0) as HTMLElement | null;
-      const root = editor.view.dom.getBoundingClientRect();
-      const box = el?.querySelector('img')?.getBoundingClientRect();
-      const x = box ? clamp(((box.left - root.left) / root.width) * 100, 0, 100 - attrs.width) : 0;
-      updateAttributes({ wrap, x, y: box ? Math.max(0, box.top - root.top) : attrs.y });
+      const area = container().getBoundingClientRect();
+      const box = boxRef.current?.getBoundingClientRect();
+      const x = box ? clamp(((box.left - area.left) / area.width) * 100, 0, 100 - attrs.width) : 0;
+      updateAttributes({ wrap, x, y: box ? Math.max(0, box.top - area.top) : attrs.y });
     } else {
       updateAttributes({ wrap, align: wrap === 'square' && attrs.align === 'center' ? 'left' : attrs.align });
     }
@@ -159,17 +218,20 @@ function ImageView({ node, selected, updateAttributes, deleteNode, editor, getPo
 
   return (
     <NodeViewWrapper className="workspace-image" style={style} data-wrap={view.wrap}>
-      <div className="relative" onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+      <div
+        ref={boxRef}
+        className={clsx('relative', shift && 'z-30 opacity-70')}
+        style={shift ? { transform: `translate(${shift.x}px, ${shift.y}px)` } : undefined}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
         <img
           src={attrs.src}
           alt=""
           draggable={false}
           onPointerDown={onImagePointerDown}
-          className={clsx(
-            'block w-full select-none rounded-sm',
-            selected && 'outline outline-2 outline-offset-2 outline-macaw',
-            selected && view.wrap === 'front' && 'cursor-move touch-none',
-          )}
+          className={clsx('block w-full select-none rounded-sm', selected && 'cursor-move touch-none outline outline-2 outline-offset-2 outline-macaw')}
         />
         {selected && editor.isEditable && (
           <>

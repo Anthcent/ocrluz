@@ -245,6 +245,24 @@ mark.hit {
 .workspace-doc ol {
   @apply list-decimal pl-7;
 }
+.workspace-doc ul[data-type='taskList'] {
+  @apply list-none pl-1;
+}
+.workspace-doc ul[data-type='taskList'] li {
+  @apply flex items-start gap-2;
+}
+.workspace-doc ul[data-type='taskList'] li > label {
+  @apply mt-1 shrink-0;
+}
+.workspace-doc ul[data-type='taskList'] li > div {
+  @apply min-w-0 flex-1;
+}
+.workspace-doc ul[data-type='taskList'] li[data-checked='true'] > div {
+  @apply text-wolf line-through;
+}
+.workspace-doc a {
+  @apply text-macaw-dark underline underline-offset-2;
+}
 .workspace-doc blockquote {
   @apply border-l-4 border-swan pl-4 italic text-wolf;
 }

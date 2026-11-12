@@ -50,6 +50,8 @@ function blockToLines(node: JSONContent, prefix = ''): string[] {
       const start = (node.attrs?.start as number | undefined) ?? 1;
       return (node.content ?? []).flatMap((item, i) => listItemLines(item, `${prefix}${start + i}. `));
     }
+    case 'taskList':
+      return (node.content ?? []).flatMap((item) => listItemLines(item, `${prefix}[${item.attrs?.checked ? 'x' : ' '}] `));
     case 'blockquote':
       return (node.content ?? []).flatMap((child) => blockToLines(child, `${prefix}> `));
     case 'codeBlock':

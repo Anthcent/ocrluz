@@ -77,3 +77,51 @@ test('an unreadable image shows a clear message instead of a decoder error', asy
   await expectToast(page, 'No se pudo leer la imagen');
   await expect(page.locator('.workspace-image')).toHaveCount(0);
 });
+
+test('word tools: area selection, find and replace and images in tables', async ({ page }, testInfo) => {
+  await signUp(page);
+  const { ids } = await createScans(page, { items: [{ title: 'Acta', text: 'Primera línea del acta\nSegunda línea del acta\nTercera línea', engine: 'manual' }] });
+  await page.goto(`/zona-de-trabajo/${ids[0]}`);
+  const doc = page.getByRole('textbox', { name: 'Documento', exact: true });
+  await expect(doc).toContainText('Tercera línea');
+
+  // Mobile: tapping the handle (same as swiping up) shows every tool at once.
+  if (isMobile(page)) {
+    await page.getByRole('button', { name: 'Mostrar todas las herramientas' }).click();
+    await expect(page.getByRole('button', { name: 'Mostrar menos herramientas' })).toBeVisible();
+  }
+
+  // Area selection: drag a rectangle over the first two lines, then make them bold.
+  await page.getByRole('button', { name: 'Selección por área' }).first().click();
+  const first = await doc.locator('p').nth(0).boundingBox();
+  const second = await doc.locator('p').nth(1).boundingBox();
+  await page.mouse.move(first!.x + 2, first!.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(second!.x + second!.width - 4, second!.y + second!.height - 4, { steps: 5 });
+  await page.mouse.up();
+  await page.getByRole('button', { name: 'Negrita' }).first().click();
+  await expect(doc.locator('p').nth(0).locator('strong')).toContainText('Primera');
+  await expect(doc.locator('p').nth(1).locator('strong')).toContainText('Segunda');
+  await expect(doc.locator('p').nth(2).locator('strong')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Selección por área' }).first().click();
+
+  // Find and replace, ignoring accents.
+  await page.getByRole('button', { name: 'Buscar y reemplazar' }).first().click();
+  await page.getByRole('textbox', { name: 'Buscar', exact: true }).fill('linea');
+  await page.getByRole('textbox', { name: 'Reemplazar con' }).fill('fila');
+  await page.getByRole('button', { name: 'Todo', exact: true }).click();
+  await expect(doc).toContainText('Tercera fila');
+  await page.getByRole('button', { name: 'Cerrar búsqueda' }).click();
+
+  // Image inside a table cell.
+  await doc.locator('p').nth(2).click();
+  await page.keyboard.press('End');
+  await page.getByRole('button', { name: 'Insertar tabla' }).first().click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Insertar imagen' }).first().click();
+  await (await chooser).setFiles(pageImage(1));
+  await expect(doc.locator('td .workspace-image, th .workspace-image')).toHaveCount(1);
+  await expect(doc.locator('.workspace-image')).toHaveAttribute('data-wrap', 'topBottom');
+  await page.screenshot({ path: testInfo.outputPath('tabla.png') });
+  await expect(page.getByRole('status').filter({ hasText: 'Guardado' })).toBeVisible();
+});
