@@ -224,7 +224,7 @@ mark.hit {
 
 /* Workspace: Word-style document surface. */
 .workspace-doc {
-  @apply min-h-[700px] text-base leading-relaxed text-eel outline-none;
+  @apply relative min-h-[700px] text-base leading-relaxed text-eel outline-none;
   font-family: Georgia, 'Times New Roman', serif;
 }
 .workspace-doc > * + * {
@@ -278,7 +278,36 @@ mark.hit {
   content: attr(data-placeholder);
 }
 
+/* Floating images ("square" wrap) must not leak below the document. */
+.workspace-doc::after {
+  content: '';
+  display: block;
+  clear: both;
+}
+.workspace-doc .react-renderer.ProseMirror-selectednode {
+  outline: none;
+}
+.workspace-doc > * + .react-renderer,
+.workspace-doc > .react-renderer + * {
+  margin-top: 0;
+}
+
+/* Mobile workspace dock sits right above the main bottom navigation. */
+.workspace-dock {
+  bottom: calc(5.75rem + env(safe-area-inset-bottom));
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 @media print {
+  [data-export-ignore] {
+    display: none !important;
+  }
   body:has(.workspace-page) * {
     visibility: hidden;
   }

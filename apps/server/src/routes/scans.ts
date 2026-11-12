@@ -9,6 +9,8 @@ import { languageCodes } from '../services/languages.js';
 import { groupSchema } from './groups.js';
 
 const MAX_TEXT = 500_000;
+/** El HTML de la zona de trabajo lleva las imágenes incrustadas (data URL), por eso su límite es mayor. */
+const MAX_WORKSPACE_HTML = 25_000_000;
 
 const itemSchema = z.object({
   title: z.string().trim().max(200).default(''),
@@ -33,7 +35,7 @@ const updateSchema = z.object({
   groupId: z.number().int().positive().nullable().optional(),
   pageLabel: z.string().trim().max(20).optional(),
   /** Documento con formato de la zona de trabajo; `text` se envía junto como su versión en texto plano. */
-  workspaceHtml: z.string().max(MAX_TEXT * 2, 'El documento es demasiado largo').optional(),
+  workspaceHtml: z.string().max(MAX_WORKSPACE_HTML, 'El documento es demasiado grande').optional(),
 });
 
 const listSchema = z.object({

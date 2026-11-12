@@ -41,7 +41,8 @@ export function createApp(ctx: AppContext, options: { webDist?: string } = {}) {
       crossOriginEmbedderPolicy: false,
     }),
   );
-  app.use(express.json({ limit: '10mb' }));
+  // Generoso: los documentos de la zona de trabajo incrustan sus imágenes.
+  app.use(express.json({ limit: '30mb' }));
   app.use(cookieParser());
 
   const api = express.Router();
