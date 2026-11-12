@@ -20,6 +20,7 @@ import { SettingsPage } from './pages/Settings';
 import { ScanSessionProvider } from './scan/ScanSession';
 import { SettingsProvider, useSettings } from './settings/SettingsContext';
 import { ThemeProvider } from './theme/ThemeContext';
+import { WorkspacePage } from './pages/Workspace';
 
 function SessionWithDefaults({ children }: { children: ReactNode }) {
   const { settings } = useSettings();
@@ -58,6 +59,7 @@ function PrivateApp() {
             <Route path="catalogo" element={<LegacyArchiveRedirect />} />
             <Route path="catalogo/grupo/:id" element={<LegacyArchiveRedirect />} />
             <Route path="escaneo/:id" element={<ScanDetailPage />} />
+            <Route path="zona-de-trabajo/:id" element={<WorkspacePage />} />
             <Route path="documentos" element={<DocumentsPage />} />
             <Route path="documentos/nuevo" element={<DocumentNewPage />} />
             <Route path="documentos/:id" element={<DocumentDetailPage />} />

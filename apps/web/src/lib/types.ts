@@ -51,6 +51,8 @@ export interface Scan {
   wordCount: number;
   /** Número de página impreso detectado en la hoja («23», «xii»…); vacío si no se detectó. */
   pageLabel: string;
+  /** Documento con formato de la zona de trabajo (solo en el detalle); vacío si nunca se editó ahí. */
+  workspaceHtml?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, FileText, Folder, FolderInput, Pencil, Save, Trash2, X } from 'lucide-react';
+import { BrainCircuit, BriefcaseBusiness, ChevronLeft, ChevronRight, Copy, Download, FileText, Folder, FolderInput, Pencil, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { AnalysisPanel } from '../components/AnalysisPanel';
@@ -121,6 +121,7 @@ export function ScanDetailPage() {
 
   const actions = (compact: boolean) => (
     <>
+      <PageAction icon={<BriefcaseBusiness />} label="Zona de trabajo" shortLabel="Trabajo" onClick={() => navigate(`/zona-de-trabajo/${scan.id}`)} compact={compact} tone="violet" />
       <PageAction icon={<Pencil />} label="Editar" onClick={startEdit} disabled={editing} compact={compact} />
       <PageAction icon={<Copy />} label="Copiar" onClick={copy} compact={compact} tone="violet" />
       <PageAction icon={<Download />} label="Descargar" shortLabel=".txt" onClick={() => downloadText(`${scan.title || 'escaneo'}.txt`, scan.text)} compact={compact} tone="mint" />
@@ -164,7 +165,7 @@ export function ScanDetailPage() {
       />
 
       {/* Acciones en fila (móvil y tablet) */}
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:hidden">{actions(true)}</div>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 lg:hidden">{actions(true)}</div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
         <div className="space-y-4">

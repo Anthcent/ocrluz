@@ -127,7 +127,7 @@ export const api = {
       newGroup?: Partial<GroupInput> & { title: string };
       items: { title?: string; text: string; engine: ScanEngine; language: string; pageLabel?: string }[];
     }) => request<{ groupId: number | null; ids: number[] }>('/scans', { method: 'POST', json: data }),
-    update: (id: number, data: { title?: string; text?: string; groupId?: number | null }) =>
+    update: (id: number, data: { title?: string; text?: string; groupId?: number | null; workspaceHtml?: string }) =>
       request<{ scan: Scan }>(`/scans/${id}`, { method: 'PATCH', json: data }),
     remove: (id: number) => request<void>(`/scans/${id}`, { method: 'DELETE' }),
   },

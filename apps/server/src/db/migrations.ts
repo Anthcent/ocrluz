@@ -120,4 +120,8 @@ export const migrations: string[] = [
   );
   CREATE INDEX idx_final_summaries_user ON final_summaries(user_id, updated_at DESC);
   `,
+  /* sql */ `
+  -- v4: documento con formato de la zona de trabajo (HTML); vacío hasta que se edita por primera vez.
+  ALTER TABLE scans ADD COLUMN workspace_html text NOT NULL DEFAULT '';
+  `,
 ];

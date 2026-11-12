@@ -8,6 +8,7 @@ import { DocTypeIcon } from '../components/DocTypeIcon';
 import { FolderCard } from '../components/FolderCard';
 import { HeaderChip, PageHeader } from '../components/PageHeader';
 import { EMPTY_GROUP, GroupFields } from '../components/GroupFields';
+import { WorkspaceLink } from '../components/WorkspaceLink';
 import { Badge, Button, Card, EmptyState, Input, Modal, PageLoader, Segmented } from '../components/ui';
 import { api } from '../lib/api';
 import { ENGINE_LABEL } from '../lib/constants';
@@ -246,9 +247,10 @@ function IndividualList({ filter }: { filter: string }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {visible.map((s) => (
-          <Link key={s.id} to={`/escaneo/${s.id}`} className="block">
-            <Card interactive className="flex h-full flex-col p-4">
-              <div className="mb-2 flex items-center gap-3">
+          <Card key={s.id} interactive className="relative flex h-full flex-col p-4">
+            <WorkspaceLink scanId={s.id} />
+            <Link to={`/escaneo/${s.id}`} className="flex flex-1 flex-col">
+              <div className="mb-2 flex items-center gap-3 pr-36">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-beetle-light text-beetle-dark">
                   <FileText className="size-5" />
                 </div>
@@ -263,8 +265,8 @@ function IndividualList({ filter }: { filter: string }) {
                 <Badge>{ENGINE_LABEL[s.engine]}</Badge>
                 <span className="text-xs font-bold text-hare">{s.wordCount} palabras</span>
               </div>
-            </Card>
-          </Link>
+            </Link>
+          </Card>
         ))}
       </div>
       {scans.length < total && (

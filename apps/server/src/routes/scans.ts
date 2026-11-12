@@ -32,6 +32,8 @@ const updateSchema = z.object({
   text: z.string().max(MAX_TEXT).optional(),
   groupId: z.number().int().positive().nullable().optional(),
   pageLabel: z.string().trim().max(20).optional(),
+  /** Documento con formato de la zona de trabajo; `text` se envía junto como su versión en texto plano. */
+  workspaceHtml: z.string().max(MAX_TEXT * 2, 'El documento es demasiado largo').optional(),
 });
 
 const listSchema = z.object({
@@ -52,6 +54,7 @@ interface ScanRow {
   text: string;
   position: number;
   pageLabel: string;
+  workspaceHtml: string;
 }
 
 export function scansRouter(ctx: AppContext) {
@@ -66,7 +69,7 @@ export function scansRouter(ctx: AppContext) {
 
   const findScan = async (userId: number, id: number) => {
     const scan = await ctx.db.one<ScanRow>(
-      `SELECT ${SCAN_COLUMNS}, g.title AS "groupTitle", g.color AS "groupColor"
+      `SELECT ${SCAN_COLUMNS}, s.workspace_html AS "workspaceHtml", g.title AS "groupTitle", g.color AS "groupColor"
          FROM scans s LEFT JOIN groups g ON g.id = s.group_id
         WHERE s.id = ? AND s.user_id = ?`,
       [id, userId],
@@ -156,9 +159,9 @@ export function scansRouter(ctx: AppContext) {
     if (!title && !text) throw new HttpError(400, 'El escaneo no puede quedar vacío', 'validation');
 
     await ctx.db.run(
-      `UPDATE scans SET title = ?, text = ?, group_id = ?, position = ?, word_count = ?, page_label = ?, updated_at = now()
+      `UPDATE scans SET title = ?, text = ?, group_id = ?, position = ?, word_count = ?, page_label = ?, workspace_html = ?, updated_at = now()
         WHERE id = ? AND user_id = ?`,
-      [title, text, groupId, position, countWords(text), data.pageLabel ?? current.pageLabel, id, userId],
+      [title, text, groupId, position, countWords(text), data.pageLabel ?? current.pageLabel, data.workspaceHtml ?? current.workspaceHtml, id, userId],
     );
     res.json({ scan: await findScan(userId, id) });
   });

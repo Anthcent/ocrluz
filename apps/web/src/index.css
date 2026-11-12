@@ -222,6 +222,79 @@ mark.hit {
   @apply rounded-md bg-bee px-1 font-bold text-eel;
 }
 
+/* Workspace: Word-style document surface. */
+.workspace-doc {
+  @apply min-h-[700px] text-base leading-relaxed text-eel outline-none;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.workspace-doc > * + * {
+  @apply mt-3;
+}
+.workspace-doc h1 {
+  @apply text-3xl font-black;
+}
+.workspace-doc h2 {
+  @apply text-2xl font-bold;
+}
+.workspace-doc h3 {
+  @apply text-xl font-bold;
+}
+.workspace-doc ul {
+  @apply list-disc pl-7;
+}
+.workspace-doc ol {
+  @apply list-decimal pl-7;
+}
+.workspace-doc blockquote {
+  @apply border-l-4 border-swan pl-4 italic text-wolf;
+}
+.workspace-doc hr {
+  @apply my-6 border-swan;
+}
+.workspace-doc mark {
+  @apply rounded-sm bg-bee px-0.5;
+}
+.workspace-doc table {
+  @apply my-4 w-full table-fixed border-collapse;
+}
+.workspace-doc th,
+.workspace-doc td {
+  @apply relative border border-hare px-2 py-1 align-top;
+}
+.workspace-doc th {
+  @apply bg-polar text-left font-bold;
+}
+.workspace-doc .selectedCell::after {
+  @apply pointer-events-none absolute inset-0 bg-macaw/15 content-[''];
+}
+.workspace-doc .column-resize-handle {
+  @apply pointer-events-none absolute -right-0.5 top-0 bottom-0 w-1 bg-macaw;
+}
+.workspace-doc.resize-cursor {
+  cursor: col-resize;
+}
+.workspace-doc p.is-editor-empty:first-child::before {
+  @apply pointer-events-none float-left h-0 text-hare;
+  content: attr(data-placeholder);
+}
+
+@media print {
+  body:has(.workspace-page) * {
+    visibility: hidden;
+  }
+  .workspace-sheet,
+  .workspace-sheet * {
+    visibility: visible;
+  }
+  .workspace-sheet {
+    position: absolute;
+    inset: 0;
+    max-width: none;
+    padding: 0;
+    box-shadow: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

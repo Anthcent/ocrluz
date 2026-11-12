@@ -23,7 +23,7 @@ function parseRow(line: string): string[] {
   return cells;
 }
 
-function parseSegments(text: string): Segment[] {
+export function parseSegments(text: string): Segment[] {
   const lines = text.split('\n');
   const segments: Segment[] = [];
   let textBuffer: string[] = [];

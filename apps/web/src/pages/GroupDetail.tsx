@@ -12,6 +12,7 @@ import { Button, EmptyState, PageLoader, Segmented } from '../components/ui';
 import { api } from '../lib/api';
 import { GROUP_STYLES } from '../lib/constants';
 import { DocTypeIcon } from '../components/DocTypeIcon';
+import { WorkspaceLink } from '../components/WorkspaceLink';
 import { copyText, downloadText, formatDate, formatNumber } from '../lib/format';
 import type { Group, Scan } from '../lib/types';
 import { GroupFormModal } from './Catalog';
@@ -206,10 +207,11 @@ export function GroupDetailPage() {
                 {scans.map((s, i) => (
                   <div
                     key={s.id}
-                    className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_1px_2px_rgba(41,36,68,0.06)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_6px_12px_rgba(41,36,68,0.08)]"
+                    className="group relative flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_1px_2px_rgba(41,36,68,0.06)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_6px_12px_rgba(41,36,68,0.08)]"
                   >
+                    <WorkspaceLink scanId={s.id} compact />
                     <Link to={`/escaneo/${s.id}`} className="flex flex-1 flex-col p-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-macaw/35">
-                      <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="mb-2 flex items-center justify-between gap-2 pr-10">
                         <span className={clsx('flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold', style.soft, style.text)}>{i + 1}</span>
                         {s.pageLabel ? (
                           <span className="rounded-full bg-feather-light px-2.5 py-1 text-xs font-bold text-feather-dark">pág. {s.pageLabel}</span>
