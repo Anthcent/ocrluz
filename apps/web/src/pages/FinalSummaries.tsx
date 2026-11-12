@@ -44,7 +44,7 @@ export function FinalSummariesPage() {
           Toma una foto del Resumen Final del Rendimiento Estudiantil y la app llenará el formato por ti.
         </EmptyState>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {items.map((item) => (
             <li key={item.id} className="flex flex-col rounded-2xl bg-white p-4 shadow-surface ring-1 ring-swan sm:p-5">
               <Link to={`/resumenes/${item.id}`} className="group flex items-start gap-3">

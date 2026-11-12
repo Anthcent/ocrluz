@@ -214,7 +214,7 @@ export function HomePage() {
         />
       </dl>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6 xl:grid-cols-[minmax(0,1fr)_23rem]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6 xl:grid-cols-[minmax(0,1fr)_23rem]">
         <div className="min-w-0 space-y-5 lg:space-y-6">
           <ActivityTable scans={recentScans} onOpen={(scan) => navigate(`/escaneo/${scan.id}`)} />
           <FolderList groups={stats.recentGroups} />
@@ -408,7 +408,7 @@ function FolderList({ groups }: { groups: Stats['recentGroups'] }) {
       }
     >
       {groups.length ? (
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {groups.map((group) => {
             const style = GROUP_STYLES[group.color];
             const progress = group.totalPages ? Math.min(100, Math.round((group.scanCount / group.totalPages) * 100)) : null;

@@ -145,7 +145,7 @@ export function GroupDetailPage() {
         }
       >
         {group.description && <p className="mb-4 max-w-[70ch] text-wolf">{group.description}</p>}
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-stretch">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-stretch">
           <div className="grid grid-cols-3 divide-x divide-swan rounded-2xl bg-polar py-3">
             <Stat icon={<FileText />} tone="text-macaw-dark bg-macaw-light" value={scans.length} label={scans.length === 1 ? 'hoja' : 'hojas'} />
             <Stat icon={<Type />} tone="text-bee-dark bg-bee-light" value={formatNumber(words)} label="palabras" />

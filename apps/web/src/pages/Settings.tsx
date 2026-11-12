@@ -46,7 +46,7 @@ export function SettingsPage() {
     <div className="mx-auto max-w-6xl">
       <PageHeader icon={<SettingsIcon />} tone="neutral" title="Ajustes" subtitle="Configura los motores de OCR, tus preferencias y tu cuenta." />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] xl:items-start">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] xl:items-start">
         <div className="space-y-5">
           <Section icon={<KeyRound />} title="API keys" subtitle="Se guardan cifradas en el servidor y nunca se muestran completas.">
             <div className="divide-y divide-swan">
