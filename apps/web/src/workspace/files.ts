@@ -42,14 +42,42 @@ export async function exportPdf(content: HTMLElement, fileName: string) {
 
 const MAX_IMAGE_SIDE = 1600;
 
+/** Formats every browser can decode; on iPhone this also makes the picker convert HEIC photos to JPEG. */
+export const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
+
+export class UnreadableImageError extends Error {
+  constructor() {
+    super('No se pudo leer la imagen. Usa una foto JPG o PNG (las fotos HEIC no son compatibles con este navegador).');
+  }
+}
+
+/** Decodes with createImageBitmap, falling back to an <img> element, which some browsers decode more broadly. */
+async function decode(file: File): Promise<{ source: CanvasImageSource; width: number; height: number; release: () => void }> {
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    return { source: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close() };
+  } catch {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = url;
+    try {
+      await img.decode();
+    } catch {
+      URL.revokeObjectURL(url);
+      throw new UnreadableImageError();
+    }
+    return { source: img, width: img.naturalWidth, height: img.naturalHeight, release: () => URL.revokeObjectURL(url) };
+  }
+}
+
 /** Reads a picked image, downsizing it so documents stay light, and returns it as a data URL. */
 export async function readImageFile(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const image = await decode(file);
   try {
-    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(image.width, image.height));
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
+    canvas.width = Math.round(image.width * scale);
+    canvas.height = Math.round(image.height * scale);
     const ctx = canvas.getContext('2d')!;
     // PNG keeps transparency (logos, signatures); everything else goes to JPEG on white to save space.
     const png = file.type === 'image/png';
@@ -57,9 +85,9 @@ export async function readImageFile(file: File): Promise<string> {
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image.source, 0, 0, canvas.width, canvas.height);
     return png ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85);
   } finally {
-    bitmap.close();
+    image.release();
   }
 }

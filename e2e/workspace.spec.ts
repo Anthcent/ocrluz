@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createScans, isMobile, pageImage, signUp } from './helpers';
+import { BAD_IMAGE, createScans, expectToast, isMobile, pageImage, signUp } from './helpers';
 
 test('loose and folder scans open the workspace from a corner button', async ({ page }) => {
   await signUp(page);
@@ -21,6 +21,8 @@ test('workspace autosaves, places images and exports a real PDF', async ({ page 
 
   const doc = page.getByRole('textbox', { name: 'Documento', exact: true });
   await expect(doc).toContainText('Texto del informe');
+  // On mobile the workspace toolbar replaces the main navigation.
+  if (isMobile(page)) await expect(page.getByRole('navigation', { name: 'Principal' })).toBeHidden();
   await doc.click();
   await page.keyboard.press('End');
   await page.keyboard.type(' editado');
@@ -65,4 +67,13 @@ test('workspace autosaves, places images and exports a real PDF', async ({ page 
 
   await page.goto(`/escaneo/${ids[0]}`);
   await expect(page.getByRole('article', { name: 'Texto escaneado' })).toContainText('Texto del informe editado');
+});
+
+test('an unreadable image shows a clear message instead of a decoder error', async ({ page }) => {
+  await signUp(page);
+  const { ids } = await createScans(page, { items: [{ title: 'Informe', text: 'Texto', engine: 'manual' }] });
+  await page.goto(`/zona-de-trabajo/${ids[0]}`);
+  await page.locator('input[type="file"]').setInputFiles(BAD_IMAGE);
+  await expectToast(page, 'No se pudo leer la imagen');
+  await expect(page.locator('.workspace-image')).toHaveCount(0);
 });

@@ -292,9 +292,9 @@ mark.hit {
   margin-top: 0;
 }
 
-/* Mobile workspace dock sits right above the main bottom navigation. */
+/* Mobile workspace dock takes the place of the main bottom navigation. */
 .workspace-dock {
-  bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
 }
 
 .no-scrollbar {

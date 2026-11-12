@@ -45,7 +45,7 @@ import { api } from '../lib/api';
 import { downloadText, formatNumber } from '../lib/format';
 import type { Scan } from '../lib/types';
 import { docToText, textToHtml } from '../lib/workspace';
-import { exportPdf, readImageFile } from '../workspace/files';
+import { exportPdf, IMAGE_ACCEPT, readImageFile } from '../workspace/files';
 import { WorkspaceImage } from '../workspace/WorkspaceImage';
 
 const AUTOSAVE_DELAY = 1200;
@@ -223,7 +223,7 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
 
   return (
     <div className="workspace-page mx-auto max-w-6xl space-y-4 pb-24 lg:pb-0">
-      <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { void addImage(e.target.files?.[0]); e.target.value = ''; }} />
+      <input ref={fileRef} type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => { void addImage(e.target.files?.[0]); e.target.value = ''; }} />
 
       <div className="workspace-chrome flex flex-wrap items-center gap-3">
         <BackLink to={`/escaneo/${scan.id}`}>{scan.title || 'Escaneo'}</BackLink>

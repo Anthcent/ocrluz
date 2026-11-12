@@ -36,6 +36,8 @@ export function Layout() {
   const stats = useStats();
   const pendingPages = useScanSession().pages.length;
   const initial = user?.name.charAt(0).toUpperCase();
+  // The workspace brings its own bottom toolbar on mobile, which replaces the main navigation.
+  const inWorkspace = useLocation().pathname.startsWith('/zona-de-trabajo');
 
   return (
     <div className="min-h-dvh bg-polar lg:pl-[17.5rem]">
@@ -144,7 +146,7 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <nav aria-label="Principal" className="pb-safe fixed inset-x-3 bottom-3 z-40 rounded-[22px] bg-brand shadow-floating lg:hidden">
+      <nav aria-label="Principal" className={clsx('pb-safe fixed inset-x-3 bottom-3 z-40 rounded-[22px] bg-brand shadow-floating lg:hidden', inWorkspace && 'hidden')}>
         <div className="mx-auto grid h-[4.25rem] max-w-md grid-cols-5 items-stretch px-1">
           {MOBILE_NAV.map(({ to, label, icon: Icon, end }) => {
             const primary = to === '/escanear';
