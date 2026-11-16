@@ -57,6 +57,8 @@ interface ScanRow {
   position: number;
   pageLabel: string;
   workspaceHtml: string;
+  /** Texto previo a la primera edición en la zona de trabajo; null si nunca se editó ahí. */
+  originalText: string | null;
 }
 
 export function scansRouter(ctx: AppContext) {
@@ -71,7 +73,7 @@ export function scansRouter(ctx: AppContext) {
 
   const findScan = async (userId: number, id: number) => {
     const scan = await ctx.db.one<ScanRow>(
-      `SELECT ${SCAN_COLUMNS}, s.workspace_html AS "workspaceHtml", g.title AS "groupTitle", g.color AS "groupColor"
+      `SELECT ${SCAN_COLUMNS}, s.workspace_html AS "workspaceHtml", s.original_text AS "originalText", g.title AS "groupTitle", g.color AS "groupColor"
          FROM scans s LEFT JOIN groups g ON g.id = s.group_id
         WHERE s.id = ? AND s.user_id = ?`,
       [id, userId],
@@ -160,10 +162,13 @@ export function scansRouter(ctx: AppContext) {
     const title = data.title ?? current.title;
     if (!title && !text) throw new HttpError(400, 'El escaneo no puede quedar vacío', 'validation');
 
+    // La primera vez que se guarda desde la zona de trabajo se conserva el texto del OCR para poder restaurarlo.
+    const originalText = current.originalText ?? (data.workspaceHtml !== undefined ? current.text : null);
+
     await ctx.db.run(
-      `UPDATE scans SET title = ?, text = ?, group_id = ?, position = ?, word_count = ?, page_label = ?, workspace_html = ?, updated_at = now()
+      `UPDATE scans SET title = ?, text = ?, group_id = ?, position = ?, word_count = ?, page_label = ?, workspace_html = ?, original_text = ?, updated_at = now()
         WHERE id = ? AND user_id = ?`,
-      [title, text, groupId, position, countWords(text), data.pageLabel ?? current.pageLabel, data.workspaceHtml ?? current.workspaceHtml, id, userId],
+      [title, text, groupId, position, countWords(text), data.pageLabel ?? current.pageLabel, data.workspaceHtml ?? current.workspaceHtml, originalText, id, userId],
     );
     res.json({ scan: await findScan(userId, id) });
   });

@@ -124,4 +124,8 @@ export const migrations: string[] = [
   -- v4: documento con formato de la zona de trabajo (HTML); vacío hasta que se edita por primera vez.
   ALTER TABLE scans ADD COLUMN workspace_html text NOT NULL DEFAULT '';
   `,
+  /* sql */ `
+  -- v5: texto del OCR tal como estaba antes de editarlo en la zona de trabajo, para poder restaurarlo.
+  ALTER TABLE scans ADD COLUMN original_text text;
+  `,
 ];

@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/react';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { scaleOf } from './page';
 
 type Box = { left: number; top: number; width: number; height: number };
 
@@ -22,8 +23,10 @@ export function MarqueeSelect({ editor, active }: { editor: Editor; active: bool
   if (!active) return null;
 
   const local = (e: ReactPointerEvent) => {
+    // The box is drawn inside the (possibly zoomed) sheet, so screen distances are unscaled.
     const rect = layerRef.current!.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const scale = scaleOf(layerRef.current!);
+    return { x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale };
   };
 
   const onPointerDown = (e: ReactPointerEvent) => {
@@ -46,8 +49,9 @@ export function MarqueeSelect({ editor, active }: { editor: Editor; active: bool
     setBox(null);
     if (!current || current.width + current.height < 6) return;
     const layer = layerRef.current!.getBoundingClientRect();
-    const from = positionAt(editor, layer.left + current.left, layer.top + current.top);
-    const to = positionAt(editor, layer.left + current.left + current.width, layer.top + current.top + current.height);
+    const scale = scaleOf(layerRef.current!);
+    const from = positionAt(editor, layer.left + current.left * scale, layer.top + current.top * scale);
+    const to = positionAt(editor, layer.left + (current.left + current.width) * scale, layer.top + (current.top + current.height) * scale);
     editor.chain().focus().setTextSelection({ from: Math.min(from, to), to: Math.max(from, to) }).run();
   };
 

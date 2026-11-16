@@ -8,8 +8,8 @@ import TextAlign from '@tiptap/extension-text-align';
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { Check, CloudOff, Download, FileDown, FileText, ImagePlus, LoaderCircle, Printer } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Check, CloudOff, Download, FileDown, FileText, FileType, ImagePlus, LoaderCircle, Minus, Plus, Printer } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, useParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { BackLink } from '../components/PageHeader';
@@ -18,15 +18,19 @@ import { api } from '../lib/api';
 import { downloadText, formatNumber } from '../lib/format';
 import type { Scan } from '../lib/types';
 import { docToText, textToHtml } from '../lib/workspace';
-import { ParagraphFormat } from '../workspace/extensions';
-import { exportPdf, IMAGE_ACCEPT, readImageFile } from '../workspace/files';
+import { PageBreak, ParagraphFormat } from '../workspace/extensions';
+import { downloadBlob, exportPdf, IMAGE_ACCEPT, readImageFile } from '../workspace/files';
 import { FindReplace } from '../workspace/FindReplace';
+import { LinkDialog } from '../workspace/LinkDialog';
 import { MarqueeSelect } from '../workspace/MarqueeSelect';
 import { MobileDock } from '../workspace/MobileDock';
-import { Tools } from '../workspace/Toolbar';
-import { WorkspaceImage } from '../workspace/WorkspaceImage';
+import { computePageBreaks, pageBox, readPageSetup, withPageSetup, ZOOMS, type PageSetup, type ViewMode, type Zoom } from '../workspace/page';
+import { SearchHighlight } from '../workspace/search';
+import { ToolTabs, Tools, type ToolTab, type ToolbarProps } from '../workspace/Toolbar';
+import { insertImage, WorkspaceImage } from '../workspace/WorkspaceImage';
 
 const AUTOSAVE_DELAY = 1200;
+const VIEW_KEY = 'ocryon.workspace.view';
 
 type SaveStatus = 'saved' | 'pending' | 'saving' | 'error';
 
@@ -105,16 +109,65 @@ function useAutosave(save: () => Promise<void>) {
   return { status, markChanged, flush };
 }
 
+/** Layout size of an element (not affected by the zoom transform), kept up to date. */
+function useSize(ref: RefObject<HTMLElement | null>) {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setSize((prev) => (prev.width === el.offsetWidth && prev.height === el.offsetHeight ? prev : { width: el.offsetWidth, height: el.offsetHeight }));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return size;
+}
+
+/** How the sheet is shown is a per-device choice: phones start with the text fitted to the screen. */
+function loadView(): { view: ViewMode; zoom: Zoom } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null') as { view?: unknown; zoom?: unknown } | null;
+    if (saved && (saved.view === 'page' || saved.view === 'flow')) {
+      return { view: saved.view, zoom: typeof saved.zoom === 'number' && ZOOMS.includes(saved.zoom) ? saved.zoom : 'fit' };
+    }
+  } catch {
+    // No stored preference.
+  }
+  return { view: window.innerWidth < 640 ? 'flow' : 'page', zoom: 'fit' };
+}
+
 function WorkspaceEditor({ scan }: { scan: Scan }) {
-  const { toast } = useFeedback();
+  const { toast, confirm } = useFeedback();
+  const saved = useMemo(() => readPageSetup(scan.workspaceHtml ?? ''), [scan.workspaceHtml]);
   const [title, setTitle] = useState(scan.title);
   const titleRef = useRef(title);
   titleRef.current = title;
+  const [page, setPage] = useState<PageSetup>(saved.setup);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const [{ view, zoom }, setViewState] = useState(loadView);
+
+  const deskRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const addImageRef = useRef<(file: File | undefined) => Promise<void>>(async () => {});
+
+  const [tab, setTab] = useState<ToolTab>('home');
   const [exporting, setExporting] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [finding, setFinding] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [breaks, setBreaks] = useState<number[]>([]);
+
+  /** Image files pasted or dropped on the document are added like picked ones. */
+  const takeImage = (files: FileList | undefined | null) => {
+    const file = [...(files ?? [])].find((f) => f.type.startsWith('image/'));
+    if (!file) return false;
+    void addImageRef.current(file);
+    return true;
+  };
 
   const editor = useEditor({
     extensions: [
@@ -127,6 +180,8 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
       TaskList,
       TaskItem.configure({ nested: true }),
       ParagraphFormat,
+      PageBreak,
+      SearchHighlight,
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -134,22 +189,63 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
       WorkspaceImage,
       Placeholder.configure({ placeholder: 'Escribe aquí el contenido del documento…' }),
     ],
-    content: scan.workspaceHtml || textToHtml(scan.text),
-    editorProps: { attributes: { class: 'workspace-doc', 'aria-label': 'Documento' } },
+    content: saved.html || textToHtml(scan.text),
+    editorProps: {
+      attributes: { class: 'workspace-doc', 'aria-label': 'Documento' },
+      // Text copied from Word or Excel also carries a picture of itself: only a bare image counts as one.
+      handlePaste: (_view, e) => !e.clipboardData?.types.some((t) => t.startsWith('text/')) && takeImage(e.clipboardData?.files),
+      handleDrop: (_view, e) => {
+        if (!takeImage(e.dataTransfer?.files)) return false;
+        e.preventDefault();
+        return true;
+      },
+    },
     onUpdate: () => autosave.markChanged(),
   });
 
   const autosave = useAutosave(async () => {
     if (!editor) return;
-    await api.scans.update(scan.id, { title: titleRef.current, text: docToText(editor.getJSON()), workspaceHtml: editor.getHTML() });
+    await api.scans.update(scan.id, { title: titleRef.current, text: docToText(editor.getJSON()), workspaceHtml: withPageSetup(editor.getHTML(), pageRef.current) });
   });
 
-  const words = useEditorState({
-    editor,
-    selector: ({ editor }) => (editor ? editor.getText().split(/\s+/).filter(Boolean).length : 0),
-  });
+  const text = useEditorState({ editor, selector: ({ editor }) => (editor ? editor.getText() : '') });
+  const words = useMemo(() => text.split(/\s+/).filter(Boolean).length, [text]);
+  const characters = useMemo(() => text.replace(/\n/g, '').length, [text]);
 
-  // Ctrl/Cmd + S saves right away; Ctrl/Cmd + F opens find and replace, like a word processor.
+  // Sheet geometry: real paper size in page view, scaled to fit the screen or to the chosen zoom.
+  const box = pageBox(page);
+  const paged = view === 'page';
+  const desk = useSize(deskRef);
+  const sheet = useSize(sheetRef);
+  const scale = !paged ? 1 : zoom === 'fit' ? (desk.width ? Math.min(1, desk.width / box.width) : 1) : zoom / 100;
+
+  // Page guides: where the document will split when exported or printed.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!paged || !editor || !content) {
+      setBreaks([]);
+      return;
+    }
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const next = computePageBreaks(content, box.contentHeight).breaks.map(Math.round);
+        setBreaks((prev) => (prev.length === next.length && prev.every((b, i) => b === next[i]) ? prev : next));
+      });
+    };
+    measure();
+    editor.on('update', measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(content);
+    return () => {
+      cancelAnimationFrame(frame);
+      editor.off('update', measure);
+      observer.disconnect();
+    };
+  }, [editor, paged, box.contentHeight, box.contentWidth]);
+
+  // Ctrl/Cmd + S saves right away; Ctrl/Cmd + F opens find and replace; Ctrl/Cmd + K adds a link.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
@@ -160,6 +256,9 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
       } else if (key === 'f' || key === 'h') {
         e.preventDefault();
         setFinding(true);
+      } else if (key === 'k') {
+        e.preventDefault();
+        setLinking(true);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -173,37 +272,18 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
   const addImage = async (file: File | undefined) => {
     if (!file) return;
     try {
-      const src = await readImageFile(file);
-      const { state, view } = editor;
-      const { $from } = state.selection;
-      if (editor.isActive('table')) {
-        // Inside a table the image goes in the current cell, on its own line and cell-wide.
-        const pos = $from.after($from.depth);
-        editor.chain().focus().insertContentAt(pos, { type: 'workspaceImage', attrs: { src, width: 100, wrap: 'topBottom', align: 'center' } }).setNodeSelection(pos).run();
-        return;
-      }
-      // Insert after the current block so the text is not split; the image starts over the text.
-      const pos = $from.depth > 0 ? $from.after(1) : state.selection.to;
-      const root = view.dom.getBoundingClientRect();
-      const caret = view.coordsAtPos(state.selection.from);
-      const width = 40;
-      editor
-        .chain()
-        .focus()
-        .insertContentAt(pos, { type: 'workspaceImage', attrs: { src, width, wrap: 'front', align: 'left', x: (100 - width) / 2, y: Math.max(0, caret.bottom - root.top + 8) } })
-        .setNodeSelection(pos)
-        .run();
+      insertImage(editor, await readImageFile(file));
     } catch (err) {
       toast(errorMessage(err), 'error');
     }
   };
+  addImageRef.current = addImage;
 
-  const savePdf = async () => {
-    if (!contentRef.current) return;
+  const exportWith = async (job: () => Promise<void>) => {
     setExporting(true);
     try {
       editor.commands.blur();
-      await exportPdf(contentRef.current, fileName);
+      await job();
     } catch (err) {
       toast(errorMessage(err), 'error');
     } finally {
@@ -213,21 +293,77 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
 
   const actions = {
     image: () => fileRef.current?.click(),
-    pdf: savePdf,
+    pdf: () =>
+      exportWith(async () => {
+        if (contentRef.current) await exportPdf(contentRef.current, fileName, page);
+      }),
+    docx: () =>
+      exportWith(async () => {
+        const { exportDocx } = await import('../workspace/docx');
+        downloadBlob(`${fileName}.docx`, await exportDocx(editor.getJSON(), title, page));
+      }),
     txt: () => downloadText(`${fileName}.txt`, docToText(editor.getJSON())),
     print: () => window.print(),
   };
 
-  const toolProps = {
+  const changePage = (next: PageSetup) => {
+    setPage(next);
+    pageRef.current = next;
+    autosave.markChanged();
+  };
+
+  const changeView = (next: { view: ViewMode; zoom: Zoom }) => {
+    setViewState(next);
+    try {
+      localStorage.setItem(VIEW_KEY, JSON.stringify(next));
+    } catch {
+      // Private mode: the choice just lasts for this visit.
+    }
+  };
+
+  // The OCR text is known while the scan was never edited here; afterwards the server keeps it.
+  const original = scan.originalText ?? (scan.workspaceHtml ? null : scan.text);
+  const restore = async () => {
+    if (!original) return;
+    const ok = await confirm({
+      title: 'Restaurar texto original',
+      message: 'Todo el contenido del documento se reemplazará por el texto tal como salió del escaneo. Si te arrepientes, puedes deshacerlo.',
+      confirmLabel: 'Restaurar',
+      danger: true,
+    });
+    if (!ok) return;
+    editor.chain().focus().insertContentAt({ from: 0, to: editor.state.doc.content.size }, textToHtml(original)).run();
+    toast('Texto original restaurado');
+  };
+
+  const toolProps: ToolbarProps = {
     editor,
+    tab,
+    onTab: setTab,
     onImage: actions.image,
     onFind: () => setFinding(true),
+    onLink: () => setLinking(true),
     selecting,
     onToggleSelect: () => setSelecting((v) => !v),
+    page,
+    onPage: changePage,
+    view,
+    onView: (next) => changeView({ view: next, zoom }),
+    zoom,
+    onZoom: (next) => changeView({ view, zoom: next }),
+    onRestore: original ? restore : undefined,
+  };
+
+  const percent = Math.round(scale * 100);
+  const stepZoom = (direction: 1 | -1) => {
+    const next = direction > 0 ? ZOOMS.find((z) => z > percent) : [...ZOOMS].reverse().find((z) => z < percent);
+    if (next) changeView({ view, zoom: next });
   };
 
   return (
-    <div className="workspace-page mx-auto max-w-6xl space-y-4 pb-24 lg:pb-0">
+    <div className="workspace-page mx-auto max-w-6xl space-y-3 pb-40 lg:space-y-4 lg:pb-0">
+      {/* The printed page uses the same paper and margins as the sheet. */}
+      <style>{`@page { size: ${box.width / 96}in ${box.height / 96}in; margin: ${box.margin / 96}in; }`}</style>
       <input ref={fileRef} type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => { void addImage(e.target.files?.[0]); e.target.value = ''; }} />
 
       <div className="workspace-chrome flex flex-wrap items-center gap-3">
@@ -237,12 +373,16 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
           <Button variant="ghost" size="sm" icon={<ImagePlus className="size-4" />} onClick={actions.image}>Imagen</Button>
           <Button variant="ghost" size="sm" icon={<Download className="size-4" />} onClick={actions.txt}>.txt</Button>
           <Button variant="ghost" size="sm" icon={<Printer className="size-4" />} onClick={actions.print}>Imprimir</Button>
+          <Button variant="ghost" size="sm" icon={<FileType className="size-4" />} disabled={exporting} onClick={actions.docx}>Word</Button>
           <Button size="sm" icon={<FileDown className="size-4" />} loading={exporting} onClick={actions.pdf}>Exportar PDF</Button>
         </div>
       </div>
 
-      <div role="toolbar" aria-label="Formato" className="workspace-chrome sticky top-20 z-10 hidden flex-wrap items-center gap-1 rounded-2xl bg-white p-2 shadow-surface lg:flex">
-        <Tools {...toolProps} />
+      <div className="workspace-chrome sticky top-20 z-10 hidden rounded-2xl bg-white p-2 shadow-surface lg:block">
+        <ToolTabs {...toolProps} />
+        <div role="toolbar" aria-label="Formato" className="mt-1.5 flex min-h-9 flex-wrap items-center gap-1 border-t border-swan/70 pt-1.5">
+          <Tools {...toolProps} />
+        </div>
       </div>
 
       {selecting && (
@@ -251,31 +391,69 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
         </p>
       )}
 
-      <div className="workspace-desk rounded-[24px] bg-swan/60 px-2 py-6 sm:px-6 sm:py-10">
-        <div className="workspace-sheet mx-auto min-h-[1000px] w-full max-w-[816px] bg-white px-5 py-8 shadow-[0_2px_10px_rgba(41,36,68,0.12)] sm:px-[72px] sm:py-[72px]">
-          <div ref={contentRef} className="relative bg-white">
-            <input
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                autosave.markChanged();
-              }}
-              maxLength={200}
-              aria-label="Título del documento"
-              placeholder="Título del documento"
-              className="mb-6 w-full border-0 bg-transparent text-3xl font-black text-eel outline-none placeholder:text-hare"
-            />
-            <EditorContent editor={editor} />
-            <MarqueeSelect editor={editor} active={selecting} />
+      <div className="workspace-desk overflow-x-auto rounded-[24px] bg-swan/60 px-2 py-4 sm:px-6 sm:py-10">
+        <div ref={deskRef} aria-hidden />
+        <div className="workspace-zoom-box mx-auto" style={paged ? { width: box.width * scale, height: (sheet.height || box.height) * scale } : undefined}>
+          <div
+            ref={sheetRef}
+            data-zoom-layer
+            data-view={view}
+            className={paged ? 'workspace-sheet bg-white shadow-[0_2px_10px_rgba(41,36,68,0.12)]' : 'workspace-sheet mx-auto w-full max-w-[816px] bg-white px-5 py-8 shadow-[0_2px_10px_rgba(41,36,68,0.12)] sm:p-[72px]'}
+            style={paged ? { width: box.width, minHeight: box.height, padding: box.margin, transform: `scale(${scale})`, transformOrigin: 'top left' } : undefined}
+          >
+            <div ref={contentRef} className="relative isolate bg-white" style={{ ['--doc-min' as string]: paged ? `${box.contentHeight - 72}px` : '55vh' }}>
+              <input
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  autosave.markChanged();
+                }}
+                maxLength={200}
+                aria-label="Título del documento"
+                placeholder="Título del documento"
+                className="mb-6 w-full border-0 bg-transparent text-2xl font-black text-eel outline-none placeholder:text-hare sm:text-3xl"
+              />
+              <EditorContent editor={editor} />
+              <MarqueeSelect editor={editor} active={selecting} />
+              {breaks.map((top, i) => (
+                <div key={i} data-export-ignore aria-hidden className="page-guide" style={{ top, left: -box.margin, right: -box.margin }}>
+                  <span>Página {i + 2}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="workspace-chrome text-right text-xs font-semibold text-wolf">{formatNumber(words)} palabras</div>
+      <div className="workspace-chrome flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-1 text-xs font-semibold text-wolf">
+        <span data-testid="workspace-status">
+          {paged && `${formatNumber(breaks.length + 1)} ${breaks.length ? 'páginas' : 'página'} · `}
+          {formatNumber(words)} palabras · {formatNumber(characters)} caracteres
+        </span>
+        {paged && (
+          <span className="flex items-center gap-1">
+            <button type="button" onClick={() => changeView({ view, zoom: 'fit' })} aria-pressed={zoom === 'fit'} className="h-9 rounded-full px-3 font-bold hover:bg-white hover:text-eel aria-pressed:text-eel">
+              Ajustar
+            </button>
+            <ZoomButton label="Alejar" onClick={() => stepZoom(-1)}><Minus /></ZoomButton>
+            <span className="w-11 text-center tabular-nums text-eel" aria-label="Zoom">{percent} %</span>
+            <ZoomButton label="Acercar" onClick={() => stepZoom(1)}><Plus /></ZoomButton>
+          </span>
+        )}
+      </div>
 
       {finding && <FindReplace editor={editor} onClose={() => setFinding(false)} />}
+      {linking && <LinkDialog editor={editor} onClose={() => setLinking(false)} />}
       <MobileDock {...toolProps} actions={actions} exporting={exporting} />
     </div>
+  );
+}
+
+function ZoomButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" aria-label={label} title={label} onClick={onClick} className="flex size-9 items-center justify-center rounded-full hover:bg-white hover:text-eel [&>svg]:size-4">
+      {children}
+    </button>
   );
 }
 
