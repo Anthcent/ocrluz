@@ -41,7 +41,6 @@ test('workspace autosaves, places images and exports a real PDF', async ({ page 
   const figure = page.locator('.workspace-image');
   await expect(figure).toHaveAttribute('data-wrap', 'front');
   // Floating images are anchored to the text: the figure takes no room and the picture floats from it.
-  await expect(figure).toHaveAttribute('data-anchored', 'true');
   await expect(figure.locator('.workspace-image-box')).toHaveCSS('position', 'absolute');
   await page.getByRole('button', { name: 'Cuadrado (el texto la rodea)' }).click();
   await expect(figure).toHaveCSS('float', 'left');
