@@ -40,7 +40,9 @@ test('workspace autosaves, places images and exports a real PDF', async ({ page 
 
   const figure = page.locator('.workspace-image');
   await expect(figure).toHaveAttribute('data-wrap', 'front');
-  await expect(figure).toHaveCSS('position', 'absolute');
+  // Floating images are anchored to the text: the figure takes no room and the picture floats from it.
+  await expect(figure).toHaveAttribute('data-anchored', 'true');
+  await expect(figure.locator('.workspace-image-box')).toHaveCSS('position', 'absolute');
   await page.getByRole('button', { name: 'Cuadrado (el texto la rodea)' }).click();
   await expect(figure).toHaveCSS('float', 'left');
   await page.getByRole('button', { name: 'Arriba y abajo' }).click();
@@ -116,7 +118,12 @@ test('word tools: area selection, find and replace and images in tables', async 
   // Image inside a table cell.
   await doc.locator('p').nth(2).click();
   await page.keyboard.press('End');
+  await page.getByRole('tab', { name: 'Insertar' }).click();
   await page.getByRole('button', { name: 'Insertar tabla' }).first().click();
+  // Inserting a table opens its own tab, with the row, column and cell tools.
+  await expect(page.getByRole('tab', { name: 'Tabla' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('button', { name: 'Combinar celdas' }).first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Insertar' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Insertar imagen' }).first().click();
   await (await chooser).setFiles(pageImage(1));
@@ -124,4 +131,43 @@ test('word tools: area selection, find and replace and images in tables', async 
   await expect(doc.locator('.workspace-image')).toHaveAttribute('data-wrap', 'topBottom');
   await page.screenshot({ path: testInfo.outputPath('tabla.png') });
   await expect(page.getByRole('status').filter({ hasText: 'Guardado' })).toBeVisible();
+});
+
+test('page setup is saved with the document and it exports to Word', async ({ page }, testInfo) => {
+  await signUp(page);
+  const { ids } = await createScans(page, { items: [{ title: 'Constancia', text: 'Texto original del escaneo', engine: 'manual' }] });
+  await page.goto(`/zona-de-trabajo/${ids[0]}`);
+  const doc = page.getByRole('textbox', { name: 'Documento', exact: true });
+  await expect(doc).toContainText('Texto original del escaneo');
+
+  // Paper size lives in the Página tab and travels with the document.
+  await page.getByRole('tab', { name: 'Página' }).click();
+  await page.getByRole('combobox', { name: 'Tamaño de papel' }).selectOption('legal');
+  await doc.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' y más');
+  await expect(page.getByRole('status').filter({ hasText: 'Guardado' })).toBeVisible();
+  await page.reload();
+  await page.getByRole('tab', { name: 'Página' }).click();
+  await expect(page.getByRole('combobox', { name: 'Tamaño de papel' })).toHaveValue('legal');
+
+  const download = page.waitForEvent('download');
+  if (isMobile(page)) {
+    await page.getByRole('button', { name: 'Más opciones' }).click();
+    await page.getByRole('menuitem', { name: 'Exportar a Word' }).click();
+  } else {
+    await page.getByRole('button', { name: 'Word', exact: true }).click();
+  }
+  const file = await download;
+  expect(file.suggestedFilename()).toBe('Constancia.docx');
+  const path = testInfo.outputPath('constancia.docx');
+  await file.saveAs(path);
+  const { readFileSync } = await import('node:fs');
+  // A .docx is a zip archive.
+  expect(readFileSync(path).subarray(0, 2).toString()).toBe('PK');
+
+  // The text the scan had before being edited here can be brought back.
+  await page.getByRole('button', { name: 'Restaurar el texto original del OCR' }).first().click();
+  await page.getByRole('button', { name: 'Restaurar', exact: true }).click();
+  await expect(doc).toHaveText('Texto original del escaneo');
 });

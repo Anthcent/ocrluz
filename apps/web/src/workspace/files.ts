@@ -1,43 +1,59 @@
-/** Letter page in PDF points, with 0.75in margins. */
-const PAGE = { width: 612, height: 792, margin: 54 };
-/** Text area width in CSS px matching the PDF page (Letter minus margins at 96 dpi). */
-const EXPORT_WIDTH = ((PAGE.width - PAGE.margin * 2) / 72) * 96;
+import { computePageBreaks, pageBox, type PageSetup } from './page';
+
+/** CSS px (96 dpi) to PDF points (72 dpi). */
+const PT = 0.75;
 
 /**
- * Renders the document node to a real PDF file and downloads it.
- * The page is laid out at a fixed Letter width so mobile and desktop exports match.
+ * Renders the document node to a real PDF file and downloads it, with the chosen paper, margins
+ * and orientation. The page is laid out at the paper's real width, so mobile and desktop exports
+ * match, and pages split where the editor's page guides show: never through a line, row or image.
  */
-export async function exportPdf(content: HTMLElement, fileName: string) {
+export async function exportPdf(content: HTMLElement, fileName: string, setup: PageSetup) {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas-pro'), import('jspdf')]);
+  const box = pageBox(setup);
+  let layout = { breaks: [] as number[], total: 0 };
 
   const canvas = await html2canvas(content, {
     scale: 2,
     backgroundColor: '#ffffff',
-    windowWidth: 1280,
+    windowWidth: Math.max(1280, box.width + 240),
     ignoreElements: (el) => el.hasAttribute('data-export-ignore'),
-    onclone: (_doc, el) => {
-      el.style.width = `${EXPORT_WIDTH}px`;
+    onclone: (doc, el) => {
+      // Undo the on-screen zoom and lay the text out at the paper's text width.
+      doc.querySelectorAll<HTMLElement>('[data-zoom-layer]').forEach((layer) => (layer.style.transform = 'none'));
+      el.classList.add('workspace-exporting');
+      el.style.width = `${box.contentWidth}px`;
       el.style.maxWidth = 'none';
+      layout = computePageBreaks(el, box.contentHeight);
     },
   });
 
-  const pdf = new jsPDF({ unit: 'pt', format: 'letter', compress: true });
-  const contentWidth = PAGE.width - PAGE.margin * 2;
-  const contentHeight = PAGE.height - PAGE.margin * 2;
-  const ptPerPx = contentWidth / canvas.width;
-  const sliceHeight = Math.floor(contentHeight / ptPerPx);
+  const pdf = new jsPDF({ unit: 'pt', format: [box.width * PT, box.height * PT], orientation: setup.landscape ? 'landscape' : 'portrait', compress: true });
+  const pxPerCss = canvas.width / box.contentWidth;
+  const end = Math.min(canvas.height, Math.ceil((layout.total + 2) * pxPerCss)) || canvas.height;
+  const edges = [0, ...layout.breaks.map((b) => Math.round(b * pxPerCss)).filter((b) => b > 0 && b < end), end];
 
-  for (let offset = 0, page = 0; offset < canvas.height; offset += sliceHeight, page++) {
-    const height = Math.min(sliceHeight, canvas.height - offset);
+  for (let page = 0; page < edges.length - 1; page++) {
+    const height = edges[page + 1] - edges[page];
+    if (height <= 0) continue;
     const slice = document.createElement('canvas');
     slice.width = canvas.width;
     slice.height = height;
-    slice.getContext('2d')!.drawImage(canvas, 0, offset, canvas.width, height, 0, 0, canvas.width, height);
+    slice.getContext('2d')!.drawImage(canvas, 0, edges[page], canvas.width, height, 0, 0, canvas.width, height);
     if (page > 0) pdf.addPage();
-    pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', PAGE.margin, PAGE.margin, contentWidth, height * ptPerPx);
+    pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', box.margin * PT, box.margin * PT, box.contentWidth * PT, (height / pxPerCss) * PT);
   }
 
   pdf.save(fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`);
+}
+
+export function downloadBlob(fileName: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName.replace(/[\\/:*?"<>|]+/g, '-');
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 const MAX_IMAGE_SIDE = 1600;

@@ -53,6 +53,8 @@ export interface Scan {
   pageLabel: string;
   /** Documento con formato de la zona de trabajo (solo en el detalle); vacío si nunca se editó ahí. */
   workspaceHtml?: string;
+  /** Texto del OCR previo a la primera edición en la zona de trabajo (solo en el detalle). */
+  originalText?: string | null;
   createdAt: string;
   updatedAt: string;
 }

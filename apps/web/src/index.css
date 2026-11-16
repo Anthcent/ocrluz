@@ -224,8 +224,14 @@ mark.hit {
 
 /* Workspace: Word-style document surface. */
 .workspace-doc {
-  @apply relative min-h-[700px] text-base leading-relaxed text-eel outline-none;
+  @apply relative text-base leading-relaxed text-eel outline-none;
+  min-height: var(--doc-min, 700px);
   font-family: Georgia, 'Times New Roman', serif;
+  overflow-wrap: break-word;
+}
+/* The exported copy only takes the height its content needs. */
+.workspace-exporting .workspace-doc {
+  min-height: 0;
 }
 .workspace-doc > * + * {
   @apply mt-3;
@@ -309,6 +315,54 @@ mark.hit {
 .workspace-doc > .react-renderer + * {
   margin-top: 0;
 }
+/* An image floating over the text takes no room, so the block after it keeps its own spacing. */
+.workspace-doc > .react-renderer:has(> [data-wrap='front']) + * {
+  @apply mt-3;
+}
+
+/* Matches of the active search; the selected one stands out. */
+.workspace-doc .search-hit {
+  @apply rounded-sm bg-bee-light;
+  box-shadow: 0 0 0 1px var(--color-bee);
+}
+.workspace-doc .search-hit-current {
+  @apply bg-fox;
+  box-shadow: 0 0 0 2px var(--color-fox-dark);
+}
+
+/* Manual page break: a labeled dashed line while editing. */
+.workspace-doc .page-break {
+  @apply relative my-5 h-0 cursor-default border-t-2 border-dashed border-hare/70;
+}
+.workspace-doc .page-break::after {
+  @apply absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 font-sans text-xs font-bold text-wolf;
+  content: 'Salto de página';
+}
+.workspace-doc .page-break.ProseMirror-selectednode {
+  @apply border-macaw;
+}
+.workspace-exporting .page-break {
+  height: 0;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+}
+.workspace-exporting .page-break::after {
+  display: none;
+}
+
+/* Automatic page guides: where the sheet ends when exported or printed. */
+.page-guide {
+  @apply pointer-events-none absolute z-[4] h-0 border-t border-dashed border-macaw/60;
+}
+.page-guide > span {
+  @apply absolute right-2 top-1 rounded-full bg-macaw-light px-2 py-0.5 font-sans text-[11px] font-bold leading-none text-macaw-dark;
+}
+
+/* Tables wider than a phone sheet scroll inside it instead of breaking the page. */
+.workspace-doc .tableWrapper {
+  @apply overflow-x-auto;
+}
 
 /* Mobile workspace dock takes the place of the main bottom navigation. */
 .workspace-dock {
@@ -333,12 +387,31 @@ mark.hit {
   .workspace-sheet * {
     visibility: visible;
   }
+  .workspace-zoom-box {
+    width: auto !important;
+    height: auto !important;
+  }
   .workspace-sheet {
     position: absolute;
     inset: 0;
+    width: auto !important;
     max-width: none;
-    padding: 0;
+    min-height: 0 !important;
+    padding: 0 !important;
     box-shadow: none;
+    transform: none !important;
+  }
+  .workspace-doc {
+    min-height: 0;
+  }
+  .workspace-doc .page-break {
+    height: 0;
+    margin: 0;
+    border: 0;
+    break-after: page;
+  }
+  .workspace-doc .page-break::after {
+    display: none;
   }
 }
 

@@ -6,8 +6,13 @@ import {
   AlignLeft,
   AlignRight,
   Baseline,
+  BetweenHorizontalEnd,
+  BetweenHorizontalStart,
+  BetweenVerticalEnd,
+  BetweenVerticalStart,
   Bold,
   Columns3,
+  Grid2x2X,
   Highlighter,
   ImagePlus,
   IndentDecrease,
@@ -18,25 +23,31 @@ import {
   ListChecks,
   ListOrdered,
   Minus,
+  PanelTop,
   Quote,
   Redo2,
   RemoveFormatting,
+  RotateCcw,
   Rows3,
   Search,
+  SeparatorHorizontal,
   SquareDashedMousePointer,
   Strikethrough,
   Subscript,
   Superscript,
   Table as TableIcon,
-  Trash2,
+  TableCellsMerge,
+  TableCellsSplit,
   Underline,
   Undo2,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { indent, setLineHeight } from './extensions';
+import { useEffect, type ReactNode } from 'react';
+import { indent, insertPageBreak, setLineHeight } from './extensions';
+import { MARGINS, PAPERS, ZOOMS, type Margin, type PageSetup, type Paper, type ViewMode, type Zoom } from './page';
 // Type-only imports register these extensions' commands on the editor's chain.
 import type {} from '@tiptap/extension-subscript';
 import type {} from '@tiptap/extension-superscript';
+import type {} from '@tiptap/extension-table';
 import type {} from '@tiptap/extension-text-style';
 
 const FONTS = [
@@ -59,16 +70,79 @@ const LINE_HEIGHTS = [
   { label: '2,0', value: '2' },
 ];
 
+export type ToolTab = 'home' | 'insert' | 'page' | 'table';
+
+const TABS: { id: ToolTab; label: string }[] = [
+  { id: 'home', label: 'Inicio' },
+  { id: 'insert', label: 'Insertar' },
+  { id: 'page', label: 'Página' },
+  { id: 'table', label: 'Tabla' },
+];
+
 export interface ToolbarProps {
   editor: Editor;
+  tab: ToolTab;
+  onTab: (tab: ToolTab) => void;
   onImage: () => void;
   onFind: () => void;
+  onLink: () => void;
   selecting: boolean;
   onToggleSelect: () => void;
+  page: PageSetup;
+  onPage: (page: PageSetup) => void;
+  view: ViewMode;
+  onView: (view: ViewMode) => void;
+  zoom: Zoom;
+  onZoom: (zoom: Zoom) => void;
+  /** Restores the text as the OCR left it; absent when that text is not available. */
+  onRestore?: () => void;
 }
 
-/** Every formatting tool, shared by the desktop toolbar and the mobile dock. */
-export function Tools({ editor, onImage, onFind, selecting, onToggleSelect }: ToolbarProps) {
+/**
+ * Tab strip of the ribbon. "Tabla" only shows while the cursor is inside a table. Undo, redo and
+ * search stay at hand on every tab.
+ */
+export function ToolTabs({ editor, tab, onTab, onFind }: Pick<ToolbarProps, 'editor' | 'tab' | 'onTab' | 'onFind'>) {
+  const state = useEditorState({
+    editor,
+    selector: ({ editor }) => ({ inTable: editor.isActive('table'), canUndo: editor.can().undo(), canRedo: editor.can().redo() }),
+  });
+
+  // Leaving the table closes its tab.
+  useEffect(() => {
+    if (tab === 'table' && !state.inTable) onTab('home');
+  }, [tab, state.inTable, onTab]);
+
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <div role="tablist" aria-label="Grupos de herramientas" className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        {TABS.filter((t) => t.id !== 'table' || state.inTable).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onTab(t.id)}
+            className={clsx(
+              'h-10 shrink-0 rounded-full px-3 text-sm font-bold transition-colors lg:h-8',
+              tab === t.id ? 'bg-eel text-white' : t.id === 'table' ? 'bg-macaw-light text-macaw-dark' : 'text-wolf hover:bg-polar hover:text-eel',
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <Tool compact label="Deshacer" onClick={() => editor.chain().focus().undo().run()} disabled={!state.canUndo}><Undo2 /></Tool>
+      <Tool compact label="Rehacer" onClick={() => editor.chain().focus().redo().run()} disabled={!state.canRedo}><Redo2 /></Tool>
+      <Tool compact label="Buscar y reemplazar" onClick={onFind}><Search /></Tool>
+    </div>
+  );
+}
+
+/** Tools of the active tab, shared by the desktop toolbar and the mobile dock. */
+export function Tools(props: ToolbarProps) {
+  const { editor, tab, onTab, onImage, onLink, selecting, onToggleSelect } = props;
   // Re-render on selection/transaction so active states stay in sync.
   const state = useEditorState({
     editor,
@@ -98,33 +172,65 @@ export function Tools({ editor, onImage, onFind, selecting, onToggleSelect }: To
         task: editor.isActive('taskList'),
         quote: editor.isActive('blockquote'),
         inTable: editor.isActive('table'),
-        canUndo: editor.can().undo(),
-        canRedo: editor.can().redo(),
+        canMerge: editor.can().mergeCells(),
+        canSplit: editor.can().splitCell(),
       };
     },
   });
 
   const chain = () => editor.chain().focus();
 
+  if (tab === 'insert') {
+    return (
+      <>
+        <Tool label="Insertar imagen" text="Imagen" onClick={onImage}><ImagePlus /></Tool>
+        <Tool
+          label="Insertar tabla"
+          text="Tabla"
+          onClick={() => {
+            chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+            onTab('table');
+          }}
+        >
+          <TableIcon />
+        </Tool>
+        <Tool label="Enlace" text="Enlace" active={state.link} onClick={onLink}><Link2 /></Tool>
+        <Divider />
+        <Tool label="Línea divisoria" text="Línea" onClick={() => chain().setHorizontalRule().run()}><Minus /></Tool>
+        <Tool label="Cita" text="Cita" active={state.quote} onClick={() => chain().toggleBlockquote().run()}><Quote /></Tool>
+        <Tool label="Salto de página" text="Salto de página" disabled={state.inTable} onClick={() => insertPageBreak(editor)}><SeparatorHorizontal /></Tool>
+      </>
+    );
+  }
+
+  if (tab === 'page') return <PageTools {...props} />;
+
+  if (tab === 'table') {
+    return (
+      <>
+        <Tool label="Insertar fila arriba" text="Fila arriba" onClick={() => chain().addRowBefore().run()}><BetweenHorizontalStart /></Tool>
+        <Tool label="Añadir fila" text="Fila abajo" onClick={() => chain().addRowAfter().run()}><BetweenHorizontalEnd /></Tool>
+        <Tool label="Insertar columna a la izquierda" text="Columna izq." onClick={() => chain().addColumnBefore().run()}><BetweenVerticalStart /></Tool>
+        <Tool label="Añadir columna" text="Columna der." onClick={() => chain().addColumnAfter().run()}><BetweenVerticalEnd /></Tool>
+        <Divider />
+        <Tool label="Combinar celdas" text="Combinar" disabled={!state.canMerge} onClick={() => chain().mergeCells().run()}><TableCellsMerge /></Tool>
+        <Tool label="Dividir celda" text="Dividir" disabled={!state.canSplit} onClick={() => chain().splitCell().run()}><TableCellsSplit /></Tool>
+        <Tool label="Fila de encabezado" text="Encabezado" onClick={() => chain().toggleHeaderRow().run()}><PanelTop /></Tool>
+        <Divider />
+        <Tool label="Borrar fila" text="Borrar fila" tone="danger" onClick={() => chain().deleteRow().run()}><Rows3 /></Tool>
+        <Tool label="Borrar columna" text="Borrar columna" tone="danger" onClick={() => chain().deleteColumn().run()}><Columns3 /></Tool>
+        <Tool label="Borrar tabla" text="Borrar tabla" tone="danger" onClick={() => chain().deleteTable().run()}><Grid2x2X /></Tool>
+      </>
+    );
+  }
+
   const setBlock = (value: string) => {
     if (value === 'p') chain().setParagraph().run();
     else chain().setHeading({ level: Number(value.slice(1)) as 1 | 2 | 3 }).run();
   };
 
-  const toggleLink = () => {
-    if (state.link) return chain().extendMarkRange('link').unsetLink().run();
-    const url = window.prompt('Dirección del enlace', 'https://');
-    if (url && url !== 'https://') chain().extendMarkRange('link').setLink({ href: url }).run();
-  };
-
   return (
     <>
-      <Tool label="Selección por área" active={selecting} onClick={onToggleSelect}><SquareDashedMousePointer /></Tool>
-      <Tool label="Buscar y reemplazar" onClick={onFind}><Search /></Tool>
-      <Divider />
-      <Tool label="Deshacer" onClick={() => chain().undo().run()} disabled={!state.canUndo}><Undo2 /></Tool>
-      <Tool label="Rehacer" onClick={() => chain().redo().run()} disabled={!state.canRedo}><Redo2 /></Tool>
-      <Divider />
       <Select label="Estilo de párrafo" value={state.block} onChange={setBlock} className="w-32">
         <option value="p">Texto normal</option>
         <option value="h1">Título 1</option>
@@ -162,7 +268,7 @@ export function Tools({ editor, onImage, onFind, selecting, onToggleSelect }: To
       <ColorTool label="Color de texto" value={state.color} onChange={(c) => chain().setColor(c).run()} icon={<Baseline />} />
       <Tool label="Resaltar" active={state.highlight} onClick={() => chain().toggleHighlight({ color: state.highlightColor }).run()}><Highlighter /></Tool>
       <ColorTool label="Color de resaltado" value={state.highlightColor} onChange={(c) => chain().setHighlight({ color: c }).run()} icon={<Highlighter />} />
-      <Tool label="Enlace" active={state.link} onClick={toggleLink}><Link2 /></Tool>
+      <Tool label="Quitar formato" onClick={() => chain().unsetAllMarks().clearNodes().run()}><RemoveFormatting /></Tool>
       <Divider />
       <Tool label="Alinear a la izquierda" active={state.left} onClick={() => chain().setTextAlign('left').run()}><AlignLeft /></Tool>
       <Tool label="Centrar" active={state.center} onClick={() => chain().setTextAlign('center').run()}><AlignCenter /></Tool>
@@ -179,27 +285,75 @@ export function Tools({ editor, onImage, onFind, selecting, onToggleSelect }: To
       <Tool label="Lista con viñetas" active={state.bullet} onClick={() => chain().toggleBulletList().run()}><List /></Tool>
       <Tool label="Lista numerada" active={state.ordered} onClick={() => chain().toggleOrderedList().run()}><ListOrdered /></Tool>
       <Tool label="Lista de tareas" active={state.task} onClick={() => chain().toggleTaskList().run()}><ListChecks /></Tool>
-      <Tool label="Cita" active={state.quote} onClick={() => chain().toggleBlockquote().run()}><Quote /></Tool>
-      <Tool label="Línea divisoria" onClick={() => chain().setHorizontalRule().run()}><Minus /></Tool>
       <Divider />
-      <Tool label="Insertar imagen" onClick={onImage}><ImagePlus /></Tool>
-      <Tool label="Insertar tabla" onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}><TableIcon /></Tool>
-      {state.inTable && (
-        <>
-          <Tool label="Añadir fila" onClick={() => chain().addRowAfter().run()}><Rows3 /></Tool>
-          <Tool label="Añadir columna" onClick={() => chain().addColumnAfter().run()}><Columns3 /></Tool>
-          <Tool label="Borrar fila" onClick={() => chain().deleteRow().run()} tone="danger"><Rows3 /></Tool>
-          <Tool label="Borrar columna" onClick={() => chain().deleteColumn().run()} tone="danger"><Columns3 /></Tool>
-          <Tool label="Borrar tabla" onClick={() => chain().deleteTable().run()} tone="danger"><Trash2 /></Tool>
-        </>
-      )}
-      <Divider />
-      <Tool label="Quitar formato" onClick={() => chain().unsetAllMarks().clearNodes().run()}><RemoveFormatting /></Tool>
+      <Tool label="Selección por área" active={selecting} onClick={onToggleSelect}><SquareDashedMousePointer /></Tool>
     </>
   );
 }
 
-function Tool({ label, active, disabled, tone, onClick, children }: { label: string; active?: boolean; disabled?: boolean; tone?: 'danger'; onClick: () => void; children: ReactNode }) {
+/** Paper, orientation, margins, how the sheet is shown, and restoring the OCR text. */
+function PageTools({ page, onPage, view, onView, zoom, onZoom, onRestore }: ToolbarProps) {
+  return (
+    <>
+      <Select label="Tamaño de papel" value={page.paper} onChange={(v) => onPage({ ...page, paper: v as Paper })} className="w-24">
+        {(Object.keys(PAPERS) as Paper[]).map((p) => (
+          <option key={p} value={p}>{PAPERS[p].label}</option>
+        ))}
+      </Select>
+      <Select label="Orientación" value={page.landscape ? 'h' : 'v'} onChange={(v) => onPage({ ...page, landscape: v === 'h' })} className="w-28">
+        <option value="v">Vertical</option>
+        <option value="h">Horizontal</option>
+      </Select>
+      <Select label="Márgenes" value={page.margin} onChange={(v) => onPage({ ...page, margin: v as Margin })} className="w-44">
+        {(Object.keys(MARGINS) as Margin[]).map((m) => (
+          <option key={m} value={m}>Márgenes {MARGINS[m].label.toLowerCase()}</option>
+        ))}
+      </Select>
+      <Divider />
+      <Select label="Vista" value={view} onChange={(v) => onView(v as ViewMode)} className="w-44">
+        <option value="page">Vista de página</option>
+        <option value="flow">Ajustada a la pantalla</option>
+      </Select>
+      <Select label="Zoom" value={String(zoom)} disabled={view !== 'page'} onChange={(v) => onZoom(v === 'fit' ? 'fit' : Number(v))} className="w-36">
+        <option value="fit">Ajustar al ancho</option>
+        {ZOOMS.map((z) => (
+          <option key={z} value={String(z)}>{z} %</option>
+        ))}
+      </Select>
+      {onRestore && (
+        <>
+          <Divider />
+          <Tool label="Restaurar el texto original del OCR" text="Restaurar texto original" onClick={onRestore}><RotateCcw /></Tool>
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Toolbar button. Touch-sized on phones, compact on desktop. With `text` it shows the name next to
+ * the icon, for tools whose icon alone is not obvious.
+ */
+function Tool({
+  label,
+  text,
+  compact,
+  active,
+  disabled,
+  tone,
+  onClick,
+  children,
+}: {
+  label: string;
+  text?: string;
+  /** Slightly narrower on phones, for the always-visible buttons next to the tabs. */
+  compact?: boolean;
+  active?: boolean;
+  disabled?: boolean;
+  tone?: 'danger';
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
@@ -210,23 +364,40 @@ function Tool({ label, active, disabled, tone, onClick, children }: { label: str
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={clsx(
-        'flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors disabled:opacity-30 [&>svg]:size-4',
+        'flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-30 lg:h-9 [&>svg]:size-[18px] lg:[&>svg]:size-4',
+        text ? 'px-3' : compact ? 'w-10 lg:w-9' : 'w-11 lg:w-9',
         active ? 'bg-macaw-light text-macaw-dark' : tone === 'danger' ? 'text-cardinal-dark hover:bg-cardinal-light' : 'text-wolf hover:bg-polar hover:text-eel',
       )}
     >
       {children}
+      {text && <span className="whitespace-nowrap">{text}</span>}
     </button>
   );
 }
 
-function Select({ label, value, onChange, className, children }: { label: string; value: string; onChange: (value: string) => void; className?: string; children: ReactNode }) {
+function Select({
+  label,
+  value,
+  onChange,
+  disabled,
+  className,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={label}
       title={label}
-      className={clsx('h-9 shrink-0 rounded-xl bg-polar px-2 text-sm font-bold text-eel outline-none focus-visible:ring-4 focus-visible:ring-macaw/35', className)}
+      disabled={disabled}
+      className={clsx('h-11 shrink-0 rounded-xl bg-polar px-2 text-sm font-bold text-eel outline-none focus-visible:ring-4 focus-visible:ring-macaw/35 disabled:opacity-40 lg:h-9', className)}
     >
       {children}
     </select>
@@ -236,7 +407,7 @@ function Select({ label, value, onChange, className, children }: { label: string
 /** Icon button that opens the native color picker; the bar under the icon shows the current color. */
 function ColorTool({ label, value, onChange, icon }: { label: string; value: string; onChange: (color: string) => void; icon: ReactNode }) {
   return (
-    <label title={label} className="relative flex size-9 shrink-0 cursor-pointer flex-col items-center justify-center rounded-xl text-wolf hover:bg-polar hover:text-eel [&>svg]:size-4">
+    <label title={label} className="relative flex size-11 shrink-0 cursor-pointer flex-col items-center justify-center rounded-xl text-wolf hover:bg-polar hover:text-eel lg:size-9 [&>svg]:size-[18px] lg:[&>svg]:size-4">
       {icon}
       <span aria-hidden className="mt-0.5 h-1 w-5 rounded-full" style={{ background: value }} />
       <input type="color" aria-label={label} value={toHex(value)} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" />

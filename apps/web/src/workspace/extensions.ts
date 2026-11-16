@@ -1,4 +1,4 @@
-import { Extension, type Editor } from '@tiptap/react';
+import { Extension, Node, type Editor } from '@tiptap/react';
 
 const BLOCKS = ['paragraph', 'heading'];
 const MAX_INDENT = 8;
@@ -46,3 +46,29 @@ export function indent(editor: Editor, direction: 1 | -1) {
 export function setLineHeight(editor: Editor, value: string | null) {
   return editor.chain().focus().updateAttributes('paragraph', { lineHeight: value }).updateAttributes('heading', { lineHeight: value }).run();
 }
+
+/** Starts a new page from here on (in the page guides, the PDF, Word and print). Not allowed inside tables. */
+export function insertPageBreak(editor: Editor) {
+  if (editor.isActive('table')) return false;
+  return editor.chain().focus().insertContent([{ type: 'pageBreak' }, { type: 'paragraph' }]).run();
+}
+
+/** Manual page break, shown in the editor as a labeled dashed line. */
+export const PageBreak = Node.create({
+  name: 'pageBreak',
+  group: 'block',
+  atom: true,
+  selectable: true,
+
+  parseHTML() {
+    return [{ tag: 'div[data-page-break]' }];
+  },
+
+  renderHTML() {
+    return ['div', { 'data-page-break': '', class: 'page-break' }];
+  },
+
+  addKeyboardShortcuts() {
+    return { 'Mod-Enter': () => insertPageBreak(this.editor as Editor) };
+  },
+});
