@@ -3,8 +3,8 @@ import { NodeSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { Node, NodeViewWrapper, ReactNodeViewRenderer, type Editor, type ReactNodeViewProps } from '@tiptap/react';
 import clsx from 'clsx';
-import { AlignCenter, AlignLeft, AlignRight, Layers, PanelsTopLeft, Trash2, WrapText } from 'lucide-react';
-import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { scaleOf } from './page';
 
 /**
@@ -91,16 +91,41 @@ export const WorkspaceImage = Node.create({
   },
 });
 
+const CELLS = ['tableCell', 'tableHeader'];
+/** Tallest an image is shown when it is added to a table cell, so the row does not blow up. */
+const CELL_IMAGE_HEIGHT = 240;
+
+async function imageSize(src: string) {
+  const img = new Image();
+  img.src = src;
+  await img.decode().catch(() => {});
+  return { width: img.naturalWidth || 400, height: img.naturalHeight || 300 };
+}
+
 /**
- * Adds a picked image at the cursor. Inside a table it goes in the current cell, on its own line;
- * elsewhere it starts over the text, anchored right below the block being edited.
+ * Adds a picked image at the cursor. Inside a table it goes in the current cell, on its own line and
+ * no bigger than the picture itself or a moderate height; elsewhere it starts over the text, anchored
+ * right below the block being edited.
  */
-export function insertImage(editor: Editor, src: string) {
-  const { state } = editor;
+export async function insertImage(editor: Editor, src: string) {
+  const size = await imageSize(src);
+  if (editor.isDestroyed) return false;
+  const { state, view } = editor;
   const { $from } = state.selection;
-  if (editor.isActive('table') && $from.depth > 0) {
-    const pos = $from.after($from.depth);
-    return editor.chain().focus().insertContentAt(pos, { type: 'workspaceImage', attrs: { src, width: 100, wrap: 'topBottom', align: 'center' } }).setNodeSelection(pos).run();
+  let cellDepth = 0;
+  for (let depth = $from.depth; depth > 0; depth--) {
+    if (CELLS.includes($from.node(depth).type.name)) {
+      cellDepth = depth;
+      break;
+    }
+  }
+  if (cellDepth) {
+    // After the block being edited, inside the same cell.
+    const pos = $from.depth > cellDepth ? $from.after(cellDepth + 1) : $from.pos;
+    const cell = frameAt(view, pos);
+    const shown = Math.min(size.width, (CELL_IMAGE_HEIGHT * size.width) / size.height, cell.width / cell.scale);
+    const width = clamp(Math.round(((shown * cell.scale) / cell.width) * 100), MIN_WIDTH, 100);
+    return editor.chain().focus().insertContentAt(pos, { type: 'workspaceImage', attrs: { src, width, wrap: 'topBottom', align: 'center' } }).setNodeSelection(pos).run();
   }
   // After the current block so the text is not split.
   const pos = $from.depth > 0 ? $from.after(1) : state.selection.to;
@@ -113,15 +138,49 @@ export function insertImage(editor: Editor, src: string) {
     .run();
 }
 
+/** Changes the selected image (used by the "Imagen" tab of the toolbar). */
+export function updateSelectedImage(editor: Editor, change: Partial<WorkspaceImageAttrs>) {
+  const { selection } = editor.state;
+  if (!(selection instanceof NodeSelection) || selection.node.type.name !== 'workspaceImage') return false;
+  const attrs = selection.node.attrs as WorkspaceImageAttrs;
+  const next = { ...attrs, ...change };
+  if (change.wrap && change.wrap !== attrs.wrap) {
+    if (change.wrap === 'front') {
+      // Becomes free-floating about where it was, anchored at its own place in the text.
+      next.anchored = true;
+      next.x = attrs.align === 'right' ? 100 - attrs.width : attrs.align === 'center' ? (100 - attrs.width) / 2 : 0;
+      next.y = 0;
+    } else if (change.wrap === 'square' && attrs.align === 'center') {
+      next.align = 'left';
+    }
+  }
+  if (next.wrap === 'front') next.x = clamp(next.x, 0, Math.max(0, 100 - next.width));
+  const pos = selection.from;
+  const tr = editor.state.tr.setNodeMarkup(pos, undefined, next);
+  tr.setSelection(NodeSelection.create(tr.doc, pos));
+  editor.view.dispatch(tr);
+  return true;
+}
+
+export function deleteSelectedImage(editor: Editor) {
+  return editor.chain().focus().deleteSelection().run();
+}
+
 /**
  * Document position where the image can be dropped for a screen point: before or after the closest
  * block that accepts it (a paragraph of the page or of a table cell; the whole table when the point
  * falls on its borders).
  */
-function dropTarget(view: EditorView, type: NodeType, left: number, top: number): number | null {
+function dropTarget(view: EditorView, type: NodeType, left: number, top: number, topLevel = false): number | null {
   const hit = view.posAtCoords({ left, top });
   if (!hit) return null;
   const $pos = view.state.doc.resolve(hit.pos);
+  if (topLevel && $pos.depth > 0) {
+    // Next to the top-level block under the point, whatever it holds (a table counts as one block).
+    const dom = view.nodeDOM($pos.before(1));
+    const rect = dom instanceof HTMLElement ? dom.getBoundingClientRect() : null;
+    return rect && top > rect.top + rect.height / 2 ? $pos.after(1) : $pos.before(1);
+  }
   if ($pos.depth === 0) {
     const index = $pos.index(0);
     return $pos.parent.canReplaceWith(index, index, type) ? hit.pos : null;
@@ -192,11 +251,13 @@ type Gesture = {
 
 const DRAG_THRESHOLD = 4;
 
-function ImageView({ node, selected, updateAttributes, deleteNode, editor, getPos }: ReactNodeViewProps) {
+function ImageView({ node, selected, updateAttributes, editor, getPos }: ReactNodeViewProps) {
   const attrs = node.attrs as WorkspaceImageAttrs;
   const [draft, setDraft] = useState<Partial<WorkspaceImageAttrs> | null>(null);
   /** Visual offset while dragging an image that sits in the text flow. */
   const [shift, setShift] = useState<{ x: number; y: number } | null>(null);
+  /** Where an in-flow image would land if dropped now (screen px). */
+  const [drop, setDrop] = useState<{ left: number; top: number; width: number } | null>(null);
   const gesture = useRef<Gesture | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const view = { ...attrs, ...draft };
@@ -255,6 +316,9 @@ function ImageView({ node, selected, updateAttributes, deleteNode, editor, getPo
       setDraft({ x: clamp(g.attrs.x + dx, 0, 100 - g.attrs.width), y: g.attrs.anchored ? y : Math.max(0, y) });
     } else {
       setShift({ x: px, y: py });
+      const target = targetAt(e.clientX, e.clientY);
+      const frame = target === null ? null : frameAt(editor.view, target);
+      setDrop(frame && { left: frame.left, top: frame.top, width: frame.width });
     }
   };
 
@@ -270,40 +334,43 @@ function ImageView({ node, selected, updateAttributes, deleteNode, editor, getPo
     }
     setDraft(null);
     setShift(null);
+    setDrop(null);
   };
 
   /** Drop point resolved with the image itself out of the way, so what is under it gets hit. */
-  const targetAt = (left: number, top: number) => {
+  const targetAt = (left: number, top: number, topLevel = false) => {
     const box = boxRef.current!;
     box.style.pointerEvents = 'none';
-    const target = dropTarget(editor.view, node.type, left, top);
+    const target = dropTarget(editor.view, node.type, left, top, topLevel);
     box.style.pointerEvents = '';
     return target;
   };
 
   /**
-   * Ends the drag of a floating image: it is re-anchored to the block under its top edge (inside a
-   * table cell if dropped there) while staying exactly where it was dropped. From then on it moves
-   * together with that block when the text above changes.
+   * Ends the drag of a floating image. On the page it is re-anchored to the block under its top
+   * edge while staying exactly where it was dropped, so from then on it moves together with that
+   * text; it floats freely over tables without being captured by their cells. An image that floats
+   * inside a table cell stays in its cell.
    */
   const placeFront = () => {
     const from = getPos();
     const box = boxRef.current;
     if (typeof from !== 'number' || !box) return;
+    const $from = editor.state.doc.resolve(from);
+    let inCell = false;
+    for (let depth = $from.depth; depth > 0; depth--) inCell ||= CELLS.includes($from.node(depth).type.name);
     const rect = box.getBoundingClientRect();
-    let target = targetAt(rect.left + rect.width / 2, rect.top + 2);
+    let target = inCell ? null : targetAt(rect.left + rect.width / 2, rect.top + 2, true);
     if (target === from + node.nodeSize) target = from;
     if (target === null || (target === from && attrs.anchored)) {
       if (draft) updateAttributes(draft);
       return;
     }
     const frame = frameAt(editor.view, target);
-    const width = clamp((rect.width / frame.width) * 100, MIN_WIDTH, 100);
     const next: WorkspaceImageAttrs = {
       ...attrs,
       anchored: true,
-      width,
-      x: clamp(((rect.left - frame.left) / frame.width) * 100, 0, 100 - width),
+      x: clamp(((rect.left - frame.left) / frame.width) * 100, 0, 100 - attrs.width),
       y: (rect.top - frame.top) / frame.scale,
     };
     if (target === from || !moveImage(editor, from, node, target, next)) updateAttributes(target === from ? next : (draft ?? {}));
@@ -329,19 +396,6 @@ function ImageView({ node, selected, updateAttributes, deleteNode, editor, getPo
     moveImage(editor, from, node, target, { ...attrs, align, width });
   };
 
-  const setWrap = (wrap: ImageWrap) => {
-    if (wrap === attrs.wrap) return;
-    if (wrap === 'front') {
-      // Becomes free-floating right where it is shown, anchored at its own place in the text.
-      const area = wrapper()?.parentElement?.getBoundingClientRect();
-      const box = boxRef.current?.getBoundingClientRect();
-      const x = area && box ? clamp(((box.left - area.left) / area.width) * 100, 0, 100 - attrs.width) : 0;
-      updateAttributes({ wrap, anchored: true, x, y: 0 });
-    } else {
-      updateAttributes({ wrap, align: wrap === 'square' && attrs.align === 'center' ? 'left' : attrs.align });
-    }
-  };
-
   const placed: CSSProperties = { left: `${view.x}%`, top: view.y, width: `${view.width}%` };
   const wrapperStyle: CSSProperties = front
     ? view.anchored
@@ -361,7 +415,6 @@ function ImageView({ node, selected, updateAttributes, deleteNode, editor, getPo
     front && view.anchored ? { position: 'absolute', ...placed } : shift ? { transform: `translate(${shift.x}px, ${shift.y}px)` } : undefined;
 
   const resizeFromLeft = !front && view.align === 'right';
-  const menuOnRight = front ? view.x + view.width / 2 > 50 : view.align === 'right';
 
   return (
     <NodeViewWrapper className="workspace-image" style={wrapperStyle} data-wrap={view.wrap}>
@@ -384,16 +437,9 @@ function ImageView({ node, selected, updateAttributes, deleteNode, editor, getPo
           <>
             {(front || !resizeFromLeft) && <Handle side="right" onPointerDown={(e) => start('resize', e, 1)} />}
             {(front || resizeFromLeft) && <Handle side="left" onPointerDown={(e) => start('resize', e, -1)} />}
-            <ImageMenu
-              wrap={view.wrap}
-              align={view.align}
-              onRight={menuOnRight}
-              onWrap={setWrap}
-              onAlign={(align) => updateAttributes({ align })}
-              onDelete={deleteNode}
-            />
           </>
         )}
+        {drop && createPortal(<div aria-hidden className="pointer-events-none fixed z-[70] h-1 -translate-y-1/2 rounded-full bg-macaw-dark" style={drop} />, document.body)}
       </div>
     </NodeViewWrapper>
   );
@@ -411,64 +457,5 @@ function Handle({ side, onPointerDown }: { side: 'left' | 'right'; onPointerDown
         side === 'left' ? '-left-2.5 cursor-nesw-resize' : '-right-2.5 cursor-nwse-resize',
       )}
     />
-  );
-}
-
-function ImageMenu({
-  wrap,
-  align,
-  onRight,
-  onWrap,
-  onAlign,
-  onDelete,
-}: {
-  wrap: ImageWrap;
-  align: ImageAlign;
-  onRight: boolean;
-  onWrap: (wrap: ImageWrap) => void;
-  onAlign: (align: ImageAlign) => void;
-  onDelete: () => void;
-}) {
-  const aligns: ImageAlign[] = wrap === 'square' ? ['left', 'right'] : wrap === 'topBottom' ? ['left', 'center', 'right'] : [];
-  const alignIcon = { left: <AlignLeft />, center: <AlignCenter />, right: <AlignRight /> };
-  const alignLabel = { left: 'A la izquierda', center: 'Centrada', right: 'A la derecha' };
-
-  return (
-    <div
-      data-export-ignore
-      role="toolbar"
-      aria-label="Ajuste de imagen"
-      onPointerDown={(e) => e.stopPropagation()}
-      className={clsx(
-        // Above the image, so the picture stays visible while its layout is changed.
-        'absolute bottom-full z-20 mb-2 flex items-center gap-0.5 whitespace-nowrap rounded-xl bg-eel/90 p-1 text-white shadow-floating backdrop-blur',
-        onRight ? 'right-0' : 'left-0',
-      )}
-    >
-      <MenuButton label="Delante del texto" active={wrap === 'front'} onClick={() => onWrap('front')}><Layers /></MenuButton>
-      <MenuButton label="Cuadrado (el texto la rodea)" active={wrap === 'square'} onClick={() => onWrap('square')}><WrapText /></MenuButton>
-      <MenuButton label="Arriba y abajo" active={wrap === 'topBottom'} onClick={() => onWrap('topBottom')}><PanelsTopLeft /></MenuButton>
-      {aligns.length > 0 && <span aria-hidden className="mx-0.5 h-5 w-px bg-white/25" />}
-      {aligns.map((a) => (
-        <MenuButton key={a} label={alignLabel[a]} active={align === a} onClick={() => onAlign(a)}>{alignIcon[a]}</MenuButton>
-      ))}
-      <span aria-hidden className="mx-0.5 h-5 w-px bg-white/25" />
-      <MenuButton label="Borrar imagen" onClick={onDelete}><Trash2 /></MenuButton>
-    </div>
-  );
-}
-
-function MenuButton({ label, active, onClick, children }: { label: string; active?: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      aria-pressed={active}
-      onClick={onClick}
-      className={clsx('flex size-9 items-center justify-center rounded-lg transition-colors [&>svg]:size-4', active ? 'bg-white text-eel' : 'text-white/80 hover:bg-white/15')}
-    >
-      {children}
-    </button>
   );
 }

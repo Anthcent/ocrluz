@@ -26,7 +26,9 @@ export const DEFAULT_PAGE: PageSetup = { paper: 'letter', margin: 'moderate', la
 /** `page` shows the real sheet (zoomable); `flow` adapts the text to the screen width. */
 export type ViewMode = 'page' | 'flow';
 export type Zoom = 'fit' | number;
-export const ZOOMS = [50, 75, 100, 125, 150, 200];
+export const ZOOMS = [50, 67, 75, 90, 100, 110, 125, 150, 175, 200];
+/** Space between two sheets in the page view, in px. */
+export const PAGE_GAP = 28;
 
 export function pageBox(setup: PageSetup) {
   const paper = PAPERS[setup.paper];
@@ -65,55 +67,86 @@ export function scaleOf(el: HTMLElement) {
   return el.offsetWidth ? el.getBoundingClientRect().width / el.offsetWidth || 1 : 1;
 }
 
+/** Something a page break must not slice: a text line, a table row, an image or a rule. */
+export interface LayoutBox {
+  /** Offsets (unscaled px) from the top of the measured root. */
+  top: number;
+  bottom: number;
+  /** The row, image or rule; for a text line, the paragraph or heading it belongs to. */
+  el: HTMLElement;
+  /** Set for text lines: whether it is the first line of its block. */
+  line?: { first: boolean; clientTop: number };
+}
+
+export interface PageLayout {
+  /** Offset where each page starts; the first one is always 0. */
+  starts: number[];
+  /** What each page after the first begins with; null when it starts in the middle of something taller than a page. */
+  firsts: (LayoutBox | null)[];
+  /** Height the content really uses. */
+  total: number;
+}
+
 /**
- * Where the document splits into pages, as offsets (unscaled px) from the top of `root`, plus the
- * height the content really uses. A break never slices a text line, a table row or an image: it
- * moves up to the top of whatever it would cut. Manual page breaks always start a new page.
+ * Splits the content of `root` into pages of `pageHeight`. A page never ends in the middle of a
+ * text line, a table row or an image: whatever would be cut starts the next page instead. Manual
+ * page breaks always start a new page.
  */
-export function computePageBreaks(root: HTMLElement, pageHeight: number): { breaks: number[]; total: number } {
+export function layoutPages(root: HTMLElement, pageHeight: number): PageLayout {
   const scale = scaleOf(root);
   const origin = root.getBoundingClientRect().top;
   const y = (value: number) => (value - origin) / scale;
 
-  const boxes: { top: number; bottom: number }[] = [];
-  const add = (rect: DOMRect) => {
-    if (rect.height > 0) boxes.push({ top: y(rect.top), bottom: y(rect.bottom) });
-  };
-  root.querySelectorAll<HTMLElement>('img, hr, tr, input').forEach((el) => add(el.getBoundingClientRect()));
+  const boxes: LayoutBox[] = [];
+  root.querySelectorAll<HTMLElement>('img, hr, tr, input').forEach((el) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.height > 0) boxes.push({ top: y(rect.top), bottom: y(rect.bottom), el });
+  });
   const range = document.createRange();
   root.querySelectorAll<HTMLElement>('p, h1, h2, h3, pre').forEach((el) => {
     range.selectNodeContents(el);
-    for (const rect of range.getClientRects()) add(rect);
+    let firstTop = Infinity;
+    for (const rect of range.getClientRects()) {
+      if (rect.height <= 0) continue;
+      firstTop = Math.min(firstTop, rect.top);
+      boxes.push({ top: y(rect.top), bottom: y(rect.bottom), el, line: { first: rect.top < firstTop + 2, clientTop: rect.top } });
+    }
   });
+  // Rows and images win over the text inside them when they share a top edge.
+  boxes.sort((a, b) => a.top - b.top || Number(!!a.line) - Number(!!b.line));
 
   const forced = [...root.querySelectorAll<HTMLElement>('[data-page-break]')].map((el) => y(el.getBoundingClientRect().bottom)).sort((a, b) => a - b);
   const total = Math.max(0, ...boxes.map((b) => b.bottom));
 
-  const breaks: number[] = [];
-  let start = 0;
-  while (breaks.length < 500) {
+  const starts = [0];
+  const firsts: (LayoutBox | null)[] = [];
+  while (starts.length < 500) {
+    const start = starts[starts.length - 1];
     const limit = start + pageHeight;
-    const manual = forced.find((f) => f > start + 1 && f <= limit);
-    if (manual !== undefined) {
-      if (manual >= total - 1) break;
-      breaks.push(manual);
-      start = manual;
-      continue;
-    }
-    if (limit >= total) break;
-    let cut = limit;
-    for (let moved = true; moved; ) {
-      moved = false;
-      for (const box of boxes) {
-        // Something taller than a page that starts at the top of it has to be cut anyway.
-        if (box.top < cut && box.bottom > cut && box.top > start + 1) {
-          cut = box.top;
-          moved = true;
+    let cut = forced.find((f) => f > start + 1 && f <= limit);
+    if (cut === undefined) {
+      if (limit >= total) break;
+      cut = limit;
+      for (let moved = true; moved; ) {
+        moved = false;
+        for (const box of boxes) {
+          if (box.top < cut && box.bottom > cut && box.top > start + 1) {
+            cut = box.top;
+            moved = true;
+          }
         }
       }
+      // Still slicing something: it is taller than a page and has to be cut.
+      if (boxes.some((box) => box.top < cut! - 0.5 && box.bottom > cut! + 0.5)) {
+        starts.push(cut);
+        firsts.push(null);
+        continue;
+      }
     }
-    breaks.push(cut);
-    start = cut;
+    const first = boxes.find((box) => box.top >= cut! - 0.5);
+    if (!first) break;
+    starts.push(first.top);
+    firsts.push(first);
   }
-  return { breaks, total };
+  return { starts, firsts, total };
 }

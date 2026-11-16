@@ -18,12 +18,14 @@ import {
   IndentDecrease,
   IndentIncrease,
   Italic,
+  Layers,
   Link2,
   List,
   ListChecks,
   ListOrdered,
   Minus,
   PanelTop,
+  PanelsTopLeft,
   Quote,
   Redo2,
   RemoveFormatting,
@@ -38,11 +40,14 @@ import {
   Table as TableIcon,
   TableCellsMerge,
   TableCellsSplit,
+  Trash2,
   Underline,
   Undo2,
+  WrapText,
 } from 'lucide-react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { indent, insertPageBreak, setLineHeight } from './extensions';
+import { deleteSelectedImage, updateSelectedImage, type WorkspaceImageAttrs } from './WorkspaceImage';
 import { MARGINS, PAPERS, ZOOMS, type Margin, type PageSetup, type Paper, type ViewMode, type Zoom } from './page';
 // Type-only imports register these extensions' commands on the editor's chain.
 import type {} from '@tiptap/extension-subscript';
@@ -70,14 +75,20 @@ const LINE_HEIGHTS = [
   { label: '2,0', value: '2' },
 ];
 
-export type ToolTab = 'home' | 'insert' | 'page' | 'table';
+export type ToolTab = 'home' | 'insert' | 'page' | 'table' | 'image';
 
 const TABS: { id: ToolTab; label: string }[] = [
   { id: 'home', label: 'Inicio' },
   { id: 'insert', label: 'Insertar' },
   { id: 'page', label: 'Página' },
   { id: 'table', label: 'Tabla' },
+  { id: 'image', label: 'Imagen' },
 ];
+
+/** Tabs that only exist while their subject is selected. */
+const CONTEXTUAL: ToolTab[] = ['table', 'image'];
+
+const selectedImage = (editor: Editor) => (editor.isActive('workspaceImage') ? (editor.getAttributes('workspaceImage') as WorkspaceImageAttrs) : null);
 
 export interface ToolbarProps {
   editor: Editor;
@@ -99,24 +110,29 @@ export interface ToolbarProps {
 }
 
 /**
- * Tab strip of the ribbon. "Tabla" only shows while the cursor is inside a table. Undo, redo and
- * search stay at hand on every tab.
+ * Tab strip of the ribbon. "Tabla" only shows while the cursor is inside a table and "Imagen" while
+ * an image is selected (it opens by itself, with everything that can be done to the picture). Undo,
+ * redo and search stay at hand on every tab.
  */
 export function ToolTabs({ editor, tab, onTab, onFind }: Pick<ToolbarProps, 'editor' | 'tab' | 'onTab' | 'onFind'>) {
   const state = useEditorState({
     editor,
-    selector: ({ editor }) => ({ inTable: editor.isActive('table'), canUndo: editor.can().undo(), canRedo: editor.can().redo() }),
+    selector: ({ editor }) => ({ inTable: editor.isActive('table'), inImage: editor.isActive('workspaceImage'), canUndo: editor.can().undo(), canRedo: editor.can().redo() }),
   });
+  const available = (id: ToolTab) => (id === 'table' ? state.inTable : id === 'image' ? state.inImage : true);
 
-  // Leaving the table closes its tab.
+  // Selecting an image opens its tab; leaving the image or the table closes theirs.
+  const hadImage = useRef(false);
   useEffect(() => {
-    if (tab === 'table' && !state.inTable) onTab('home');
-  }, [tab, state.inTable, onTab]);
+    if (state.inImage && !hadImage.current) onTab('image');
+    else if (!available(tab)) onTab(state.inTable && tab === 'image' ? 'table' : 'home');
+    hadImage.current = state.inImage;
+  }, [tab, state.inTable, state.inImage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex min-w-0 items-center gap-1">
       <div role="tablist" aria-label="Grupos de herramientas" className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-        {TABS.filter((t) => t.id !== 'table' || state.inTable).map((t) => (
+        {TABS.filter((t) => available(t.id)).map((t) => (
           <button
             key={t.id}
             type="button"
@@ -126,7 +142,7 @@ export function ToolTabs({ editor, tab, onTab, onFind }: Pick<ToolbarProps, 'edi
             onClick={() => onTab(t.id)}
             className={clsx(
               'h-10 shrink-0 rounded-full px-3 text-sm font-bold transition-colors lg:h-8',
-              tab === t.id ? 'bg-eel text-white' : t.id === 'table' ? 'bg-macaw-light text-macaw-dark' : 'text-wolf hover:bg-polar hover:text-eel',
+              tab === t.id ? 'bg-eel text-white' : CONTEXTUAL.includes(t.id) ? 'bg-macaw-light text-macaw-dark' : 'text-wolf hover:bg-polar hover:text-eel',
             )}
           >
             {t.label}
@@ -174,6 +190,7 @@ export function Tools(props: ToolbarProps) {
         inTable: editor.isActive('table'),
         canMerge: editor.can().mergeCells(),
         canSplit: editor.can().splitCell(),
+        image: selectedImage(editor),
       };
     },
   });
@@ -204,6 +221,37 @@ export function Tools(props: ToolbarProps) {
   }
 
   if (tab === 'page') return <PageTools {...props} />;
+
+  if (tab === 'image') {
+    const image = state.image;
+    if (!image) return null;
+    const set = (change: Partial<WorkspaceImageAttrs>) => updateSelectedImage(editor, change);
+    const widths = [25, 33, 50, 75, 100];
+    return (
+      <>
+        <Tool label="Delante del texto" text="Delante del texto" active={image.wrap === 'front'} onClick={() => set({ wrap: 'front' })}><Layers /></Tool>
+        <Tool label="Cuadrado (el texto la rodea)" text="El texto la rodea" active={image.wrap === 'square'} onClick={() => set({ wrap: 'square' })}><WrapText /></Tool>
+        <Tool label="Arriba y abajo" text="En su propia línea" active={image.wrap === 'topBottom'} onClick={() => set({ wrap: 'topBottom' })}><PanelsTopLeft /></Tool>
+        {image.wrap !== 'front' && (
+          <>
+            <Divider />
+            <Tool label="A la izquierda" active={image.align === 'left'} onClick={() => set({ align: 'left' })}><AlignLeft /></Tool>
+            {image.wrap === 'topBottom' && <Tool label="Centrada" active={image.align === 'center'} onClick={() => set({ align: 'center' })}><AlignCenter /></Tool>}
+            <Tool label="A la derecha" active={image.align === 'right'} onClick={() => set({ align: 'right' })}><AlignRight /></Tool>
+          </>
+        )}
+        <Divider />
+        <Select label="Ancho de la imagen" value={widths.includes(Math.round(image.width)) ? String(Math.round(image.width)) : ''} onChange={(v) => v && set({ width: Number(v) })} className="w-32">
+          <option value="">Ancho: {Math.round(image.width)} %</option>
+          {widths.map((w) => (
+            <option key={w} value={String(w)}>Ancho: {w} %</option>
+          ))}
+        </Select>
+        <Divider />
+        <Tool label="Borrar imagen" text="Borrar" tone="danger" onClick={() => deleteSelectedImage(editor)}><Trash2 /></Tool>
+      </>
+    );
+  }
 
   if (tab === 'table') {
     return (

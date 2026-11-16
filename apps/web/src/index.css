@@ -226,6 +226,7 @@ mark.hit {
 .workspace-doc {
   @apply relative text-base leading-relaxed text-eel outline-none;
   min-height: var(--doc-min, 700px);
+  flex: 1 1 auto;
   font-family: Georgia, 'Times New Roman', serif;
   overflow-wrap: break-word;
 }
@@ -351,12 +352,83 @@ mark.hit {
   display: none;
 }
 
-/* Automatic page guides: where the sheet ends when exported or printed. */
-.page-guide {
-  @apply pointer-events-none absolute z-[4] h-0 border-t border-dashed border-macaw/60;
+/* Page view: real sheets on a desk. The text is one flow; spacers push what starts each page past the gap. */
+.workspace-desk {
+  --desk: color-mix(in srgb, var(--color-swan) 70%, var(--color-polar));
+  background: var(--desk);
 }
-.page-guide > span {
-  @apply absolute right-2 top-1 rounded-full bg-macaw-light px-2 py-0.5 font-sans text-[11px] font-bold leading-none text-macaw-dark;
+.workspace-sheet-paged {
+  box-shadow:
+    0 1px 3px rgb(41 36 68 / 0.2),
+    0 10px 28px rgb(41 36 68 / 0.12);
+}
+.workspace-doc .page-spacer {
+  display: block;
+  margin: 0 !important;
+  pointer-events: none;
+  user-select: none;
+}
+.workspace-doc .page-push {
+  padding-top: var(--page-push);
+}
+/* A pushed table row keeps its top border where the row now starts. */
+.workspace-doc tr.page-push > th,
+.workspace-doc tr.page-push > td {
+  padding-top: calc(0.25rem + var(--page-push));
+  background-image: linear-gradient(var(--color-hare), var(--color-hare));
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: 0 var(--page-push);
+}
+/* Spacers collapse while pages are measured, in the exported copy and on paper. */
+.page-measuring .page-spacer,
+.workspace-exporting .page-spacer {
+  display: none;
+}
+.page-measuring .page-push,
+.workspace-exporting .page-push {
+  padding-top: 0;
+}
+.page-measuring tr.page-push > th,
+.page-measuring tr.page-push > td,
+.workspace-exporting tr.page-push > th,
+.workspace-exporting tr.page-push > td {
+  padding-top: 0.25rem;
+  background-image: none;
+}
+/* What separates two sheets: bottom margin, the desk showing through, top margin. */
+.page-gap {
+  @apply pointer-events-none absolute z-[7] bg-white;
+}
+.page-gap::before {
+  content: '';
+  position: absolute;
+  top: var(--page-margin);
+  bottom: var(--page-margin);
+  left: -40px;
+  right: -40px;
+  background: var(--desk);
+}
+.page-gap::after {
+  content: '';
+  position: absolute;
+  top: var(--page-margin);
+  bottom: var(--page-margin);
+  left: 0;
+  right: 0;
+  box-shadow:
+    inset 0 9px 10px -9px rgb(41 36 68 / 0.3),
+    inset 0 -3px 4px -3px rgb(41 36 68 / 0.22);
+}
+.page-gap > span {
+  @apply absolute inset-x-0 z-[1] flex items-center justify-center font-sans text-[11px] font-bold leading-none text-wolf;
+  top: var(--page-margin);
+  bottom: var(--page-margin);
+}
+
+/* Selected text stands out clearly on the white sheet. */
+.workspace-doc ::selection {
+  background: color-mix(in srgb, var(--color-macaw) 42%, transparent);
 }
 
 /* Tables wider than a phone sheet scroll inside it instead of breaking the page. */
@@ -404,6 +476,10 @@ mark.hit {
   .workspace-doc {
     min-height: 0;
   }
+  /* The sheet column is only as tall as its content: the browser makes the pages. */
+  .workspace-sheet > div {
+    min-height: 0 !important;
+  }
   .workspace-doc .page-break {
     height: 0;
     margin: 0;
@@ -412,6 +488,17 @@ mark.hit {
   }
   .workspace-doc .page-break::after {
     display: none;
+  }
+  .workspace-doc .page-spacer {
+    display: none;
+  }
+  .workspace-doc .page-push {
+    padding-top: 0;
+  }
+  .workspace-doc tr.page-push > th,
+  .workspace-doc tr.page-push > td {
+    padding-top: 0.25rem;
+    background-image: none;
   }
 }
 

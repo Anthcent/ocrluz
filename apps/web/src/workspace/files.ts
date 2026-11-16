@@ -1,4 +1,4 @@
-import { computePageBreaks, pageBox, type PageSetup } from './page';
+import { layoutPages, pageBox, type PageSetup } from './page';
 
 /** CSS px (96 dpi) to PDF points (72 dpi). */
 const PT = 0.75;
@@ -12,6 +12,7 @@ export async function exportPdf(content: HTMLElement, fileName: string, setup: P
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas-pro'), import('jspdf')]);
   const box = pageBox(setup);
   let layout = { breaks: [] as number[], total: 0 };
+  // Pages are laid out again on the copy: the on-screen page gaps do not exist there.
 
   const canvas = await html2canvas(content, {
     scale: 2,
@@ -24,7 +25,9 @@ export async function exportPdf(content: HTMLElement, fileName: string, setup: P
       el.classList.add('workspace-exporting');
       el.style.width = `${box.contentWidth}px`;
       el.style.maxWidth = 'none';
-      layout = computePageBreaks(el, box.contentHeight);
+      el.style.minHeight = '0';
+      const pages = layoutPages(el, box.contentHeight);
+      layout = { breaks: pages.starts.slice(1), total: pages.total };
     },
   });
 

@@ -24,13 +24,14 @@ import { FindReplace } from '../workspace/FindReplace';
 import { LinkDialog } from '../workspace/LinkDialog';
 import { MarqueeSelect } from '../workspace/MarqueeSelect';
 import { MobileDock } from '../workspace/MobileDock';
-import { computePageBreaks, pageBox, readPageSetup, withPageSetup, ZOOMS, type PageSetup, type ViewMode, type Zoom } from '../workspace/page';
+import { PAGE_GAP, pageBox, readPageSetup, withPageSetup, ZOOMS, type PageSetup, type ViewMode, type Zoom } from '../workspace/page';
+import { clearPagination, paginate, Pagination } from '../workspace/pagination';
 import { SearchHighlight } from '../workspace/search';
 import { ToolTabs, Tools, type ToolTab, type ToolbarProps } from '../workspace/Toolbar';
 import { insertImage, WorkspaceImage } from '../workspace/WorkspaceImage';
 
 const AUTOSAVE_DELAY = 1200;
-const VIEW_KEY = 'ocryon.workspace.view';
+const VIEW_KEY = 'ocryon.workspace.view.v2';
 
 type SaveStatus = 'saved' | 'pending' | 'saving' | 'error';
 
@@ -124,7 +125,7 @@ function useSize(ref: RefObject<HTMLElement | null>) {
   return size;
 }
 
-/** How the sheet is shown is a per-device choice: phones start with the text fitted to the screen. */
+/** How the sheet is shown is a per-device choice. It starts as the real sheet, fitted to the width of the screen. */
 function loadView(): { view: ViewMode; zoom: Zoom } {
   try {
     const saved = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null') as { view?: unknown; zoom?: unknown } | null;
@@ -134,7 +135,7 @@ function loadView(): { view: ViewMode; zoom: Zoom } {
   } catch {
     // No stored preference.
   }
-  return { view: window.innerWidth < 640 ? 'flow' : 'page', zoom: 'fit' };
+  return { view: 'page', zoom: 'fit' };
 }
 
 function WorkspaceEditor({ scan }: { scan: Scan }) {
@@ -149,6 +150,7 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
   const [{ view, zoom }, setViewState] = useState(loadView);
 
   const deskRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -159,7 +161,7 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
   const [selecting, setSelecting] = useState(false);
   const [finding, setFinding] = useState(false);
   const [linking, setLinking] = useState(false);
-  const [breaks, setBreaks] = useState<number[]>([]);
+  const [pages, setPages] = useState(1);
 
   /** Image files pasted or dropped on the document are added like picked ones. */
   const takeImage = (files: FileList | undefined | null) => {
@@ -181,6 +183,7 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
       TaskItem.configure({ nested: true }),
       ParagraphFormat,
       PageBreak,
+      Pagination,
       SearchHighlight,
       Table.configure({ resizable: true }),
       TableRow,
@@ -219,31 +222,47 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
   const sheet = useSize(sheetRef);
   const scale = !paged ? 1 : zoom === 'fit' ? (desk.width ? Math.min(1, desk.width / box.width) : 1) : zoom / 100;
 
-  // Page guides: where the document will split when exported or printed.
+  // Page view: the text is split into real sheets, with the margins and the gap between them.
+  const dead = box.margin * 2 + PAGE_GAP;
   useEffect(() => {
     const content = contentRef.current;
-    if (!paged || !editor || !content) {
-      setBreaks([]);
+    if (!editor || !content) return;
+    if (!paged) {
+      clearPagination(editor);
+      setPages(1);
       return;
     }
     let frame = 0;
-    const measure = () => {
+    const run = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const next = computePageBreaks(content, box.contentHeight).breaks.map(Math.round);
-        setBreaks((prev) => (prev.length === next.length && prev.every((b, i) => b === next[i]) ? prev : next));
-      });
+      frame = requestAnimationFrame(() => setPages(paginate(editor, content, box.contentHeight, dead)));
     };
-    measure();
-    editor.on('update', measure);
-    const observer = new ResizeObserver(measure);
+    run();
+    editor.on('update', run);
+    const observer = new ResizeObserver(run);
     observer.observe(content);
+    // Web fonts change the line breaks when they arrive.
+    void document.fonts?.ready.then(run);
     return () => {
       cancelAnimationFrame(frame);
-      editor.off('update', measure);
+      editor.off('update', run);
       observer.disconnect();
     };
-  }, [editor, paged, box.contentHeight, box.contentWidth]);
+  }, [editor, paged, box.contentHeight, box.contentWidth, dead]);
+
+  // Ctrl/Cmd + wheel zooms the sheet instead of the whole browser page.
+  const zoomRef = useRef<(direction: 1 | -1) => void>(() => {});
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      zoomRef.current(e.deltaY < 0 ? 1 : -1);
+    };
+    scroller.addEventListener('wheel', onWheel, { passive: false });
+    return () => scroller.removeEventListener('wheel', onWheel);
+  }, [editor]);
 
   // Ctrl/Cmd + S saves right away; Ctrl/Cmd + F opens find and replace; Ctrl/Cmd + K adds a link.
   useEffect(() => {
@@ -272,7 +291,7 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
   const addImage = async (file: File | undefined) => {
     if (!file) return;
     try {
-      insertImage(editor, await readImageFile(file));
+      await insertImage(editor, await readImageFile(file));
     } catch (err) {
       toast(errorMessage(err), 'error');
     }
@@ -357,8 +376,12 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
   const percent = Math.round(scale * 100);
   const stepZoom = (direction: 1 | -1) => {
     const next = direction > 0 ? ZOOMS.find((z) => z > percent) : [...ZOOMS].reverse().find((z) => z < percent);
-    if (next) changeView({ view, zoom: next });
+    if (next) changeView({ view: 'page', zoom: next });
   };
+  zoomRef.current = stepZoom;
+
+  // Height of the text column: whole pages, plus what separates them.
+  const columnHeight = pages * box.contentHeight + (pages - 1) * dead;
 
   return (
     <div className="workspace-page mx-auto max-w-6xl space-y-3 pb-40 lg:space-y-4 lg:pb-0">
@@ -391,17 +414,21 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
         </p>
       )}
 
-      <div className="workspace-desk overflow-x-auto rounded-[24px] bg-swan/60 px-2 py-4 sm:px-6 sm:py-10">
+      <div ref={scrollerRef} className="workspace-desk overflow-x-auto rounded-[24px] px-2 py-4 sm:px-6 sm:py-8">
         <div ref={deskRef} aria-hidden />
         <div className="workspace-zoom-box mx-auto" style={paged ? { width: box.width * scale, height: (sheet.height || box.height) * scale } : undefined}>
           <div
             ref={sheetRef}
             data-zoom-layer
             data-view={view}
-            className={paged ? 'workspace-sheet bg-white shadow-[0_2px_10px_rgba(41,36,68,0.12)]' : 'workspace-sheet mx-auto w-full max-w-[816px] bg-white px-5 py-8 shadow-[0_2px_10px_rgba(41,36,68,0.12)] sm:p-[72px]'}
+            className={paged ? 'workspace-sheet workspace-sheet-paged bg-white' : 'workspace-sheet mx-auto w-full max-w-[816px] bg-white px-5 py-8 shadow-[0_2px_10px_rgba(41,36,68,0.12)] sm:p-[72px]'}
             style={paged ? { width: box.width, minHeight: box.height, padding: box.margin, transform: `scale(${scale})`, transformOrigin: 'top left' } : undefined}
           >
-            <div ref={contentRef} className="relative isolate bg-white" style={{ ['--doc-min' as string]: paged ? `${box.contentHeight - 72}px` : '55vh' }}>
+            <div
+              ref={contentRef}
+              className="relative isolate flex flex-col bg-white"
+              style={paged ? { minHeight: columnHeight, ['--doc-min' as string]: '0px' } : { ['--doc-min' as string]: '55vh' }}
+            >
               <input
                 value={title}
                 onChange={(e) => {
@@ -413,13 +440,23 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
                 placeholder="Título del documento"
                 className="mb-6 w-full border-0 bg-transparent text-2xl font-black text-eel outline-none placeholder:text-hare sm:text-3xl"
               />
-              <EditorContent editor={editor} />
-              <MarqueeSelect editor={editor} active={selecting} />
-              {breaks.map((top, i) => (
-                <div key={i} data-export-ignore aria-hidden className="page-guide" style={{ top, left: -box.margin, right: -box.margin }}>
-                  <span>Página {i + 2}</span>
-                </div>
-              ))}
+              <EditorContent editor={editor} className="flex min-h-0 flex-1 flex-col" />
+              <MarqueeSelect editor={editor} active={selecting} bleed={paged ? box.margin : 20} />
+              {paged &&
+                Array.from({ length: pages - 1 }, (_, i) => (
+                  // End of a sheet: its bottom margin, the gap, and the top margin of the next one.
+                  <div
+                    key={i}
+                    data-export-ignore
+                    aria-hidden
+                    className="page-gap"
+                    style={{ top: (i + 1) * box.contentHeight + i * dead, height: dead, left: -box.margin, right: -box.margin, ['--page-margin' as string]: `${box.margin}px` }}
+                  >
+                    <span>
+                      Página {i + 2} de {pages}
+                    </span>
+                  </div>
+                ))}
             </div>
           </div>
         </div>
@@ -427,7 +464,7 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
 
       <div className="workspace-chrome flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-1 text-xs font-semibold text-wolf">
         <span data-testid="workspace-status">
-          {paged && `${formatNumber(breaks.length + 1)} ${breaks.length ? 'páginas' : 'página'} · `}
+          {paged && `${formatNumber(pages)} ${pages > 1 ? 'páginas' : 'página'} · `}
           {formatNumber(words)} palabras · {formatNumber(characters)} caracteres
         </span>
         {paged && (
