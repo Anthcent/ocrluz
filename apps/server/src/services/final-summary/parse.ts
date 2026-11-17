@@ -32,7 +32,7 @@ const span = (from: string, to = from) => ({ start: COLUMN_START[colIndex(from)]
 const center = (s: { start: number; end: number }) => (s.start + s.end) / 2;
 
 type StudentField = Exclude<keyof FinalSummaryStudent, 'grades'>;
-type Field = 'number' | StudentField | `g${number}`;
+export type Field = 'number' | StudentField | `g${number}`;
 
 const GRADE_SPANS = [span('AS', 'AT'), span('AU', 'AV'), span('AW', 'AX'), span('AY', 'AZ'), span('BA', 'BB'), span('BC', 'BD'), span('BE', 'BF'), span('BG'), span('BH'), span('BI')];
 const SPANS = {
@@ -54,7 +54,7 @@ const FIELDS: { field: Field; start: number; end: number }[] = [
 const TABLE_WIDTH = GRADE_SPANS[AREA_COUNT - 1].end;
 
 /** Column of each area code on the form (BAT/BIO and OV/OC share a column depending on the year). */
-const AREA_INDEX: Record<string, number> = { LL: 0, ID: 1, MA: 2, EF: 3, BAT: 4, BIO: 4, FI: 5, QU: 6, GHSN: 7, ITP: 8, OV: 9, OC: 9 };
+export const AREA_INDEX: Record<string, number> = { LL: 0, ID: 1, MA: 2, EF: 3, BAT: 4, BIO: 4, FI: 5, QU: 6, GHSN: 7, ITP: 8, OV: 9, OC: 9 };
 
 /** Header words that appear once, with the template column they are centred on. */
 const HEADER_ANCHORS: Record<string, number> = {
@@ -220,7 +220,7 @@ const PLACES = [
 ];
 
 /** Snaps a place to a close known spelling: the same page's majority spelling first, then the list. */
-function snapPlaces(students: FinalSummaryStudent[], extra: string[]) {
+export function snapPlaces(students: FinalSummaryStudent[], extra: string[]) {
   const counts = new Map<string, number>();
   for (const s of students) if (s.birthPlace) counts.set(s.birthPlace, (counts.get(s.birthPlace) ?? 0) + 1);
   const known = new Set([...PLACES, ...extra.map((p) => deaccent(p).toUpperCase()).filter(Boolean)]);
@@ -240,7 +240,7 @@ function snapPlaces(students: FinalSummaryStudent[], extra: string[]) {
   }
 }
 
-function buildStudent(cells: Partial<Record<Field, string>>, letterArea: boolean): FinalSummaryStudent | null {
+export function buildStudent(cells: Partial<Record<Field, string>>, letterArea: boolean): FinalSummaryStudent | null {
   const s = emptyStudent();
   s.id = cleanId(cells.id ?? '');
   s.lastNames = restoreEnye(cleanName(cells.lastNames ?? ''));

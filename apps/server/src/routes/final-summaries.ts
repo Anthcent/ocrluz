@@ -5,6 +5,7 @@ import type { AppContext } from '../context.js';
 import { HttpError, notFound } from '../lib/http-error.js';
 import { currentUser } from '../middleware/auth.js';
 import { COURSE_YEARS, emptySummary, finalSummarySchema, summaryTitle, type FinalSummary } from '../services/final-summary/model.js';
+import { geminiReadFinalSummary } from '../services/final-summary/gemini.js';
 import { parseFinalSummaryPage } from '../services/final-summary/parse.js';
 import { buildFinalSummaryXlsx, finalSummaryFileName } from '../services/final-summary/xlsx.js';
 import { languageCodes } from '../services/languages.js';
@@ -81,10 +82,17 @@ export function finalSummariesRouter(ctx: AppContext) {
       if (!req.file) throw new HttpError(400, 'Falta la imagen', 'upload');
       const settings = await loadSettingsRow(ctx, userId);
       const language = z.enum(languageCodes).catch(settings.ocr_language as (typeof languageCodes)[number]).parse(req.body?.language);
+      // OCR en la nube (palabras ubicadas por geometría) o IA (Gemini lee la tabla ya estructurada).
+      const engine = z.enum(['ocrspace', 'gemini']).catch('ocrspace').parse(req.body?.engine);
       const started = Date.now();
+      if (engine === 'gemini') {
+        const { summary, warnings } = await geminiReadFinalSummary(req.file.buffer, req.file.mimetype, await getApiKey(ctx, userId, 'gemini'), settings.gemini_model);
+        res.json({ summary: await withDefaults(userId, summary), warnings, engine, words: 0, ms: Date.now() - started });
+        return;
+      }
       const { text, words } = await ocrSpaceWithLayout(req.file.buffer, req.file.mimetype, await getApiKey(ctx, userId, 'ocrspace'), language);
       const { summary, warnings } = parseFinalSummaryPage(text, words);
-      res.json({ summary: await withDefaults(userId, summary), warnings, words: words.length, ms: Date.now() - started });
+      res.json({ summary: await withDefaults(userId, summary), warnings, engine, words: words.length, ms: Date.now() - started });
     },
   );
 

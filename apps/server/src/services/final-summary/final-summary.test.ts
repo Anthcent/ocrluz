@@ -343,3 +343,58 @@ describe('finalSummarySchema', () => {
     expect(clean.students[0].grades).toEqual(['16', '9', 'X2', '18', '12', '10', '11', '14', '16', 'A']);
   });
 });
+
+describe('POST /api/final-summaries/scan with the AI', () => {
+  let close: (() => Promise<void>) | undefined;
+  afterAll(async () => {
+    vi.restoreAllMocks();
+    await close?.();
+  });
+
+  it('sends the photo to Gemini with a schema and cleans what it returns like the OCR path', async () => {
+    const db = await openDatabase({});
+    close = () => db.close();
+    const app = createApp({ db, cipher: createCipher('test-secret-key-123456'), jwtSecret: 'test-jwt-secret-123456', secureCookies: false, fallbackKeys: { ocrspace: '', gemini: 'server-key' } });
+    const agent = request.agent(app);
+    await agent.post('/api/auth/register').set('X-Requested-With', 'ocryon').send({ name: 'Ana', email: 'ana@example.com', password: 'secreto123' }).expect(201);
+
+    // What the model answers: ids without prefix, a stray «O» for 0, lower case, slashes in dates.
+    const answer = {
+      evaluationType: 'FINAL',
+      schoolYear: '2025 - 2026',
+      course: { year: 'PRIMERO', section: 'd', plan: 'EDUCACION MEDIA GENERAL', planCode: '31059' },
+      areas: ['LL', 'ID', 'MA', 'EF', 'BAT', 'FI', 'QU', 'GHSN', 'ITP', 'OV'].map((code) => ({ code, teacher: '', teacherId: '' })),
+      students: STUDENTS.map((s, i) => ({
+        ...s,
+        number: String(i + 1).padStart(2, '0'),
+        id: i === 0 ? '3OOOOOO1' : s.id,
+        lastNames: s.lastNames.toLowerCase(),
+        grades: i === 1 ? [...s.grades.slice(0, 9), 'a'] : s.grades,
+      })),
+      remissionDate: '31/07/2026',
+    };
+    const realFetch = globalThis.fetch;
+    const sent: any[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      if (!String(url).includes('generateContent')) return realFetch(url, init);
+      sent.push(JSON.parse(String(init!.body)));
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(answer) }] }, finishReason: 'STOP' }] }), { status: 200 });
+    });
+
+    const res = await agent
+      .post('/api/final-summaries/scan')
+      .set('X-Requested-With', 'ocryon')
+      .field('engine', 'gemini')
+      .attach('image', Buffer.from([0xff, 0xd8, 0xff, 0xd9]), { filename: 'hoja.jpg', contentType: 'image/jpeg' })
+      .expect(200);
+
+    expect(res.body.engine).toBe('gemini');
+    expect(sent[0].generationConfig.responseSchema.properties.students.type).toBe('ARRAY');
+    expect(sent[0].contents[0].parts[0].inline_data.mime_type).toBe('image/jpeg');
+    expect(res.body.summary.students).toEqual(STUDENTS);
+    expect(res.body.summary.course).toMatchObject({ year: 'PRIMERO', section: 'D' });
+    expect(res.body.summary.schoolYear).toBe('2025-2026');
+    expect(res.body.summary.remissionDate).toBe('31-07-2026');
+    expect(res.body.warnings).toEqual([]);
+  }, 60_000);
+});

@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { AlertTriangle, Camera, CheckCircle2, ChevronDown, Download, FilePlus2, FileSpreadsheet, ImagePlus, PenLine, Save, ScanText, Settings2, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, ChevronDown, Cpu, Download, FilePlus2, FileSpreadsheet, ImagePlus, PenLine, Save, ScanText, Settings2, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
@@ -10,11 +10,24 @@ import { SummarySheet } from '../final-summary/SummarySheet';
 import { validateSummary, type Issue } from '../final-summary/validation';
 import { api } from '../lib/api';
 import { prepareFormImage } from '../final-summary/prepare';
-import { CLOUD_OCR } from '../lib/constants';
+import { CLOUD_OCR, LOCAL_OCR } from '../lib/constants';
 import { prepareImage } from '../lib/image';
 import { tesseractRecognizeLayout } from '../lib/tesseract';
 import { useSettings } from '../settings/SettingsContext';
-import type { FinalSummary } from '../lib/types';
+import type { Engine, FinalSummary } from '../lib/types';
+
+/** How each engine is named on this screen. */
+const ENGINE_NAMES: Record<Engine, string> = { ocrspace: CLOUD_OCR, gemini: 'IA (Gemini)', tesseract: LOCAL_OCR };
+const ENGINE_KEY = 'ocryon.final-summary.engine';
+
+function storedEngine(): Engine | null {
+  try {
+    const value = localStorage.getItem(ENGINE_KEY);
+    return value === 'ocrspace' || value === 'gemini' || value === 'tesseract' ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 interface Photo {
   url: string;
@@ -57,9 +70,25 @@ export function FinalSummaryEditorPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [viewing, setViewing] = useState<Photo | null>(null);
   const [started, setStarted] = useState(existingId !== null);
-  const [lastEngine, setLastEngine] = useState<{ engine: 'ocrspace' | 'tesseract'; reason: string } | null>(null);
+  const [lastEngine, setLastEngine] = useState<{ engine: Engine; reason: string } | null>(null);
   const { settings } = useSettings();
-  const ocrSpaceReady = settings.keys.ocrspace.configured && navigator.onLine;
+  // The engine chosen on this device wins; until then, the default engine from Ajustes.
+  const [picked, setPicked] = useState<Engine | null>(storedEngine);
+  const engine: Engine = picked ?? settings.defaultEngine;
+  const online = navigator.onLine;
+  const ready: Record<Engine, boolean> = {
+    ocrspace: settings.keys.ocrspace.configured && online,
+    gemini: settings.keys.gemini.configured && online,
+    tesseract: true,
+  };
+  const pickEngine = (next: Engine) => {
+    setPicked(next);
+    try {
+      localStorage.setItem(ENGINE_KEY, next);
+    } catch {
+      // Private mode: the choice lasts for this visit.
+    }
+  };
   const cameraInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const issues = useMemo(() => (summary ? validateSummary(summary) : []), [summary]);
@@ -102,41 +131,52 @@ export function FinalSummaryEditorPage() {
       await new Promise((resolve) => setTimeout(resolve, 30));
       const image = await prepareFormImage(file);
 
-      // OCR.space first when it has a key and there is a connection; on-device Tesseract otherwise or if it fails.
+      // The chosen engine first; if it is not available or fails, the other online engine, and the device last.
+      const order = ([engine, engine === 'gemini' ? 'ocrspace' : 'gemini', 'tesseract'] as Engine[]).filter((e, i, list) => list.indexOf(e) === i);
       let result: { summary: FinalSummary; warnings: string[] } | null = null;
-      let engine: 'ocrspace' | 'tesseract' = 'tesseract';
-      let fallbackReason = ocrSpaceReady ? '' : `el ${CLOUD_OCR} no está configurado`;
-      if (ocrSpaceReady) {
+      let used: Engine = 'tesseract';
+      const reasons: string[] = [];
+      for (const candidate of order) {
+        if (candidate === 'tesseract') break;
+        if (!ready[candidate]) {
+          if (candidate === engine) reasons.push(`${ENGINE_NAMES[candidate]} no está ${online ? 'configurado' : 'disponible sin conexión'}`);
+          continue;
+        }
+        const name = ENGINE_NAMES[candidate];
+        const ai = candidate === 'gemini';
         try {
           let current = 0.08;
-          result = await api.finalSummaries.scan(image, (fraction) => {
+          // The AI reads the photo as it is (colour, with the grid); the cloud OCR gets the cleaned version.
+          result = await api.finalSummaries.scan(ai ? preview : image, candidate, (fraction) => {
             current = 0.08 + fraction * 0.32;
-            setScan({ progress: current, label: `Subiendo la foto al ${CLOUD_OCR}…` });
+            setScan({ progress: current, label: ai ? 'Subiendo la foto a la IA…' : `Subiendo la foto al ${name}…` });
             if (fraction >= 1 && !timer) {
               timer = setInterval(() => {
-                current += (0.95 - current) * 0.05;
-                setScan({ progress: current, label: `El ${CLOUD_OCR} está leyendo la tabla…` });
+                current += (0.95 - current) * (ai ? 0.03 : 0.05);
+                setScan({ progress: current, label: ai ? 'La IA está leyendo la tabla…' : `El ${name} está leyendo la tabla…` });
               }, 200);
             }
           });
-          engine = 'ocrspace';
+          used = candidate;
+          break;
         } catch (err) {
-          // Without a connection there is nothing to retry online; other failures fall back too, with the reason.
-          fallbackReason = `el ${CLOUD_OCR} falló: ${errorMessage(err)}`;
+          reasons.push(`${name} falló: ${errorMessage(err)}`);
         } finally {
           clearInterval(timer);
           timer = undefined;
         }
       }
       if (!result) {
-        setScan({ progress: 0.1, label: 'Leyendo la tabla con el OCR local…' });
+        setScan({ progress: 0.1, label: `Leyendo la tabla con el ${LOCAL_OCR}…` });
         const read = await tesseractRecognizeLayout(image, settings.ocrLanguage, (value, label) =>
           setScan({ progress: 0.1 + value * 0.8, label: `${label.replace('…', '')} en el dispositivo…` }),
         );
         setScan({ progress: 0.93, label: 'Ubicando los datos en el formato…' });
         result = await api.finalSummaries.parse(read.text, read.words);
       }
-      setLastEngine({ engine, reason: fallbackReason });
+      const fallbackReason = used === engine ? '' : reasons.join('; ');
+      const engineUsed = used;
+      setLastEngine({ engine: engineUsed, reason: fallbackReason });
       const url = URL.createObjectURL(preview);
       photoUrls.current.push(url);
       setPhotos((list) => [...list, { url, name: `Página ${list.length + 1}` }]);
@@ -145,7 +185,7 @@ export function FinalSummaryEditorPage() {
       setWarnings(result.warnings);
       setStarted(true);
       const added = merged.students.length - summary.students.length;
-      const via = engine === 'ocrspace' ? `con el ${CLOUD_OCR}` : 'con el OCR local';
+      const via = engineUsed === 'gemini' ? 'con la IA' : `con el ${ENGINE_NAMES[engineUsed]}`;
       toast(
         added > 0 ? `Se leyeron ${added} ${added === 1 ? 'estudiante' : 'estudiantes'} ${via}. Revisa los datos.` : `No se encontraron estudiantes nuevos en la foto (${via})`,
         added > 0 ? 'success' : 'error',
@@ -257,7 +297,7 @@ export function FinalSummaryEditorPage() {
                 <span className="font-bold">Subir imagen</span>
               </button>
             </div>
-            <EngineNotice ready={ocrSpaceReady} configured={settings.keys.ocrspace.configured} />
+            <EnginePicker engine={engine} ready={ready} online={online} onPick={pickEngine} />
             <div className="rounded-2xl bg-white p-5 shadow-surface ring-1 ring-swan">
               <p className="font-bold text-eel">Para que se lea bien</p>
               <ul className="mt-2 space-y-1.5 text-sm text-wolf">
@@ -284,6 +324,7 @@ export function FinalSummaryEditorPage() {
         subtitle={id ? 'Revisa y corrige las celdas: los totales se recalculan solos.' : 'Revisa lo leído antes de guardar. Las celdas en amarillo están vacías o no son una nota válida.'}
         actions={
           <div className="flex flex-wrap gap-2">
+            <EngineSelect engine={engine} ready={ready} onPick={pickEngine} disabled={!!scan} />
             <Button variant="ghost" icon={<ImagePlus className="size-5" />} onClick={() => cameraInput.current?.click()} disabled={!!scan}>
               Agregar página
             </Button>
@@ -315,9 +356,9 @@ export function FinalSummaryEditorPage() {
       )}
 
       {lastEngine && (
-        <p className={clsx('mb-3 flex items-start gap-2 text-sm font-semibold', lastEngine.engine === 'ocrspace' ? 'text-feather-dark' : 'text-bee-dark')}>
-          <ScanText className="mt-0.5 size-4 shrink-0" />
-          {lastEngine.engine === 'ocrspace' ? `Leído con el ${CLOUD_OCR}.` : `Leído con el OCR local${lastEngine.reason ? ` (${lastEngine.reason})` : ''}.`}
+        <p className={clsx('mb-3 flex items-start gap-2 text-sm font-semibold', lastEngine.reason ? 'text-bee-dark' : 'text-feather-dark')}>
+          {lastEngine.engine === 'gemini' ? <Sparkles className="mt-0.5 size-4 shrink-0" /> : <ScanText className="mt-0.5 size-4 shrink-0" />}
+          {`Leído con ${lastEngine.engine === 'gemini' ? 'la IA (Gemini)' : `el ${ENGINE_NAMES[lastEngine.engine]}`}${lastEngine.reason ? ` (${lastEngine.reason})` : ''}.`}
         </p>
       )}
 
@@ -396,27 +437,72 @@ function IssuesPanel({ issues }: { issues: Issue[] }) {
   );
 }
 
-/** Which engine the next photo will go through: OCR.space when it is set up, the device otherwise. */
-function EngineNotice({ ready, configured }: { ready: boolean; configured: boolean }) {
-  if (ready) {
-    return (
-      <p className="flex items-start gap-2 rounded-2xl bg-feather-light p-4 text-sm font-semibold text-feather-dark">
-        <ScanText className="mt-0.5 size-4 shrink-0" /> Se leerá con el {CLOUD_OCR}. Si no responde, se usará el OCR local de tu dispositivo.
-      </p>
-    );
-  }
+const ENGINE_OPTIONS: { engine: Engine; icon: typeof ScanText; hint: string }[] = [
+  { engine: 'gemini', icon: Sparkles, hint: 'La IA lee la tabla completa. La más precisa con fotos difíciles o letra a mano.' },
+  { engine: 'ocrspace', icon: ScanText, hint: 'Rápido. Ubica cada palabra en su columna del formato.' },
+  { engine: 'tesseract', icon: Cpu, hint: 'En tu dispositivo, sin internet. Más lento y menos preciso.' },
+];
+
+/** Which engine reads the photos: AI, cloud OCR or on-device OCR. Engines without a key say so and link to Ajustes. */
+function EnginePicker({ engine, ready, online, onPick }: { engine: Engine; ready: Record<Engine, boolean>; online: boolean; onPick: (engine: Engine) => void }) {
+  const missing = ENGINE_OPTIONS.some((o) => o.engine !== 'tesseract' && !ready[o.engine]);
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-bee-light p-4 text-sm font-semibold text-bee-dark">
-      <ScanText className="size-4 shrink-0" />
-      <span className="min-w-0 flex-1">
-        {configured ? 'Sin conexión: ' : `El ${CLOUD_OCR} no está activo: `}
-        se leerá con el OCR local de tu dispositivo, que es más lento y menos preciso.
-      </span>
-      {!configured && (
-        <Link to="/ajustes" className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-eel hover:bg-polar">
-          <Settings2 className="size-3.5" /> Activar {CLOUD_OCR}
+    <div className="rounded-2xl bg-white p-4 shadow-surface ring-1 ring-swan">
+      <p className="font-bold text-eel">¿Con qué se lee la foto?</p>
+      <div role="radiogroup" aria-label="Motor de lectura" className="mt-3 grid gap-2 sm:grid-cols-3">
+        {ENGINE_OPTIONS.map(({ engine: option, icon: Icon, hint }) => {
+          const selected = engine === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => onPick(option)}
+              className={clsx(
+                'flex min-h-11 flex-col items-start gap-1 rounded-xl p-3 text-left transition-colors',
+                selected ? 'bg-eel text-white' : 'bg-polar text-eel hover:bg-polar-hover',
+              )}
+            >
+              <span className="flex items-center gap-2 text-sm font-bold">
+                <Icon className="size-4 shrink-0" /> {ENGINE_NAMES[option]}
+              </span>
+              <span className={clsx('text-xs font-semibold', selected ? 'text-white/75' : 'text-wolf')}>{hint}</span>
+              {!ready[option] && <span className={clsx('text-xs font-bold', selected ? 'text-bee' : 'text-bee-dark')}>{online ? 'Falta la API key' : 'Sin conexión'}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {!ready[engine] && (
+        <p className="mt-3 text-sm font-semibold text-bee-dark">{ENGINE_NAMES[engine]} no está disponible ahora: se usará el siguiente motor que sí lo esté.</p>
+      )}
+      {missing && online && (
+        <Link to="/ajustes" className="mt-3 inline-flex items-center gap-1 rounded-full bg-polar px-3 py-1.5 text-xs font-bold text-eel hover:bg-polar-hover">
+          <Settings2 className="size-3.5" /> Configurar API keys en Ajustes
         </Link>
       )}
     </div>
+  );
+}
+
+/** Compact version for the editor, to read the next page with another engine. */
+function EngineSelect({ engine, ready, onPick, disabled }: { engine: Engine; ready: Record<Engine, boolean>; onPick: (engine: Engine) => void; disabled?: boolean }) {
+  return (
+    <label className="inline-flex h-11 items-center gap-2 rounded-full bg-white pl-3 pr-1 text-sm font-bold text-eel shadow-[inset_0_0_0_1px_#dde0e4]">
+      <span className="text-wolf">Leer con</span>
+      <select
+        aria-label="Motor de lectura"
+        value={engine}
+        disabled={disabled}
+        onChange={(e) => onPick(e.target.value as Engine)}
+        className="h-9 rounded-full bg-polar px-2 font-bold text-eel outline-none focus-visible:ring-4 focus-visible:ring-macaw/35"
+      >
+        {ENGINE_OPTIONS.map(({ engine: option }) => (
+          <option key={option} value={option}>
+            {ENGINE_NAMES[option] + (ready[option] ? '' : ' (no disponible)')}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

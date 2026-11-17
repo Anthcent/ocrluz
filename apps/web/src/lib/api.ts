@@ -162,11 +162,12 @@ export const api = {
   finalSummaries: {
     list: () => request<{ summaries: FinalSummaryListItem[] }>('/final-summaries'),
     blank: (year: string) => request<{ summary: FinalSummary }>(`/final-summaries/new${qs({ year })}`),
-    /** Reads one photographed page; `onUpload` reports the image upload (0 to 1). */
-    scan: (image: Blob, onUpload?: (fraction: number) => void) => {
+    /** Reads one photographed page with the cloud OCR or the AI; `onUpload` reports the image upload (0 to 1). */
+    scan: (image: Blob, engine: 'ocrspace' | 'gemini', onUpload?: (fraction: number) => void) => {
       const form = new FormData();
+      form.append('engine', engine);
       form.append('image', image, 'resumen.jpg');
-      return uploadWithProgress<{ summary: FinalSummary; warnings: string[]; words: number; ms: number }>('/final-summaries/scan', form, onUpload);
+      return uploadWithProgress<{ summary: FinalSummary; warnings: string[]; engine: 'ocrspace' | 'gemini'; words: number; ms: number }>('/final-summaries/scan', form, onUpload);
     },
     /** Parses a page already read on the device (word boxes from Tesseract). */
     parse: (text: string, words: { text: string; left: number; top: number; width: number; height: number }[]) =>
