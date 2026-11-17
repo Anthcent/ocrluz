@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { AlertTriangle, Camera, CheckCircle2, ChevronDown, Cpu, Download, FilePlus2, FileSpreadsheet, ImagePlus, PenLine, Save, ScanText, Settings2, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, ChevronDown, Cpu, Download, FilePlus2, FileSpreadsheet, ImagePlus, Info, PenLine, Save, ScanText, Settings2, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { errorMessage, useFeedback } from '../components/feedback';
@@ -382,7 +382,10 @@ export function FinalSummaryEditorPage() {
       {lastEngine && (
         <p className={clsx('mb-3 flex items-start gap-2 text-sm font-semibold', lastEngine.reason ? 'text-bee-dark' : 'text-feather-dark')}>
           {lastEngine.engine === 'gemini' ? <Sparkles className="mt-0.5 size-4 shrink-0" /> : <ScanText className="mt-0.5 size-4 shrink-0" />}
-          {`Leído con ${lastEngine.engine === 'gemini' ? 'la IA (Gemini)' : `el ${ENGINE_NAMES[lastEngine.engine]}`}${lastEngine.reason ? ` (${lastEngine.reason})` : ''}.`}
+          <span>
+            {`Leído con ${lastEngine.engine === 'gemini' ? 'la IA (Gemini)' : `el ${ENGINE_NAMES[lastEngine.engine]}`}${lastEngine.reason ? ` (${lastEngine.reason})` : ''}.`}
+            {lastEngine.engine === 'gemini' && <span className="font-medium text-wolf"> La IA puede cometer errores: compara las notas y cédulas con la foto.</span>}
+          </span>
         </p>
       )}
 
@@ -502,6 +505,11 @@ function EnginePicker({ engine, ready, online, onPick }: { engine: Engine; ready
           );
         })}
       </div>
+      {engine === 'gemini' && (
+        <p className="mt-3 flex items-start gap-1.5 text-xs font-medium text-wolf">
+          <Info className="mt-px size-3.5 shrink-0" /> La IA puede cometer errores. Revisa los datos con la foto antes de guardar.
+        </p>
+      )}
       {!ready[engine] && (
         <p className="mt-3 text-sm font-semibold text-bee-dark">
           {ready.gemini || ready.ocrspace ? `${ENGINE_NAMES[engine]} no tiene API key: se usará el otro motor.` : 'Configura al menos una API key para poder leer la foto.'}
