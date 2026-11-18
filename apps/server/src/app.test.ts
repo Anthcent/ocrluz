@@ -440,6 +440,8 @@ describe('administración', () => {
       ['get', '/api/admin/scans/1'],
       ['get', '/api/admin/audit'],
       ['patch', `/api/admin/users/${id}/role`],
+      ['post', `/api/admin/users/${id}/deactivate`],
+      ['post', `/api/admin/users/${id}/reactivate`],
       ['delete', `/api/admin/users/${id}`],
       ['post', '/api/admin/admins'],
     ] as const;
@@ -760,6 +762,259 @@ describe('administración', () => {
       }
       expect(await db.one('SELECT COUNT(*) AS n FROM admin_audit_log')).toEqual({ n: 1 });
     });
+  });
+});
+
+describe('operadores, roles y desactivación', () => {
+  type Session = ReturnType<typeof setup> & { id: number };
+  const H = { 'X-Requested-With': 'ocryon' };
+
+  /** Registra una cuenta y, si hace falta, le asigna el rol directamente en la base. */
+  async function account(email: string, role: 'user' | 'operator' | 'admin' = 'user'): Promise<Session> {
+    const s = setup();
+    const { body } = await s.post('/api/auth/register', { name: email.split('@')[0], email, password: 'secreto123' }).expect(201);
+    if (role !== 'user') await db.run('UPDATE users SET role = ? WHERE id = ?', [role, body.user.id]);
+    return { ...s, id: body.user.id as number };
+  }
+
+  const deactivate = (s: ReturnType<typeof setup>, id: number, body: object = {}) => s.post(`/api/admin/users/${id}/deactivate`, body);
+  const reactivate = (s: ReturnType<typeof setup>, id: number) => s.post(`/api/admin/users/${id}/reactivate`);
+  const setRole = (s: ReturnType<typeof setup>, id: number, role: string) => s.agent.patch(`/api/admin/users/${id}/role`).set(H).send({ role });
+  const auditRows = () =>
+    db.query('SELECT action, actor_email AS "actorEmail", target_user_id AS "targetUserId", details FROM admin_audit_log ORDER BY id');
+
+  it('el operador solo ve el listado parcial de usuarios; el resto del panel le responde 403', async () => {
+    const op = await account('op@example.com', 'operator');
+    const ana = await account('ana@example.com');
+    await account('adm@example.com', 'admin');
+    await account('op2@example.com', 'operator');
+    const saved = await ana.post('/api/scans', { newGroup: { title: 'Carpeta reservada' }, items: [{ title: 'Título reservado', text: 'texto reservado', engine: 'manual' }] }).expect(201);
+    const scanId = saved.body.ids[0];
+
+    const denied = [
+      ['get', '/api/admin/stats'],
+      ['get', '/api/admin/audit'],
+      ['get', '/api/admin/scans'],
+      ['get', `/api/admin/scans/${scanId}`],
+      ['get', `/api/admin/users/${ana.id}`],
+      ['get', `/api/admin/users/${ana.id}/scans`],
+      ['patch', `/api/admin/users/${ana.id}/role`],
+      ['delete', `/api/admin/users/${ana.id}`],
+      ['post', '/api/admin/admins'],
+    ] as const;
+    for (const [method, url] of denied) {
+      const res = await op.agent[method](url).set(H).send({ role: 'operator', name: 'Otro', email: 'otro@example.com', password: 'secreto123' });
+      expect(res.status, `${method} ${url}`).toBe(403);
+      expect(res.body.code).toBe('forbidden');
+    }
+
+    const list = (await op.agent.get('/api/admin/users').expect(200)).body;
+    // Solo cuentas de usuario normal, y solo las columnas parciales.
+    expect(list).toMatchObject({ total: 1, page: 1, pageSize: 20 });
+    expect(list.users).toEqual([
+      {
+        id: ana.id,
+        name: 'ana',
+        email: 'ana@example.com',
+        createdAt: expect.stringMatching(/Z$/),
+        lastLoginAt: expect.stringMatching(/Z$/),
+        disabledAt: null,
+        scanCount: 1,
+        lastScanAt: expect.stringMatching(/Z$/),
+      },
+    ]);
+    expect(JSON.stringify(list)).not.toMatch(/reservad|wordCount|"role"|preview|text/);
+    expect((await op.agent.get('/api/admin/users').query({ role: 'admin' }).expect(200)).body.total).toBe(0);
+    expect(await db.one('SELECT role FROM users WHERE id = ?', [ana.id])).toEqual({ role: 'user' });
+    expect(await auditRows()).toEqual([]);
+  });
+
+  it('el operador desactiva y reactiva usuarios normales, pero no a operadores, administradores, a sí mismo ni al superadministrador', async () => {
+    const op = await account('op@example.com', 'operator');
+    const ana = await account('ana@example.com');
+    const op2 = await account('op2@example.com', 'operator');
+    const adm = await account('adm@example.com', 'admin');
+    const sa = await superadminSession(op.app);
+    const saId = (await sa.agent.get('/api/auth/me')).body.user.id;
+
+    const off = await deactivate(op, ana.id, { reason: 'Cuenta duplicada' }).expect(200);
+    expect(off.body.user).toMatchObject({ id: ana.id, disabledAt: expect.stringMatching(/Z$/) });
+    expect(off.body.user).not.toHaveProperty('role');
+    // Repetir no cambia nada ni se vuelve a registrar.
+    await deactivate(op, ana.id).expect(200);
+
+    for (const target of [op2.id, adm.id]) {
+      expect((await deactivate(op, target).expect(403)).body.code).toBe('forbidden');
+      expect((await reactivate(op, target).expect(403)).body.code).toBe('forbidden');
+    }
+    expect((await deactivate(op, op.id).expect(409)).body.code).toBe('self_action');
+    for (const s of [op, adm, sa]) {
+      expect((await deactivate(s, saId).expect(403)).body.code).toBe('superadmin_protected');
+    }
+    expect((await deactivate(adm, adm.id).expect(409)).body.code).toBe('self_action');
+    await deactivate(op, 9999).expect(404);
+    expect((await deactivate(op, ana.id, { reason: 'x'.repeat(501) })).status).toBe(400);
+
+    const on = await reactivate(op, ana.id).expect(200);
+    expect(on.body.user.disabledAt).toBeNull();
+    expect(await db.one('SELECT disabled_by AS "by", disabled_reason AS reason FROM users WHERE id = ?', [ana.id])).toEqual({ by: null, reason: null });
+
+    expect(await auditRows()).toEqual([
+      { action: 'deactivate_user', actorEmail: 'op@example.com', targetUserId: ana.id, details: { role: 'user', reason: 'Cuenta duplicada' } },
+      { action: 'reactivate_user', actorEmail: 'op@example.com', targetUserId: ana.id, details: { role: 'user' } },
+    ]);
+    expect(await db.one(`SELECT COUNT(*) AS n FROM users WHERE disabled_at IS NOT NULL`)).toEqual({ n: 0 });
+  });
+
+  it('el administrador desactiva operadores pero no administradores; el superadministrador sí', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const op = await account('op@example.com', 'operator');
+    const adm2 = await account('adm2@example.com', 'admin');
+    const sa = await superadminSession(adm.app);
+
+    expect((await deactivate(adm, op.id).expect(200)).body.user).toMatchObject({ role: 'operator', disabledAt: expect.any(String), disabledByEmail: 'adm@example.com' });
+    expect((await deactivate(adm, adm2.id).expect(403)).body.code).toBe('forbidden');
+    await deactivate(sa, adm2.id, { reason: 'Baja temporal' }).expect(200);
+    await adm2.agent.get('/api/admin/users').expect(401);
+    await reactivate(sa, adm2.id).expect(200);
+    await adm2.post('/api/auth/login', { email: 'adm2@example.com', password: 'secreto123' }).expect(200);
+    await adm2.agent.get('/api/admin/users').expect(200);
+  });
+
+  it('el administrador asigna el rol de operador pero no el de administrador; el superadministrador asigna todos', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const ana = await account('ana@example.com');
+    const adm2 = await account('adm2@example.com', 'admin');
+    const sa = await superadminSession(adm.app);
+
+    expect((await setRole(adm, ana.id, 'operator').expect(200)).body.user.role).toBe('operator');
+    expect((await ana.agent.get('/api/auth/me')).body.user.role).toBe('operator');
+    // Ya operadora, entra al listado parcial.
+    await ana.agent.get('/api/admin/users').expect(200);
+    await setRole(adm, ana.id, 'user').expect(200);
+    expect((await setRole(adm, ana.id, 'admin').expect(403)).body.code).toBe('forbidden');
+    expect((await setRole(adm, adm2.id, 'operator').expect(403)).body.code).toBe('forbidden');
+    expect((await setRole(adm, adm2.id, 'user').expect(403)).body.code).toBe('forbidden');
+    await setRole(adm, ana.id, 'superadmin').expect(400);
+
+    for (const role of ['operator', 'admin', 'user']) {
+      expect((await setRole(sa, ana.id, role).expect(200)).body.user.role).toBe(role);
+    }
+    await setRole(sa, adm2.id, 'operator').expect(200);
+    await setRole(sa, ana.id, 'superadmin').expect(400);
+
+    const changes = (await auditRows()).map((r: any) => [r.actorEmail, r.details.from, r.details.to]);
+    expect(changes).toEqual([
+      ['adm@example.com', 'user', 'operator'],
+      ['adm@example.com', 'operator', 'user'],
+      [SUPERADMIN_EMAIL, 'user', 'operator'],
+      [SUPERADMIN_EMAIL, 'operator', 'admin'],
+      [SUPERADMIN_EMAIL, 'admin', 'user'],
+      [SUPERADMIN_EMAIL, 'admin', 'operator'],
+    ]);
+  });
+
+  it('una cuenta desactivada pierde sus sesiones al momento, no puede entrar y conserva sus datos hasta reactivarla', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const ana = await account('ana@example.com');
+    await ana.post('/api/scans', { items: [{ text: 'mis apuntes', engine: 'manual' }] }).expect(201);
+    const other = setup();
+    await other.post('/api/auth/login', { email: 'ana@example.com', password: 'secreto123' }).expect(200);
+
+    await deactivate(adm, ana.id).expect(200);
+    await ana.agent.get('/api/auth/me').expect(401);
+    await other.agent.get('/api/scans').expect(401);
+
+    const denied = await setup().post('/api/auth/login', { email: 'ana@example.com', password: 'secreto123' }).expect(403);
+    expect(denied.body).toEqual({ error: 'Tu cuenta está desactivada. Contacta con un administrador.', code: 'account_disabled' });
+    // Con la contraseña incorrecta no se revela el estado de la cuenta.
+    const wrong = await setup().post('/api/auth/login', { email: 'ana@example.com', password: 'otra-clave' }).expect(401);
+    expect(wrong.body.code).toBe('invalid_credentials');
+    expect(await db.one('SELECT COUNT(*) AS n FROM scans WHERE user_id = ?', [ana.id])).toEqual({ n: 1 });
+    // Una sesión firmada aunque sea con la versión actual tampoco vale mientras esté desactivada.
+    const { v } = (await db.one<{ v: number }>('SELECT credentials_version AS v FROM users WHERE id = ?', [ana.id]))!;
+    expect(v).toBe(1);
+    const forged = jwt.sign({ sub: String(ana.id), v }, 'test-jwt-secret-123456', { expiresIn: '1h' });
+    await request(ana.app).get('/api/auth/me').set('Cookie', `ocryon_session=${forged}`).expect(401);
+
+    await reactivate(adm, ana.id).expect(200);
+    const back = setup();
+    await back.post('/api/auth/login', { email: 'ana@example.com', password: 'secreto123' }).expect(200);
+    const scans = (await back.agent.get('/api/scans').expect(200)).body;
+    expect(scans.scans.map((s: any) => s.text)).toEqual(['mis apuntes']);
+  });
+
+  it('pagina, filtra y ordena el listado de usuarios con una lista cerrada de órdenes', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const u1 = await account('u1@example.com');
+    const u2 = await account('u2@example.com');
+    const u3 = await account('u3@example.com');
+    await u2.post('/api/scans', { items: [{ text: 'a', engine: 'manual' }, { text: 'b', engine: 'manual' }] }).expect(201);
+    await u3.post('/api/scans', { items: [{ text: 'c', engine: 'manual' }] }).expect(201);
+    await db.run(
+      `UPDATE users SET last_login_at = CASE id WHEN ? THEN '2020-01-01'::timestamptz WHEN ? THEN '2024-01-01'::timestamptz ELSE '2021-01-01'::timestamptz END`,
+      [adm.id, u1.id],
+    );
+    await db.run(`UPDATE scans SET created_at = now() - interval '1 hour' WHERE user_id = ?`, [u2.id]);
+    await setRole(adm, u3.id, 'operator').expect(200);
+    await deactivate(adm, u1.id).expect(200);
+
+    const emails = async (query: object) => (await adm.agent.get('/api/admin/users').query(query).expect(200)).body.users.map((u: any) => u.email.split('@')[0]);
+    expect(await emails({ sort: 'recent' })).toEqual(['u3', 'u2', 'u1', 'adm']);
+    expect(await emails({ sort: 'scans' })).toEqual(['u2', 'u3', 'u1', 'adm']);
+    expect(await emails({ sort: 'activity' })).toEqual(['u3', 'u2', 'u1', 'adm']);
+    expect(await emails({ status: 'disabled' })).toEqual(['u1']);
+    expect(await emails({ status: 'active', sort: 'scans' })).toEqual(['u2', 'u3', 'adm']);
+    expect(await emails({ role: 'operator' })).toEqual(['u3']);
+    expect(await emails({ q: 'U2' })).toEqual(['u2']);
+
+    const paged = (await adm.agent.get('/api/admin/users').query({ sort: 'scans', page: 2, pageSize: 2 }).expect(200)).body;
+    expect(paged).toMatchObject({ total: 4, page: 2, pageSize: 2 });
+    expect(paged.users.map((u: any) => u.email)).toEqual(['u1@example.com', 'adm@example.com']);
+    expect(paged.users[0]).toMatchObject({ disabledAt: expect.any(String), role: 'user', wordCount: 0 });
+
+    for (const query of [{ sort: 'email' }, { sort: 'created_at; DROP TABLE users' }, { status: 'todos' }, { pageSize: 101 }, { page: 0 }]) {
+      const res = await adm.agent.get('/api/admin/users').query(query);
+      expect(res.status, JSON.stringify(query)).toBe(400);
+    }
+    expect(await db.one('SELECT COUNT(*) AS n FROM users')).toEqual({ n: 4 });
+  });
+
+  it('busca y filtra los escaneos de un usuario y los agrupa por carpeta', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const ana = await account('ana@example.com');
+    await ana.post('/api/scans', { newGroup: { title: 'Zeta' }, items: [{ text: 'manzana verde', engine: 'ocrspace' }] }).expect(201);
+    await ana.post('/api/scans', { newGroup: { title: 'Alfa' }, items: [{ text: 'pera', engine: 'ocrspace' }] }).expect(201);
+    await ana.post('/api/scans', { items: [{ title: 'Árbol', text: 'manzana roja', engine: 'gemini' }] }).expect(201);
+    const scans = (query: object) => adm.agent.get(`/api/admin/users/${ana.id}/scans`).query(query);
+
+    expect((await scans({ q: 'MANZ' }).expect(200)).body.total).toBe(2);
+    expect((await scans({ q: 'arbol' }).expect(200)).body.scans.map((s: any) => s.title)).toEqual(['Árbol']);
+    expect((await scans({ engine: 'gemini' }).expect(200)).body.total).toBe(1);
+    expect((await scans({ from: new Date(Date.now() + 60_000).toISOString() }).expect(200)).body.total).toBe(0);
+    expect((await scans({ sort: 'group' }).expect(200)).body.scans.map((s: any) => s.groupTitle)).toEqual(['Alfa', 'Zeta', null]);
+    await scans({ sort: 'title' }).expect(400);
+    await scans({ engine: 'otro' }).expect(400);
+  });
+
+  it('filtra la auditoría por actor, afectado y fechas', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const ana = await account('ana@example.com');
+    const beto = await account('beto@example.com');
+    await deactivate(adm, ana.id).expect(200);
+    await deactivate(adm, beto.id).expect(200);
+    await reactivate(adm, beto.id).expect(200);
+    const audit = async (query: object) => (await adm.agent.get('/api/admin/audit').query(query).expect(200)).body.total;
+
+    expect(await audit({ actor: 'ADM@' })).toBe(3);
+    expect(await audit({ actor: 'nadie' })).toBe(0);
+    expect(await audit({ target: 'beto' })).toBe(2);
+    expect(await audit({ target: 'beto', action: 'reactivate_user' })).toBe(1);
+    expect(await audit({ action: 'deactivate_user' })).toBe(2);
+    expect(await audit({ from: new Date(Date.now() + 60_000).toISOString() })).toBe(0);
+    expect(await audit({ to: new Date(Date.now() + 60_000).toISOString() })).toBe(3);
+    expect(await audit({ target: '100%' })).toBe(0);
+    await adm.agent.get('/api/admin/audit').query({ from: 'ayer' }).expect(400);
   });
 });
 

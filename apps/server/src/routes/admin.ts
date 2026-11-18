@@ -1,26 +1,36 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { AppContext } from '../context.js';
 import type { Queryable } from '../db/index.js';
 import { fold, foldSql } from '../lib/fold.js';
 import { accountSchema, hashPassword, insertAccount } from '../lib/accounts.js';
 import { HttpError, isUniqueViolation, notFound } from '../lib/http-error.js';
-import { currentUser, isAdminRole, requireSuperAdmin } from '../middleware/auth.js';
+import { searchTerms } from '../lib/snippet.js';
+import { currentUser, isAdminRole, isStaffRole, requireAdmin, requireSuperAdmin, type UserRole } from '../middleware/auth.js';
+import { toTsQuery } from './search.js';
 
 /**
  * Panel de administración: estadísticas globales, usuarios y actividad de escaneo.
- * Se monta detrás de requireAuth + requireAdmin (ver app.ts). Nunca devuelve password_hash, pin_hash ni
- * los contadores de bloqueo. Crear administradores y cambiar roles es exclusivo del superadministrador;
- * nadie puede modificar ni eliminar al superadministrador desde la API.
+ * Se monta detrás de requireAuth + requireStaff (ver app.ts) y cada ruta exige su propio nivel:
+ * - Operador: solo el listado de usuarios (datos parciales, sin escaneos) y desactivar/reactivar usuarios normales.
+ * - Administrador: todo lo demás, salvo crear administradores y asignar el rol de administrador.
+ * - Superadministrador: todo. Nadie puede modificar, desactivar ni eliminar al superadministrador desde la API.
+ * Nunca devuelve password_hash, pin_hash ni los contadores de bloqueo.
  * Los listados devuelven solo un extracto del texto; GET /scans/:id devuelve el texto completo.
  */
 
 const idParam = z.coerce.number().int().positive();
-const roleSchema = z.object({ role: z.enum(['user', 'admin'], 'Rol no válido') });
+const roleSchema = z.object({ role: z.enum(['user', 'operator', 'admin'], 'Rol no válido') });
+const statusSchema = z.object({ reason: z.string().trim().max(500, 'El motivo es demasiado largo').optional() });
 
 const pagination = {
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
+};
+
+const dateRange = {
+  from: z.coerce.date('Fecha no válida').optional(),
+  to: z.coerce.date('Fecha no válida').optional(),
 };
 
 // Diferencia del administrador respecto a UTC en minutos, igual que en /api/stats.
@@ -29,26 +39,58 @@ const seriesSchema = {
   days: z.coerce.number().int().min(7).max(90).default(14),
 };
 
+/** Órdenes permitidos del listado de usuarios. La clave llega del cliente; el SQL nunca. */
+const USER_SORTS = {
+  recent: 'u.created_at DESC, u.id DESC',
+  scans: 'COALESCE(s.scans, 0) DESC, u.id DESC',
+  // Última actividad: el último acceso o el último escaneo, lo que sea más reciente.
+  activity: 'GREATEST(u.last_login_at, s.last_scan) DESC NULLS LAST, u.id DESC',
+} as const;
+
+/** Órdenes permitidos de los escaneos de un usuario: por fecha o agrupados por carpeta. */
+const SCAN_SORTS = {
+  recent: 's.created_at DESC, s.id DESC',
+  group: 'g.title ASC NULLS LAST, s.group_id, s.position, s.created_at DESC, s.id DESC',
+} as const;
+
+const sortKeys = <T extends object>(sorts: T) => Object.keys(sorts) as [keyof T & string, ...(keyof T & string)[]];
+
+const ENGINES = ['ocrspace', 'gemini', 'tesseract', 'manual'] as const;
+
 const statsSchema = z.object(seriesSchema);
 const usersSchema = z.object({
   q: z.string().trim().max(200).optional(),
-  role: z.enum(['user', 'admin', 'superadmin'], 'Rol no válido').optional(),
+  role: z.enum(['user', 'operator', 'admin', 'superadmin'], 'Rol no válido').optional(),
+  status: z.enum(['active', 'disabled'], 'Estado no válido').optional(),
+  sort: z.enum(sortKeys(USER_SORTS), 'Orden no válido').default('recent'),
+  ...pagination,
+});
+const userScansSchema = z.object({
+  q: z.string().trim().max(200).optional(),
+  engine: z.enum(ENGINES, 'Motor no válido').optional(),
+  sort: z.enum(sortKeys(SCAN_SORTS), 'Orden no válido').default('recent'),
+  ...dateRange,
   ...pagination,
 });
 const scansSchema = z.object({
   userId: z.coerce.number().int().positive().optional(),
-  from: z.coerce.date('Fecha no válida').optional(),
-  to: z.coerce.date('Fecha no válida').optional(),
+  user: z.string().trim().max(200).optional(),
+  engine: z.enum(ENGINES, 'Motor no válido').optional(),
+  ...dateRange,
   ...pagination,
 });
 
-const AUDIT_ACTIONS = ['view_scan', 'change_role', 'delete_user', 'create_admin'] as const;
+const AUDIT_ACTIONS = ['view_scan', 'change_role', 'delete_user', 'create_admin', 'deactivate_user', 'reactivate_user'] as const;
 type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 const auditSchema = z.object({
   action: z.enum(AUDIT_ACTIONS, 'Acción no válida').optional(),
   actorId: z.coerce.number().int().positive().optional(),
   targetUserId: z.coerce.number().int().positive().optional(),
+  // Texto libre sobre el correo del actor o del afectado (copia guardada en el registro).
+  actor: z.string().trim().max(200).optional(),
+  target: z.string().trim().max(200).optional(),
+  ...dateRange,
   ...pagination,
 });
 
@@ -81,7 +123,28 @@ function writeAudit(db: Queryable, entry: AuditEntry) {
 
 const PREVIEW_CHARS = 200;
 
-const USER_COLUMNS = `u.id, u.email, u.name, u.role, u.created_at AS "createdAt", u.last_login_at AS "lastLoginAt"`;
+const USER_COLUMNS = `u.id, u.email, u.name, u.role, u.created_at AS "createdAt", u.last_login_at AS "lastLoginAt",
+  u.disabled_at AS "disabledAt", u.disabled_reason AS "disabledReason"`;
+
+/** Lo único que ve un operador de cada cuenta: sin rol, sin palabras, sin títulos ni texto de escaneos. */
+const OPERATOR_USER_COLUMNS = `u.id, u.name, u.email, u.created_at AS "createdAt", u.last_login_at AS "lastLoginAt",
+  u.disabled_at AS "disabledAt", COALESCE(s.scans, 0) AS "scanCount", s.last_scan AS "lastScanAt"`;
+
+const ADMIN_USER_LIST_COLUMNS = `${USER_COLUMNS}, COALESCE(s.scans, 0) AS "scanCount", COALESCE(s.words, 0) AS "wordCount", s.last_scan AS "lastScanAt"`;
+
+const SCAN_TOTALS_JOIN = `LEFT JOIN (
+    SELECT user_id, COUNT(*) AS scans, SUM(word_count) AS words, MAX(created_at) AS last_scan FROM scans GROUP BY user_id
+  ) s ON s.user_id = u.id`;
+
+/**
+ * Cuentas que cada rol puede desactivar o reactivar. El operador solo gestiona usuarios normales;
+ * el superadministrador no aparece como afectado posible en ningún caso.
+ */
+const STATUS_TARGETS: Partial<Record<UserRole, readonly string[]>> = {
+  operator: ['user'],
+  admin: ['user', 'operator'],
+  superadmin: ['user', 'operator', 'admin'],
+};
 
 function isoDay(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -107,27 +170,63 @@ async function scansPerDay(db: Queryable, tz: number, days: number, userId?: num
   });
 }
 
+const escapeLike = (word: string) => word.replace(/[\\%_]/g, (c) => `\\${c}`);
+
 /** Cada palabra de la búsqueda debe aparecer en el nombre o el correo, sin importar acentos ni mayúsculas. */
-function userSearch(q: string | undefined) {
+function userSearch(q: string | undefined, alias = 'u') {
   const words = q ? (fold(q).match(/[\p{L}\p{N}@._+-]+/gu) ?? []).slice(0, 8) : [];
   return {
-    where: words.map(() => `${foldSql("u.name || ' ' || u.email")} LIKE ?`),
-    params: words.map((word) => `%${word.replace(/[\\%_]/g, (c) => `\\${c}`)}%`),
+    where: words.map(() => `${foldSql(`${alias}.name || ' ' || ${alias}.email`)} LIKE ?`),
+    params: words.map((word) => `%${escapeLike(word)}%`),
+  };
+}
+
+/** Acumula condiciones WHERE con sus parámetros en el mismo orden. */
+function conditions() {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  return {
+    where,
+    params,
+    add(sql: string, ...values: unknown[]) {
+      where.push(sql);
+      params.push(...values);
+    },
+    merge(other: { where: string[]; params: unknown[] }) {
+      where.push(...other.where);
+      params.push(...other.params);
+    },
+    get clause() {
+      return where.length ? `WHERE ${where.join(' AND ')}` : '';
+    },
   };
 }
 
 const offsetOf = (page: number, pageSize: number) => (page - 1) * pageSize;
 
+const forbidden = (message = 'No tienes permiso para acceder a esta sección') => new HttpError(403, message, 'forbidden');
+
 export function adminRouter(ctx: AppContext) {
   const router = Router();
 
   const findUser = async (id: number) => {
-    const user = await ctx.db.one(`SELECT ${USER_COLUMNS} FROM users u WHERE u.id = ?`, [id]);
+    const user = await ctx.db.one(
+      `SELECT ${USER_COLUMNS}, d.email AS "disabledByEmail" FROM users u LEFT JOIN users d ON d.id = u.disabled_by WHERE u.id = ?`,
+      [id],
+    );
     if (!user) throw notFound('Usuario');
     return user;
   };
 
-  router.get('/stats', async (req, res) => {
+  /** La cuenta tal como la puede ver quien pregunta: el operador recibe solo los datos parciales. */
+  const userForActor = async (id: number, actorRole: UserRole) => {
+    if (isAdminRole(actorRole)) return findUser(id);
+    const user = await ctx.db.one(`SELECT ${OPERATOR_USER_COLUMNS} FROM users u ${SCAN_TOTALS_JOIN} WHERE u.id = ?`, [id]);
+    if (!user) throw notFound('Usuario');
+    return user;
+  };
+
+  router.get('/stats', requireAdmin, async (req, res) => {
     const { tz, days } = statsSchema.parse(req.query);
     const totals = (await ctx.db.one<Record<string, number>>(
       `SELECT (SELECT COUNT(*) FROM users) AS users,
@@ -151,30 +250,32 @@ export function adminRouter(ctx: AppContext) {
     res.json({ totals, perDay, topUsers, recentScans });
   });
 
+  /**
+   * Listado de cuentas, con búsqueda, filtros, orden y paginación. El operador solo ve usuarios normales
+   * y con las columnas de OPERATOR_USER_COLUMNS: la proyección se decide aquí, nunca en el cliente.
+   */
   router.get('/users', async (req, res) => {
-    const { q, role, page, pageSize } = usersSchema.parse(req.query);
-    const search = userSearch(q);
-    if (role) {
-      search.where.push('u.role = ?');
-      search.params.push(role);
-    }
-    const where = search.where.length ? `WHERE ${search.where.join(' AND ')}` : '';
-    const { total } = (await ctx.db.one<{ total: number }>(`SELECT COUNT(*) AS total FROM users u ${where}`, search.params))!;
+    const { q, role, status, sort, page, pageSize } = usersSchema.parse(req.query);
+    const actor = currentUser(req);
+    const operator = !isAdminRole(actor.role);
+    const filter = conditions();
+    filter.merge(userSearch(q));
+    if (operator) filter.add(`u.role = 'user'`);
+    if (role) filter.add('u.role = ?', role);
+    if (status) filter.add(status === 'disabled' ? 'u.disabled_at IS NOT NULL' : 'u.disabled_at IS NULL');
+    const { total } = (await ctx.db.one<{ total: number }>(`SELECT COUNT(*) AS total FROM users u ${filter.clause}`, filter.params))!;
     const users = await ctx.db.query(
-      `SELECT ${USER_COLUMNS}, COALESCE(s.scans, 0) AS "scanCount", COALESCE(s.words, 0) AS "wordCount", s.last_scan AS "lastScanAt"
-         FROM users u
-         LEFT JOIN (
-           SELECT user_id, COUNT(*) AS scans, SUM(word_count) AS words, MAX(created_at) AS last_scan FROM scans GROUP BY user_id
-         ) s ON s.user_id = u.id
-         ${where}
-        ORDER BY u.created_at DESC, u.id DESC
+      `SELECT ${operator ? OPERATOR_USER_COLUMNS : ADMIN_USER_LIST_COLUMNS}
+         FROM users u ${SCAN_TOTALS_JOIN}
+         ${filter.clause}
+        ORDER BY ${USER_SORTS[sort]}
         LIMIT ? OFFSET ?`,
-      [...search.params, pageSize, offsetOf(page, pageSize)],
+      [...filter.params, pageSize, offsetOf(page, pageSize)],
     );
     res.json({ users, total, page, pageSize });
   });
 
-  router.get('/users/:id', async (req, res) => {
+  router.get('/users/:id', requireAdmin, async (req, res) => {
     const id = idParam.parse(req.params.id);
     const { tz, days } = statsSchema.parse(req.query);
     const user = await findUser(id);
@@ -196,56 +297,58 @@ export function adminRouter(ctx: AppContext) {
     res.json({ user, stats: { ...totals, byEngine, perDay } });
   });
 
-  router.get('/users/:id/scans', async (req, res) => {
+  // Escaneos de un usuario: búsqueda por título o texto, filtros por motor y fecha (`to` exclusivo), y orden por carpeta.
+  router.get('/users/:id/scans', requireAdmin, async (req, res) => {
     const id = idParam.parse(req.params.id);
-    const { page, pageSize } = z.object(pagination).parse(req.query);
+    const { q, engine, from, to, sort, page, pageSize } = userScansSchema.parse(req.query);
     await findUser(id);
-    const { total } = (await ctx.db.one<{ total: number }>('SELECT COUNT(*) AS total FROM scans WHERE user_id = ?', [id]))!;
+    const filter = conditions();
+    filter.add('s.user_id = ?', id);
+    const terms = q ? searchTerms(q) : [];
+    if (terms.length) filter.add(`s.search @@ to_tsquery('simple', ?)`, toTsQuery(terms));
+    if (engine) filter.add('s.engine = ?', engine);
+    if (from) filter.add('s.created_at >= ?::timestamptz', from.toISOString());
+    if (to) filter.add('s.created_at < ?::timestamptz', to.toISOString());
+    const { total } = (await ctx.db.one<{ total: number }>(`SELECT COUNT(*) AS total FROM scans s ${filter.clause}`, filter.params))!;
     const scans = await ctx.db.query(
       `SELECT s.id, s.title, s.engine, s.language, s.word_count AS "wordCount", s.created_at AS "createdAt",
               s.group_id AS "groupId", g.title AS "groupTitle", left(s.text, ?::int) AS preview
          FROM scans s LEFT JOIN groups g ON g.id = s.group_id
-        WHERE s.user_id = ?
-        ORDER BY s.created_at DESC, s.id DESC
+         ${filter.clause}
+        ORDER BY ${SCAN_SORTS[sort]}
         LIMIT ? OFFSET ?`,
-      [PREVIEW_CHARS, id, pageSize, offsetOf(page, pageSize)],
+      [PREVIEW_CHARS, ...filter.params, pageSize, offsetOf(page, pageSize)],
     );
     res.json({ scans, total, page, pageSize });
   });
 
   // Registro global de actividad: quién escaneó, cuándo y con qué motor. `to` es exclusivo.
-  router.get('/scans', async (req, res) => {
-    const { userId, from, to, page, pageSize } = scansSchema.parse(req.query);
-    const where: string[] = [];
-    const params: unknown[] = [];
-    if (userId) {
-      where.push('s.user_id = ?');
-      params.push(userId);
-    }
-    if (from) {
-      where.push('s.created_at >= ?::timestamptz');
-      params.push(from.toISOString());
-    }
-    if (to) {
-      where.push('s.created_at < ?::timestamptz');
-      params.push(to.toISOString());
-    }
-    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const { total } = (await ctx.db.one<{ total: number }>(`SELECT COUNT(*) AS total FROM scans s ${clause}`, params))!;
+  router.get('/scans', requireAdmin, async (req, res) => {
+    const { userId, user, engine, from, to, page, pageSize } = scansSchema.parse(req.query);
+    const filter = conditions();
+    if (userId) filter.add('s.user_id = ?', userId);
+    filter.merge(userSearch(user));
+    if (engine) filter.add('s.engine = ?', engine);
+    if (from) filter.add('s.created_at >= ?::timestamptz', from.toISOString());
+    if (to) filter.add('s.created_at < ?::timestamptz', to.toISOString());
+    const { total } = (await ctx.db.one<{ total: number }>(
+      `SELECT COUNT(*) AS total FROM scans s JOIN users u ON u.id = s.user_id ${filter.clause}`,
+      filter.params,
+    ))!;
     const scans = await ctx.db.query(
       `SELECT s.id, s.title, s.engine, s.language, s.word_count AS "wordCount", s.created_at AS "createdAt",
               u.id AS "userId", u.name AS "userName", u.email AS "userEmail"
          FROM scans s JOIN users u ON u.id = s.user_id
-         ${clause}
+         ${filter.clause}
         ORDER BY s.created_at DESC, s.id DESC
         LIMIT ? OFFSET ?`,
-      [...params, pageSize, offsetOf(page, pageSize)],
+      [...filter.params, pageSize, offsetOf(page, pageSize)],
     );
     res.json({ scans, total, page, pageSize });
   });
 
   // Escaneo completo (texto incluido) de cualquier usuario, para revisarlo desde el panel.
-  router.get('/scans/:id', async (req, res) => {
+  router.get('/scans/:id', requireAdmin, async (req, res) => {
     const id = idParam.parse(req.params.id);
     const scan = await ctx.db.one(
       `SELECT s.id, s.title, s.text, s.original_text AS "originalText", s.engine, s.language, s.word_count AS "wordCount",
@@ -271,20 +374,19 @@ export function adminRouter(ctx: AppContext) {
     res.json({ scan });
   });
 
-  const forbidden = (message = 'No tienes permiso para acceder a esta sección') => new HttpError(403, message, 'forbidden');
-
   /**
    * Bloquea la fila del actor y la del afectado y comprueba, dentro de la transacción, el rol actual
-   * del actor (pudo cambiar después de validar la sesión). El superadministrador nunca es un afectado válido.
+   * del actor (pudo cambiar o desactivarse después de validar la sesión). El superadministrador nunca
+   * es un afectado válido.
    */
-  const lockActorAndTarget = async (tx: Queryable, actorId: number, targetId: number) => {
-    const rows = await tx.query<{ id: number; email: string; role: string }>(
-      'SELECT id, email, role FROM users WHERE id IN (?, ?) ORDER BY id FOR UPDATE',
+  const lockActorAndTarget = async (tx: Queryable, actorId: number, targetId: number, allowed: (role: string) => boolean) => {
+    const rows = await tx.query<{ id: number; email: string; role: UserRole; disabled: boolean }>(
+      'SELECT id, email, role, disabled_at IS NOT NULL AS disabled FROM users WHERE id IN (?, ?) ORDER BY id FOR UPDATE',
       [actorId, targetId],
     );
     const actor = rows.find((r) => r.id === actorId);
     const target = rows.find((r) => r.id === targetId);
-    if (!actor || !isAdminRole(actor.role)) throw forbidden();
+    if (!actor || actor.disabled || !allowed(actor.role)) throw forbidden();
     if (!target) throw notFound('Usuario');
     if (target.role === 'superadmin') {
       throw new HttpError(403, 'No se puede modificar ni eliminar al superadministrador', 'superadmin_protected');
@@ -292,14 +394,22 @@ export function adminRouter(ctx: AppContext) {
     return { actor, target };
   };
 
-  // Promover o degradar entre usuario y administrador: solo el superadministrador.
-  router.patch('/users/:id/role', requireSuperAdmin, async (req, res) => {
+  /**
+   * Cambios de rol. El superadministrador asigna usuario, operador o administrador; un administrador
+   * solo alterna usuario y operador sobre cuentas que no sean de administrador.
+   */
+  router.patch('/users/:id/role', requireAdmin, async (req, res) => {
     const id = idParam.parse(req.params.id);
     const { role } = roleSchema.parse(req.body);
     const actorId = currentUser(req).id;
     await ctx.db.transaction(async (tx) => {
-      const { actor, target } = await lockActorAndTarget(tx, actorId, id);
-      if (actor.role !== 'superadmin') throw forbidden('Solo el superadministrador puede hacer esto');
+      const { actor, target } = await lockActorAndTarget(tx, actorId, id, isAdminRole);
+      if (actor.role !== 'superadmin') {
+        const limited = ['user', 'operator'];
+        if (!limited.includes(target.role) || !limited.includes(role)) {
+          throw forbidden('Solo el superadministrador puede asignar o quitar el rol de administrador');
+        }
+      }
       if (target.role === role) return;
       await tx.run('UPDATE users SET role = ? WHERE id = ?', [role, id]);
       // Si el registro falla, la transacción deshace también el cambio de rol.
@@ -315,12 +425,52 @@ export function adminRouter(ctx: AppContext) {
     res.json({ user: await findUser(id) });
   });
 
-  // Los administradores eliminan usuarios normales; eliminar a otro administrador exige ser superadministrador.
-  router.delete('/users/:id', async (req, res) => {
+  /**
+   * Desactivar o reactivar una cuenta sin borrar sus datos. Al desactivar se sube la versión de credenciales
+   * (y requireAuth rechaza las cuentas desactivadas), así que sus sesiones abiertas dejan de valer al momento.
+   */
+  const setStatus = (disable: boolean) =>
+    async (req: Request, res: Response) => {
+      const id = idParam.parse(req.params.id);
+      const { reason } = statusSchema.parse(req.body ?? {});
+      const me = currentUser(req);
+      await ctx.db.transaction(async (tx) => {
+        const { actor, target } = await lockActorAndTarget(tx, me.id, id, isStaffRole);
+        if (id === me.id) throw new HttpError(409, 'No puedes desactivar ni reactivar tu propia cuenta', 'self_action');
+        if (!STATUS_TARGETS[actor.role]?.includes(target.role)) {
+          throw forbidden(actor.role === 'operator' ? 'Solo puedes gestionar cuentas de usuario' : 'Solo el superadministrador puede gestionar a otro administrador');
+        }
+        if (target.disabled === disable) return;
+        if (disable) {
+          await tx.run(
+            `UPDATE users SET disabled_at = now(), disabled_by = ?, disabled_reason = ?, credentials_version = credentials_version + 1 WHERE id = ?`,
+            [me.id, reason || null, id],
+          );
+        } else {
+          await tx.run('UPDATE users SET disabled_at = NULL, disabled_by = NULL, disabled_reason = NULL WHERE id = ?', [id]);
+        }
+        // Si el registro falla, la transacción deshace también el cambio de estado.
+        await writeAudit(tx, {
+          actorId: me.id,
+          actorEmail: actor.email,
+          action: disable ? 'deactivate_user' : 'reactivate_user',
+          targetUserId: id,
+          targetEmail: target.email,
+          details: disable && reason ? { role: target.role, reason } : { role: target.role },
+        });
+      });
+      res.json({ user: await userForActor(id, me.role) });
+    };
+
+  router.post('/users/:id/deactivate', setStatus(true));
+  router.post('/users/:id/reactivate', setStatus(false));
+
+  // Los administradores eliminan usuarios y operadores; eliminar a otro administrador exige ser superadministrador.
+  router.delete('/users/:id', requireAdmin, async (req, res) => {
     const id = idParam.parse(req.params.id);
     const actorId = currentUser(req).id;
     await ctx.db.transaction(async (tx) => {
-      const { actor, target } = await lockActorAndTarget(tx, actorId, id);
+      const { actor, target } = await lockActorAndTarget(tx, actorId, id, isAdminRole);
       if (id === actorId) throw new HttpError(409, 'No puedes eliminar tu propia cuenta desde el panel', 'self_action');
       if (target.role === 'admin' && actor.role !== 'superadmin') {
         throw forbidden('Solo el superadministrador puede eliminar a otro administrador');
@@ -372,33 +522,26 @@ export function adminRouter(ctx: AppContext) {
   });
 
   // Registro de auditoría, del más reciente al más antiguo. Solo lectura: no hay rutas para editarlo ni borrarlo.
-  router.get('/audit', async (req, res) => {
-    const { action, actorId, targetUserId, page, pageSize } = auditSchema.parse(req.query);
-    const where: string[] = [];
-    const params: unknown[] = [];
-    if (action) {
-      where.push('a.action = ?');
-      params.push(action);
-    }
-    if (actorId) {
-      where.push('a.actor_id = ?');
-      params.push(actorId);
-    }
-    if (targetUserId) {
-      where.push('a.target_user_id = ?');
-      params.push(targetUserId);
-    }
-    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const { total } = (await ctx.db.one<{ total: number }>(`SELECT COUNT(*) AS total FROM admin_audit_log a ${clause}`, params))!;
+  router.get('/audit', requireAdmin, async (req, res) => {
+    const { action, actorId, targetUserId, actor, target, from, to, page, pageSize } = auditSchema.parse(req.query);
+    const filter = conditions();
+    if (action) filter.add('a.action = ?', action);
+    if (actorId) filter.add('a.actor_id = ?', actorId);
+    if (targetUserId) filter.add('a.target_user_id = ?', targetUserId);
+    if (actor) filter.add('lower(a.actor_email) LIKE ?', `%${escapeLike(actor.toLowerCase())}%`);
+    if (target) filter.add(`lower(COALESCE(a.target_email, '')) LIKE ?`, `%${escapeLike(target.toLowerCase())}%`);
+    if (from) filter.add('a.created_at >= ?::timestamptz', from.toISOString());
+    if (to) filter.add('a.created_at < ?::timestamptz', to.toISOString());
+    const { total } = (await ctx.db.one<{ total: number }>(`SELECT COUNT(*) AS total FROM admin_audit_log a ${filter.clause}`, filter.params))!;
     const entries = await ctx.db.query(
       `SELECT a.id, a.action, a.actor_id AS "actorId", a.actor_email AS "actorEmail",
               a.target_user_id AS "targetUserId", a.target_email AS "targetEmail", a.target_scan_id AS "targetScanId",
               (t.id IS NOT NULL) AS "targetExists", a.details, a.created_at AS "createdAt"
          FROM admin_audit_log a LEFT JOIN users t ON t.id = a.target_user_id
-         ${clause}
+         ${filter.clause}
         ORDER BY a.created_at DESC, a.id DESC
         LIMIT ? OFFSET ?`,
-      [...params, pageSize, offsetOf(page, pageSize)],
+      [...filter.params, pageSize, offsetOf(page, pageSize)],
     );
     res.json({ entries, total, page, pageSize });
   });
