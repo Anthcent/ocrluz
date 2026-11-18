@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AppContext } from '../context.js';
 import type { Queryable } from '../db/index.js';
 import { fold, foldSql } from '../lib/fold.js';
-import { accountSchema, hashPassword, insertAccount } from '../lib/accounts.js';
+import { accountSchema, generateTemporaryPassword, hashPassword, insertAccount } from '../lib/accounts.js';
 import { HttpError, isUniqueViolation, notFound } from '../lib/http-error.js';
 import { searchTerms } from '../lib/snippet.js';
 import { currentUser, isAdminRole, isStaffRole, requireAdmin, requireSuperAdmin, type UserRole } from '../middleware/auth.js';
@@ -91,7 +91,7 @@ const scansSchema = z.object({
   ...pagination,
 });
 
-const AUDIT_ACTIONS = ['view_scan', 'change_role', 'delete_user', 'create_admin', 'deactivate_user', 'reactivate_user'] as const;
+const AUDIT_ACTIONS = ['view_scan', 'change_role', 'delete_user', 'create_admin', 'deactivate_user', 'reactivate_user', 'reset_password'] as const;
 type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 const auditSchema = z.object({
@@ -153,6 +153,15 @@ const SCAN_TOTALS_JOIN = `LEFT JOIN (
  */
 const STATUS_TARGETS: Partial<Record<UserRole, readonly string[]>> = {
   operator: ['user'],
+  admin: ['user', 'operator'],
+  superadmin: ['user', 'operator', 'admin'],
+};
+
+/**
+ * Cuentas cuya contraseña puede restablecer cada rol (solo administradores: la ruta no está abierta al operador).
+ * El superadministrador nunca es afectado: sus credenciales vienen del entorno.
+ */
+const RESET_TARGETS: Partial<Record<UserRole, readonly string[]>> = {
   admin: ['user', 'operator'],
   superadmin: ['user', 'operator', 'admin'],
 };
@@ -478,6 +487,44 @@ export function adminRouter(ctx: AppContext) {
 
   staff.post('/users/:id/deactivate', setStatus(true));
   staff.post('/users/:id/reactivate', setStatus(false));
+
+  /**
+   * Restablece la contraseña de otra cuenta con una temporal aleatoria que se devuelve una sola vez.
+   * Cierra todas sus sesiones (sube la versión de credenciales), levanta cualquier bloqueo y obliga a
+   * cambiarla en el próximo acceso. No reactiva una cuenta desactivada. La auditoría nunca guarda la
+   * contraseña ni su hash. Para la propia cuenta está /auth/change-password.
+   */
+  router.post('/users/:id/reset-password', async (req, res) => {
+    const id = idParam.parse(req.params.id);
+    const me = currentUser(req);
+    const temporaryPassword = generateTemporaryPassword();
+    // bcrypt fuera de la transacción para no retener los candados de las filas mientras calcula.
+    const passwordHash = await hashPassword(temporaryPassword);
+    await ctx.db.transaction(async (tx) => {
+      const { actor, target } = await lockActorAndTarget(tx, me.id, id, isAdminRole);
+      if (id === me.id) throw new HttpError(409, 'Para cambiar tu propia contraseña usa Ajustes', 'self_action');
+      if (!RESET_TARGETS[actor.role]?.includes(target.role)) {
+        throw forbidden('Solo el superadministrador puede restablecer la contraseña de un administrador');
+      }
+      await tx.run(
+        `UPDATE users SET password_hash = ?, must_change_password = true, credentials_version = credentials_version + 1,
+                failed_attempts = 0, locked_until = NULL
+          WHERE id = ?`,
+        [passwordHash, id],
+      );
+      // Si el registro falla, la transacción deshace también el restablecimiento.
+      await writeAudit(tx, {
+        actorId: me.id,
+        actorEmail: actor.email,
+        action: 'reset_password',
+        targetUserId: id,
+        targetEmail: target.email,
+        details: { role: target.role },
+      });
+    });
+    // La contraseña temporal solo viaja en esta respuesta: que ningún intermediario ni el navegador la guarden.
+    res.set('Cache-Control', 'no-store').json({ temporaryPassword });
+  });
 
   // Los administradores eliminan usuarios y operadores; eliminar a otro administrador exige ser superadministrador.
   router.delete('/users/:id', async (req, res) => {

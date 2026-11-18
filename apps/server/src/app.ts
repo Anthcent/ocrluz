@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import helmet from 'helmet';
 import type { AppContext } from './context.js';
-import { requireAuth, requireStaff } from './middleware/auth.js';
+import { requireAuth, requirePasswordChanged, requireStaff } from './middleware/auth.js';
 import { requireCustomHeader } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error.js';
 import { adminRouter } from './routes/admin.js';
@@ -51,6 +51,8 @@ export function createApp(ctx: AppContext, options: { webDist?: string } = {}) {
   api.get('/health', (_req, res) => res.json({ ok: true }));
   api.use('/auth', authRouter(ctx));
   api.use(requireAuth(ctx));
+  // Con una contraseña temporal solo se puede consultar la sesión, cambiarla o salir (rutas de /auth, montadas antes).
+  api.use(requirePasswordChanged);
   api.use('/settings', settingsRouter(ctx));
   api.use('/ocr', ocrRouter(ctx));
   api.use('/groups', groupsRouter(ctx));

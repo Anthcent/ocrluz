@@ -7,7 +7,7 @@ import type { AppContext } from '../context.js';
 import { accountSchema, hashPassword, insertAccount, PASSWORD_COST, passwordSchema } from '../lib/accounts.js';
 import { HttpError, isUniqueViolation } from '../lib/http-error.js';
 import { LOCK_MINUTES, MAX_FAILED_ATTEMPTS, PIN_PATTERN } from '../lib/superadmin.js';
-import { currentUser, requireAuth, SESSION_COOKIE, signSession, type SessionUser } from '../middleware/auth.js';
+import { currentUser, requireAuth, SESSION_COOKIE, signSession, toSessionUser, type SessionUser } from '../middleware/auth.js';
 
 const loginSchema = z.object({
   email: z.email('Correo no válido').trim().toLowerCase(),
@@ -79,8 +79,10 @@ export function authRouter(ctx: AppContext) {
 
   router.post('/login', limiter, async (req, res) => {
     const data = loginSchema.parse(req.body);
-    const row = await ctx.db.one<SessionUser & { password_hash: string; credentials_version: number; disabled: boolean }>(
-      'SELECT id, email, name, role, password_hash, credentials_version, disabled_at IS NOT NULL AS disabled FROM users WHERE email = ?',
+    type Row = SessionUser & { password_hash: string; credentials_version: number; disabled: boolean; must_change_password: boolean };
+    const row = await ctx.db.one<Row>(
+      `SELECT id, email, name, role, password_hash, credentials_version, disabled_at IS NOT NULL AS disabled, must_change_password
+         FROM users WHERE email = ?`,
       [data.email],
     );
     // Comparamos siempre para no revelar por tiempo de respuesta si el correo existe.
@@ -89,7 +91,8 @@ export function authRouter(ctx: AppContext) {
     if (!row || !ok || row.role === 'superadmin') throw new HttpError(401, 'Correo o contraseña incorrectos', 'invalid_credentials');
     // Solo se revela que la cuenta está desactivada a quien ya demostró conocer la contraseña.
     if (row.disabled) throw new HttpError(403, 'Tu cuenta está desactivada. Contacta con un administrador.', 'account_disabled');
-    const user: SessionUser = { id: row.id, email: row.email, name: row.name, role: row.role };
+    // Con una contraseña temporal la sesión se abre igual, pero la API exige cambiarla (requirePasswordChanged).
+    const user = toSessionUser({ ...row, mustChangePassword: row.must_change_password });
     await ctx.db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [row.id]);
     setSession(res, user, row.credentials_version);
     res.json({ user });
@@ -171,10 +174,16 @@ export function authRouter(ctx: AppContext) {
     if (!(await bcrypt.compare(data.currentPassword, row.password_hash))) {
       throw new HttpError(400, 'La contraseña actual no es correcta', 'invalid_credentials');
     }
+    // La contraseña temporal (que acaba de coincidir con la actual) no vale como nueva.
+    if (user.mustChangePassword && data.newPassword === data.currentPassword) {
+      throw new HttpError(400, 'La nueva contraseña debe ser distinta de la temporal', 'same_password');
+    }
     const hash = await hashPassword(data.newPassword);
     // Nueva versión de credenciales: las demás sesiones de esta cuenta dejan de valer; la actual se renueva.
+    // Cambiarla también cumple la obligación pendiente tras un restablecimiento.
     const updated = (await ctx.db.one<{ credentials_version: number }>(
-      'UPDATE users SET password_hash = ?, credentials_version = credentials_version + 1 WHERE id = ? RETURNING credentials_version',
+      `UPDATE users SET password_hash = ?, credentials_version = credentials_version + 1, must_change_password = false
+        WHERE id = ? RETURNING credentials_version`,
       [hash, user.id],
     ))!;
     setSession(res, user, updated.credentials_version);

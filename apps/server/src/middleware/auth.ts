@@ -18,6 +18,15 @@ export interface SessionUser {
   email: string;
   name: string;
   role: UserRole;
+  /** Solo presente (y true) tras un restablecimiento: la cuenta debe cambiar la contraseña temporal. */
+  mustChangePassword?: true;
+}
+
+/** Copia del usuario para la sesión; mustChangePassword solo aparece cuando es true. */
+export function toSessionUser(row: Omit<SessionUser, 'mustChangePassword'> & { mustChangePassword?: boolean }): SessionUser {
+  const user: SessionUser = { id: row.id, email: row.email, name: row.name, role: row.role };
+  if (row.mustChangePassword) user.mustChangePassword = true;
+  return user;
 }
 
 declare global {
@@ -53,12 +62,13 @@ export function requireAuth(ctx: AppContext) {
     }
     try {
       // Una cuenta desactivada pierde la sesión al instante, aunque el token siga vigente.
-      const user = await ctx.db.one<SessionUser>(
-        'SELECT id, email, name, role FROM users WHERE id = ? AND credentials_version = ? AND disabled_at IS NULL',
+      const row = await ctx.db.one<SessionUser & { mustChangePassword: boolean }>(
+        `SELECT id, email, name, role, must_change_password AS "mustChangePassword"
+           FROM users WHERE id = ? AND credentials_version = ? AND disabled_at IS NULL`,
         [userId, version],
       );
-      if (!user) return next(new HttpError(401, 'Tu sesión expiró, vuelve a iniciar sesión', 'unauthenticated'));
-      req.user = user;
+      if (!row) return next(new HttpError(401, 'Tu sesión expiró, vuelve a iniciar sesión', 'unauthenticated'));
+      req.user = toSessionUser(row);
       next();
     } catch (err) {
       // Un fallo de la base de datos no es un problema de sesión: que lo gestione el manejador de errores.
@@ -71,6 +81,17 @@ export function requireAuth(ctx: AppContext) {
 export function currentUser(req: Request): SessionUser {
   if (!req.user) throw new HttpError(401, 'No autenticado', 'unauthenticated');
   return req.user;
+}
+
+/**
+ * Con una contraseña temporal pendiente de cambiar no se puede usar la API (usar detrás de requireAuth).
+ * Solo quedan abiertas GET /auth/me, POST /auth/change-password y POST /auth/logout, que se montan antes.
+ */
+export function requirePasswordChanged(req: Request, _res: Response, next: NextFunction) {
+  if (req.user?.mustChangePassword) {
+    return next(new HttpError(403, 'Debes cambiar tu contraseña temporal antes de continuar', 'password_change_required'));
+  }
+  next();
 }
 
 /** Operadores, administradores y superadministrador (usar detrás de requireAuth). */
