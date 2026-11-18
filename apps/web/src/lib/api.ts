@@ -1,5 +1,13 @@
 import type {
+  AdminScan,
+  AdminStats,
+  AdminUser,
+  AdminUserDetail,
+  AdminUserListItem,
+  AdminUserScan,
   Analysis,
+  AuditAction,
+  AuditEntry,
   CustomTemplate,
   DocField,
   SavedDocument,
@@ -13,8 +21,10 @@ import type {
   ScanEngine,
   SearchResult,
   Settings,
+  Paged,
   Stats,
   User,
+  UserRole,
 } from './types';
 
 export class ApiError extends Error {
@@ -88,6 +98,8 @@ export const api = {
   auth: {
     me: () => request<{ user: User }>('/auth/me'),
     login: (email: string, password: string) => request<{ user: User }>('/auth/login', { method: 'POST', json: { email, password } }),
+    superadminLogin: (username: string, password: string, pin: string) =>
+      request<{ user: User }>('/auth/superadmin/login', { method: 'POST', json: { username, password, pin } }),
     register: (name: string, email: string, password: string) =>
       request<{ user: User }>('/auth/register', { method: 'POST', json: { name, email, password } }),
     logout: () => request<void>('/auth/logout', { method: 'POST' }),
@@ -177,5 +189,22 @@ export const api = {
     update: (id: number, summary: FinalSummary) => request<SavedFinalSummary>(`/final-summaries/${id}`, { method: 'PUT', json: { summary } }),
     remove: (id: number) => request<void>(`/final-summaries/${id}`, { method: 'DELETE' }),
     xlsxUrl: (id: number) => `/api/final-summaries/${id}/xlsx`,
+  },
+  /** Administration panel (admins only; the server answers 403 to everyone else). */
+  admin: {
+    stats: (days = 14) => request<AdminStats>(`/admin/stats${qs({ tz: -new Date().getTimezoneOffset(), days })}`),
+    users: (params: { q?: string; role?: UserRole; page?: number; pageSize?: number } = {}) =>
+      request<Paged & { users: AdminUserListItem[] }>(`/admin/users${qs(params)}`),
+    user: (id: number, days = 14) => request<AdminUserDetail>(`/admin/users/${id}${qs({ tz: -new Date().getTimezoneOffset(), days })}`),
+    userScans: (id: number, params: { page?: number; pageSize?: number } = {}) =>
+      request<Paged & { scans: AdminUserScan[] }>(`/admin/users/${id}/scans${qs(params)}`),
+    scan: (id: number) => request<{ scan: AdminScan }>(`/admin/scans/${id}`),
+    setRole: (id: number, role: UserRole) => request<{ user: AdminUser }>(`/admin/users/${id}/role`, { method: 'PATCH', json: { role } }),
+    removeUser: (id: number) => request<void>(`/admin/users/${id}`, { method: 'DELETE' }),
+    /** Superadmin only: creates an admin account with a temporary password. */
+    createAdmin: (data: { name: string; email: string; password: string }) => request<{ user: AdminUser }>('/admin/admins', { method: 'POST', json: data }),
+    /** Read-only audit log, newest first. */
+    audit: (params: { action?: AuditAction; actorId?: number; targetUserId?: number; page?: number; pageSize?: number } = {}) =>
+      request<Paged & { entries: AuditEntry[] }>(`/admin/audit${qs(params)}`),
   },
 };

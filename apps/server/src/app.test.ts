@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
@@ -8,30 +10,45 @@ import { openDatabase, toPositional, type Database } from './db/index.js';
 import { migrations } from './db/migrations.js';
 import { createCipher } from './lib/crypto.js';
 import { resolveSecret } from './lib/secrets.js';
+import { isReservedEmail, parseSuperadminEnv, SUPERADMIN_EMAIL, syncSuperadmin, type SuperadminCredentials } from './lib/superadmin.js';
 import { buildSnippet, searchTerms } from './lib/snippet.js';
 import { toTsQuery } from './routes/search.js';
 
 // Un único PostgreSQL embebido (PGlite) para todo el archivo: arrancarlo cuesta unos segundos.
 let db: Database;
+// Credenciales de prueba del superadministrador; hashes con coste bajo para que los tests sean rápidos.
+const SA = { username: 'sa-prueba01', password: 'Clave-Super-Segura-123!', pin: 'ABCDEFGH2345' };
+let saCreds: SuperadminCredentials;
 beforeAll(async () => {
   db = await openDatabase({});
+  saCreds = { username: SA.username, passwordHash: await bcrypt.hash(SA.password, 4), pinHash: await bcrypt.hash(SA.pin, 4) };
 }, 60_000);
 afterAll(() => db?.close());
 beforeEach(async () => {
-  await db.run('TRUNCATE users, groups, scans, analyses, doc_templates, documents, final_summaries, settings RESTART IDENTITY CASCADE');
+  await db.run('TRUNCATE users, groups, scans, analyses, doc_templates, documents, final_summaries, settings, admin_audit_log RESTART IDENTITY CASCADE');
 });
 
-function setup() {
-  const app = createApp({
-    db,
-    cipher: createCipher('test-secret-key-123456'),
-    jwtSecret: 'test-jwt-secret-123456',
-    secureCookies: false,
-    fallbackKeys: { ocrspace: '', gemini: '' },
-  });
+function setup(existingApp?: ReturnType<typeof createApp>) {
+  const app =
+    existingApp ??
+    createApp({
+      db,
+      cipher: createCipher('test-secret-key-123456'),
+      jwtSecret: 'test-jwt-secret-123456',
+      secureCookies: false,
+      fallbackKeys: { ocrspace: '', gemini: '' },
+    });
   const agent = request.agent(app);
   const post = (url: string, body?: object) => agent.post(url).set('X-Requested-With', 'ocryon').send(body);
   return { db, app, agent, post };
+}
+
+/** Sincroniza el superadministrador (como al arrancar) y abre una sesión suya sobre la app indicada. */
+async function superadminSession(app?: ReturnType<typeof createApp>) {
+  await syncSuperadmin(db, saCreds);
+  const s = setup(app);
+  await s.post('/api/auth/superadmin/login', SA).expect(200);
+  return s;
 }
 
 async function registered(email = 'ana@example.com') {
@@ -53,6 +70,27 @@ describe('auth', () => {
     await post('/api/auth/register', { name: 'Ana', email: 'ANA@example.com', password: 'secreto123' }).expect(409);
     await post('/api/auth/login', { email: 'ana@example.com', password: 'otra-clave' }).expect(401);
     await post('/api/auth/login', { email: 'ana@example.com', password: 'secreto123' }).expect(200);
+  });
+
+  it('cambiar la contraseña cierra las demás sesiones pero mantiene la actual', async () => {
+    const current = await registered();
+    const other = setup();
+    await other.post('/api/auth/login', { email: 'ana@example.com', password: 'secreto123' }).expect(200);
+    await current.post('/api/auth/change-password', { currentPassword: 'secreto123', newPassword: 'nueva-clave-123' }).expect(204);
+    await current.agent.get('/api/auth/me').expect(200);
+    await other.agent.get('/api/auth/me').expect(401);
+    expect(await db.one('SELECT credentials_version AS v FROM users WHERE email = ?', ['ana@example.com'])).toEqual({ v: 1 });
+  });
+
+  it('acepta los tokens emitidos antes de la versión de credenciales (sin claim «v»)', async () => {
+    const { app } = await registered();
+    const { id } = (await db.one<{ id: number }>('SELECT id FROM users WHERE email = ?', ['ana@example.com']))!;
+    const legacy = jwt.sign({ sub: String(id) }, 'test-jwt-secret-123456', { expiresIn: '7d' });
+    const res = await request(app).get('/api/auth/me').set('Cookie', `ocryon_session=${legacy}`).expect(200);
+    expect(res.body.user.email).toBe('ana@example.com');
+    // Tras subir la versión, ese token antiguo deja de valer.
+    await db.run('UPDATE users SET credentials_version = 1 WHERE id = ?', [id]);
+    await request(app).get('/api/auth/me').set('Cookie', `ocryon_session=${legacy}`).expect(401);
   });
 
   it('exige la cabecera anti-CSRF en peticiones que modifican datos', async () => {
@@ -368,5 +406,529 @@ describe('resúmenes finales', () => {
     await beto.agent.get(`/api/final-summaries/${id}`).expect(404);
     await beto.agent.get(`/api/final-summaries/${id}/xlsx`).expect(404);
     expect((await beto.agent.get('/api/final-summaries').expect(200)).body.summaries).toEqual([]);
+  });
+});
+
+describe('administración', () => {
+  const ADMIN = 'admin@example.com';
+
+  /** Un administrador (promovido directamente en la base) y una usuaria normal sobre la misma app. */
+  async function adminAndUser() {
+    const admin = setup();
+    await admin.post('/api/auth/register', { name: 'Admin', email: ADMIN, password: 'secreto123' }).expect(201);
+    await db.run(`UPDATE users SET role = 'admin' WHERE email = ?`, [ADMIN]);
+    const user = request.agent(admin.app);
+    const userPost = (url: string, body?: object) => user.post(url).set('X-Requested-With', 'ocryon').send(body);
+    const { body } = await userPost('/api/auth/register', { name: 'Ana', email: 'ana@example.com', password: 'secreto123' }).expect(201);
+    return { admin, user, userPost, userId: body.user.id as number };
+  }
+
+  /** Además, el superadministrador (sincronizado desde las credenciales de prueba) con su propia sesión. */
+  async function withSuperadmin() {
+    const base = await adminAndUser();
+    const sa = await superadminSession(base.admin.app);
+    return { ...base, sa };
+  }
+
+  const routes = (id: number) =>
+    [
+      ['get', '/api/admin/stats'],
+      ['get', '/api/admin/users'],
+      ['get', `/api/admin/users/${id}`],
+      ['get', `/api/admin/users/${id}/scans`],
+      ['get', '/api/admin/scans'],
+      ['get', '/api/admin/scans/1'],
+      ['get', '/api/admin/audit'],
+      ['patch', `/api/admin/users/${id}/role`],
+      ['delete', `/api/admin/users/${id}`],
+      ['post', '/api/admin/admins'],
+    ] as const;
+
+  it('exige sesión (401) y rol de administrador (403) en todas las rutas', async () => {
+    const { admin, user, userId } = await adminAndUser();
+    const anonymous = request.agent(admin.app);
+    for (const [method, url] of routes(userId)) {
+      await anonymous[method](url).set('X-Requested-With', 'ocryon').send({ role: 'admin' }).expect(401);
+      const res = await user[method](url).set('X-Requested-With', 'ocryon').send({ role: 'admin' }).expect(403);
+      expect(res.body.code).toBe('forbidden');
+    }
+    expect((await db.one<{ role: string }>('SELECT role FROM users WHERE id = ?', [userId]))!.role).toBe('user');
+  });
+
+  it('expone el rol en la sesión y nunca devuelve la contraseña', async () => {
+    const { admin } = await adminAndUser();
+    expect((await admin.agent.get('/api/auth/me').expect(200)).body.user).toEqual({ id: expect.any(Number), email: ADMIN, name: 'Admin', role: 'admin' });
+    const login = await admin.post('/api/auth/login', { email: ADMIN, password: 'secreto123' }).expect(200);
+    expect(login.body.user.role).toBe('admin');
+    expect(JSON.stringify(login.body)).not.toContain('password');
+    const other = await registered('normal@example.com');
+    expect((await other.agent.get('/api/auth/me')).body.user.role).toBe('user');
+  });
+
+  it('lista usuarios, detalle, escaneos y estadísticas globales', async () => {
+    const { admin, userPost, userId } = await adminAndUser();
+    await userPost('/api/scans', {
+      newGroup: { title: 'Actas' },
+      items: [
+        { text: 'uno dos tres', engine: 'ocrspace' },
+        { text: 'x'.repeat(500), engine: 'gemini' },
+      ],
+    }).expect(201);
+    await admin.post('/api/scans', { items: [{ text: 'hola mundo', engine: 'manual' }] }).expect(201);
+
+    const stats = (await admin.agent.get('/api/admin/stats').query({ tz: -300, days: 7 }).expect(200)).body;
+    expect(stats.totals).toEqual({ users: 2, admins: 1, scans: 3, words: 6, groups: 1, documents: 0 });
+    expect(stats.perDay).toHaveLength(7);
+    expect(stats.perDay.at(-1).count).toBe(3);
+    expect(stats.topUsers[0]).toMatchObject({ id: userId, email: 'ana@example.com', scans: 2 });
+    expect(stats.recentScans).toHaveLength(3);
+    expect(stats.recentScans[0]).toMatchObject({ userEmail: ADMIN, engine: 'manual' });
+    expect(stats.recentScans[0].createdAt).toMatch(/Z$/);
+
+    const list = (await admin.agent.get('/api/admin/users').expect(200)).body;
+    expect(list.total).toBe(2);
+    const ana = list.users.find((u: any) => u.id === userId);
+    expect(ana).toMatchObject({ email: 'ana@example.com', role: 'user', scanCount: 2, wordCount: 4 });
+    expect(ana.lastScanAt).toMatch(/Z$/);
+    expect(JSON.stringify(list)).not.toContain('password');
+    const found = (await admin.agent.get('/api/admin/users').query({ q: 'ANA' }).expect(200)).body;
+    expect(found.users.map((u: any) => u.id)).toEqual([userId]);
+    const admins = (await admin.agent.get('/api/admin/users').query({ role: 'admin' }).expect(200)).body;
+    expect(admins.users.map((u: any) => u.email)).toEqual([ADMIN]);
+    await admin.agent.get('/api/admin/users').query({ role: 'root' }).expect(400);
+    const paged = (await admin.agent.get('/api/admin/users').query({ page: 2, pageSize: 1 }).expect(200)).body;
+    expect(paged).toMatchObject({ total: 2, page: 2, pageSize: 1 });
+    expect(paged.users).toHaveLength(1);
+
+    const detail = (await admin.agent.get(`/api/admin/users/${userId}`).expect(200)).body;
+    expect(detail.user).toMatchObject({ id: userId, email: 'ana@example.com', role: 'user' });
+    expect(detail.user).not.toHaveProperty('password_hash');
+    expect(detail.stats).toMatchObject({ scans: 2, words: 4, groups: 1, documents: 0 });
+    expect(detail.stats.byEngine).toEqual(
+      expect.arrayContaining([
+        { engine: 'ocrspace', count: 1, words: 3 },
+        { engine: 'gemini', count: 1, words: 1 },
+      ]),
+    );
+    expect(detail.stats.perDay).toHaveLength(14);
+
+    const scans = (await admin.agent.get(`/api/admin/users/${userId}/scans`).expect(200)).body;
+    expect(scans.total).toBe(2);
+    expect(scans.scans[0]).toMatchObject({ groupTitle: 'Actas', engine: 'gemini' });
+    expect(scans.scans[0].preview).toHaveLength(200);
+    expect(scans.scans[0]).not.toHaveProperty('text');
+
+    const log = (await admin.agent.get('/api/admin/scans').query({ userId }).expect(200)).body;
+    expect(log.total).toBe(2);
+    expect(log.scans.every((s: any) => s.userEmail === 'ana@example.com')).toBe(true);
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    expect((await admin.agent.get('/api/admin/scans').query({ from: future }).expect(200)).body.total).toBe(0);
+    expect((await admin.agent.get('/api/admin/scans').query({ to: future }).expect(200)).body.total).toBe(3);
+
+    await admin.agent.get('/api/admin/users/9999').expect(404);
+    await admin.agent.get('/api/admin/users/9999/scans').expect(404);
+  });
+
+  it('el superadministrador cambia roles; el administrador elimina usuarios en cascada sin tocar los datos de otros', async () => {
+    const { admin, user, userPost, userId, sa } = await withSuperadmin();
+    await userPost('/api/scans', { newGroup: { title: 'Suyo' }, items: [{ text: 'de Ana', engine: 'manual' }] }).expect(201);
+    await admin.post('/api/scans', { items: [{ text: 'del admin', engine: 'manual' }] }).expect(201);
+    const role = (id: number | string, value: string) => sa.agent.patch(`/api/admin/users/${id}/role`).set('X-Requested-With', 'ocryon').send({ role: value });
+
+    expect((await role(userId, 'admin').expect(200)).body.user.role).toBe('admin');
+    expect((await user.get('/api/auth/me')).body.user.role).toBe('admin');
+    await role(userId, 'user').expect(200);
+    await role(userId, 'root').expect(400);
+    await role(userId, 'superadmin').expect(400);
+    await role(9999, 'admin').expect(404);
+
+    await admin.agent.delete(`/api/admin/users/${userId}`).set('X-Requested-With', 'ocryon').expect(204);
+    await admin.agent.delete(`/api/admin/users/${userId}`).set('X-Requested-With', 'ocryon').expect(404);
+    for (const table of ['scans', 'groups', 'settings']) {
+      expect(await db.one(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ?`, [userId])).toEqual({ n: 0 });
+    }
+    expect(await db.one('SELECT COUNT(*) AS n FROM scans')).toEqual({ n: 1 });
+    // La cookie de la cuenta borrada deja de valer.
+    await user.get('/api/auth/me').expect(401);
+    await user.get('/api/scans').expect(401);
+  });
+
+  it('el administrador no cambia roles, no crea administradores, no elimina a otro administrador ni a sí mismo', async () => {
+    const { admin, userId, sa } = await withSuperadmin();
+    const adminId = (await admin.agent.get('/api/auth/me')).body.user.id;
+    const patch = (id: number, role: string) => admin.agent.patch(`/api/admin/users/${id}/role`).set('X-Requested-With', 'ocryon').send({ role });
+    const remove = (id: number) => admin.agent.delete(`/api/admin/users/${id}`).set('X-Requested-With', 'ocryon');
+
+    expect((await patch(userId, 'admin').expect(403)).body.code).toBe('forbidden');
+    expect((await patch(adminId, 'user').expect(403)).body.code).toBe('forbidden');
+    const created = await admin.post('/api/admin/admins', { name: 'Otro', email: 'otro@example.com', password: 'secreto123' }).expect(403);
+    expect(created.body.code).toBe('forbidden');
+    expect(await db.one(`SELECT COUNT(*) AS n FROM users WHERE email = 'otro@example.com'`)).toEqual({ n: 0 });
+
+    expect((await remove(adminId).expect(409)).body.code).toBe('self_action');
+
+    // Otro administrador (promovido por el superadministrador): un administrador no puede eliminarlo.
+    await sa.agent.patch(`/api/admin/users/${userId}/role`).set('X-Requested-With', 'ocryon').send({ role: 'admin' }).expect(200);
+    expect((await remove(userId).expect(403)).body.code).toBe('forbidden');
+    expect(await db.one('SELECT COUNT(*) AS n FROM users WHERE id = ?', [userId])).toEqual({ n: 1 });
+    // El superadministrador sí.
+    await sa.agent.delete(`/api/admin/users/${userId}`).set('X-Requested-With', 'ocryon').expect(204);
+    expect(await db.one('SELECT COUNT(*) AS n FROM admin_audit_log WHERE action = ?', ['delete_user'])).toEqual({ n: 1 });
+  });
+
+  it('nadie puede eliminar, degradar ni cambiar al superadministrador', async () => {
+    const { admin, sa } = await withSuperadmin();
+    const saId = (await sa.agent.get('/api/auth/me').expect(200)).body.user.id;
+    for (const agent of [admin.agent, sa.agent]) {
+      for (const role of ['user', 'admin']) {
+        const res = await agent.patch(`/api/admin/users/${saId}/role`).set('X-Requested-With', 'ocryon').send({ role });
+        expect(res.status).toBe(403);
+      }
+      expect((await agent.delete(`/api/admin/users/${saId}`).set('X-Requested-With', 'ocryon')).status).toBe(403);
+    }
+    const res = await sa.agent.delete(`/api/admin/users/${saId}`).set('X-Requested-With', 'ocryon').expect(403);
+    expect(res.body.code).toBe('superadmin_protected');
+    expect(await db.one(`SELECT role FROM users WHERE id = ?`, [saId])).toEqual({ role: 'superadmin' });
+    expect(await db.one('SELECT COUNT(*) AS n FROM admin_audit_log')).toEqual({ n: 0 });
+  });
+
+  it('el superadministrador crea administradores (auditado) que entran con el login normal', async () => {
+    const { sa } = await withSuperadmin();
+    const created = await sa.post('/api/admin/admins', { name: 'Nuevo Admin', email: 'NUEVO@example.com', password: 'temporal123' }).expect(201);
+    expect(created.body.user).toMatchObject({ email: 'nuevo@example.com', name: 'Nuevo Admin', role: 'admin', lastLoginAt: null });
+    expect(JSON.stringify(created.body)).not.toContain('password');
+
+    const login = await setup().post('/api/auth/login', { email: 'nuevo@example.com', password: 'temporal123' }).expect(200);
+    expect(login.body.user.role).toBe('admin');
+    expect(await db.one('SELECT COUNT(*) AS n FROM settings WHERE user_id = ?', [created.body.user.id])).toEqual({ n: 1 });
+
+    const audit = (await sa.agent.get('/api/admin/audit').query({ action: 'create_admin' }).expect(200)).body;
+    expect(audit.total).toBe(1);
+    expect(audit.entries[0]).toMatchObject({
+      action: 'create_admin',
+      actorEmail: SUPERADMIN_EMAIL,
+      targetUserId: created.body.user.id,
+      targetEmail: 'nuevo@example.com',
+      details: { name: 'Nuevo Admin' },
+    });
+
+    expect((await sa.post('/api/admin/admins', { name: 'Otra', email: 'nuevo@example.com', password: 'temporal123' }).expect(409)).body.code).toBe('email_taken');
+    await sa.post('/api/admin/admins', { name: 'Otra', email: 'otra@reserved.invalid', password: 'temporal123' }).expect(400);
+    await sa.post('/api/admin/admins', { name: 'Otra', email: 'otra@example.com', password: 'corta' }).expect(400);
+  });
+
+  it('el administrador lee el texto completo de un escaneo ajeno; nadie más puede', async () => {
+    const { admin, user, userPost, userId } = await adminAndUser();
+    const long = `${'palabra '.repeat(100)}final`;
+    const saved = await userPost('/api/scans', { newGroup: { title: 'Carpeta de Ana' }, items: [{ text: long, engine: 'gemini' }] }).expect(201);
+    const scanId = saved.body.ids[0];
+
+    const { body } = await admin.agent.get(`/api/admin/scans/${scanId}`).expect(200);
+    expect(body.scan).toMatchObject({ id: scanId, text: long, originalText: null, engine: 'gemini', groupTitle: 'Carpeta de Ana', userId, userEmail: 'ana@example.com', userName: 'Ana' });
+    expect(body.scan).not.toHaveProperty('workspaceHtml');
+
+    const denied = await user.get(`/api/admin/scans/${scanId}`).expect(403);
+    expect(denied.body.code).toBe('forbidden');
+    await request.agent(admin.app).get(`/api/admin/scans/${scanId}`).expect(401);
+    await admin.agent.get('/api/admin/scans/9999').expect(404);
+  });
+
+  it('registra la fecha del último inicio de sesión', async () => {
+    const { admin, userPost, userId } = await adminAndUser();
+    await db.run('UPDATE users SET last_login_at = NULL WHERE id = ?', [userId]);
+    await userPost('/api/auth/login', { email: 'ana@example.com', password: 'secreto123' }).expect(200);
+    const { body } = await admin.agent.get(`/api/admin/users/${userId}`).expect(200);
+    expect(body.user.lastLoginAt).toMatch(/Z$/);
+  });
+
+  describe('auditoría', () => {
+    const audit = (agent: ReturnType<typeof request.agent>, query: object = {}) => agent.get('/api/admin/audit').query(query);
+
+    it('registra la lectura de un escaneo ajeno', async () => {
+      const { admin, userPost, userId } = await adminAndUser();
+      const saved = await userPost('/api/scans', { items: [{ title: 'Factura', text: 'importe', engine: 'manual' }] }).expect(201);
+      const scanId = saved.body.ids[0];
+      await admin.agent.get(`/api/admin/scans/${scanId}`).expect(200);
+      await admin.agent.get('/api/admin/scans/9999').expect(404);
+
+      const { body } = await audit(admin.agent).expect(200);
+      expect(body).toMatchObject({ total: 1, page: 1, pageSize: 20 });
+      expect(body.entries[0]).toMatchObject({
+        action: 'view_scan',
+        actorEmail: ADMIN,
+        targetUserId: userId,
+        targetEmail: 'ana@example.com',
+        targetScanId: scanId,
+        targetExists: true,
+        details: { title: 'Factura' },
+      });
+      expect(body.entries[0].createdAt).toMatch(/Z$/);
+    });
+
+    it('registra cambios de rol con origen y destino, y filtra y pagina del más reciente al más antiguo', async () => {
+      const { admin, userId, sa } = await withSuperadmin();
+      const saId = (await sa.agent.get('/api/auth/me')).body.user.id;
+      const role = (value: string) => sa.agent.patch(`/api/admin/users/${userId}/role`).set('X-Requested-With', 'ocryon').send({ role: value });
+      await role('admin').expect(200);
+      await role('admin').expect(200); // sin cambios: no se registra
+      await role('user').expect(200);
+
+      const { body } = await audit(admin.agent).expect(200);
+      expect(body.total).toBe(2);
+      expect(body.entries.map((e: any) => e.details)).toEqual([
+        { from: 'admin', to: 'user' },
+        { from: 'user', to: 'admin' },
+      ]);
+      expect(body.entries[0]).toMatchObject({ action: 'change_role', actorId: saId, actorEmail: SUPERADMIN_EMAIL, targetUserId: userId, targetEmail: 'ana@example.com' });
+
+      const paged = (await audit(admin.agent, { page: 2, pageSize: 1 }).expect(200)).body;
+      expect(paged.entries.map((e: any) => e.details.to)).toEqual(['admin']);
+      expect((await audit(admin.agent, { action: 'delete_user' }).expect(200)).body.total).toBe(0);
+      expect((await audit(admin.agent, { actorId: saId, targetUserId: userId }).expect(200)).body.total).toBe(2);
+      expect((await audit(admin.agent, { targetUserId: saId }).expect(200)).body.total).toBe(0);
+      await audit(admin.agent, { action: 'otra' }).expect(400);
+    });
+
+    it('el registro sobrevive al borrado del afectado y del actor', async () => {
+      const { admin, userPost, userId, sa } = await withSuperadmin();
+      const adminId = (await admin.agent.get('/api/auth/me')).body.user.id;
+      const saved = await userPost('/api/scans', { items: [{ title: 'Nota', text: 'texto', engine: 'manual' }] }).expect(201);
+      await admin.agent.get(`/api/admin/scans/${saved.body.ids[0]}`).expect(200);
+      // El superadministrador elimina al administrador que leyó el escaneo.
+      await sa.agent.delete(`/api/admin/users/${adminId}`).set('X-Requested-With', 'ocryon').expect(204);
+
+      const { body } = await audit(sa.agent).expect(200);
+      expect(body.total).toBe(2);
+      const [deletion, reading] = body.entries;
+      expect(deletion).toMatchObject({ action: 'delete_user', actorEmail: SUPERADMIN_EMAIL, targetUserId: adminId, targetEmail: ADMIN, targetExists: false, details: { role: 'admin' } });
+      // El actor borrado queda con actor_id NULL pero conserva su correo.
+      expect(reading).toMatchObject({ action: 'view_scan', actorId: null, actorEmail: ADMIN, targetUserId: userId });
+    });
+
+    it('un borrado cuyo registro falla se deshace entero', async () => {
+      const { admin, userId } = await adminAndUser();
+      await db.run(`ALTER TABLE admin_audit_log ADD CONSTRAINT audit_test_block CHECK (action <> 'delete_user')`);
+      try {
+        await admin.agent.delete(`/api/admin/users/${userId}`).set('X-Requested-With', 'ocryon').expect(500);
+      } finally {
+        await db.run('ALTER TABLE admin_audit_log DROP CONSTRAINT audit_test_block');
+      }
+      expect(await db.one('SELECT COUNT(*) AS n FROM users WHERE id = ?', [userId])).toEqual({ n: 1 });
+    });
+
+    it('un administrador degradado durante la petición no puede eliminar a nadie (403) y nada se registra', async () => {
+      const { userId } = await adminAndUser();
+      const adminId = (await db.one<{ id: number }>('SELECT id FROM users WHERE email = ?', [ADMIN]))!.id;
+      // La sesión se validó cuando aún era administrador (el middleware ve un rol desfasado);
+      // entre tanto el superadministrador lo degradó. Solo la comprobación dentro de la transacción lo detiene.
+      const staleSession: Database = {
+        ...db,
+        one: (sql, params) =>
+          sql.startsWith('SELECT id, email, name, role FROM users')
+            ? db.one(sql, params).then((u) => (u ? ({ ...u, role: 'admin' } as never) : undefined))
+            : db.one(sql, params),
+      };
+      const stale = request.agent(
+        createApp({
+          db: staleSession,
+          cipher: createCipher('test-secret-key-123456'),
+          jwtSecret: 'test-jwt-secret-123456',
+          secureCookies: false,
+          fallbackKeys: { ocrspace: '', gemini: '' },
+        }),
+      );
+      await stale.post('/api/auth/login').set('X-Requested-With', 'ocryon').send({ email: ADMIN, password: 'secreto123' }).expect(200);
+      await db.run(`UPDATE users SET role = 'user' WHERE id = ?`, [adminId]);
+      const res = await stale.delete(`/api/admin/users/${userId}`).set('X-Requested-With', 'ocryon');
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('forbidden');
+      expect(await db.one('SELECT COUNT(*) AS n FROM users WHERE id = ?', [userId])).toEqual({ n: 1 });
+      expect(await db.one('SELECT COUNT(*) AS n FROM admin_audit_log')).toEqual({ n: 0 });
+    });
+
+    it('no se puede modificar ni borrar el registro desde la API', async () => {
+      const { admin, user, userPost } = await adminAndUser();
+      await audit(user).expect(403);
+      await audit(request.agent(admin.app)).expect(401);
+      const saved = await userPost('/api/scans', { items: [{ text: 'algo', engine: 'manual' }] }).expect(201);
+      await admin.agent.get(`/api/admin/scans/${saved.body.ids[0]}`).expect(200);
+      for (const method of ['post', 'put', 'patch', 'delete'] as const) {
+        for (const url of ['/api/admin/audit', '/api/admin/audit/1']) {
+          const res = await admin.agent[method](url).set('X-Requested-With', 'ocryon').send({ action: 'view_scan' });
+          expect(res.status).toBe(404);
+        }
+      }
+      expect(await db.one('SELECT COUNT(*) AS n FROM admin_audit_log')).toEqual({ n: 1 });
+    });
+  });
+});
+
+describe('superadministrador', () => {
+  const login = (s: ReturnType<typeof setup>, body: object) => s.post('/api/auth/superadmin/login', body);
+
+  it('al arrancar crea el superadministrador y después aplica la rotación de credenciales', async () => {
+    expect(await syncSuperadmin(db, saCreds)).toBe('created');
+    const row = await db.one<Record<string, unknown>>(`SELECT id, email, name, username, role FROM users WHERE role = 'superadmin'`);
+    expect(row).toMatchObject({ email: SUPERADMIN_EMAIL, name: 'Superadministrador', username: SA.username, role: 'superadmin' });
+    expect(await db.one('SELECT COUNT(*) AS n FROM settings WHERE user_id = ?', [row!.id])).toEqual({ n: 1 });
+
+    // Rotación: nuevo usuario, contraseña y PIN; el bloqueo se levanta y los datos anteriores dejan de valer.
+    await db.run(`UPDATE users SET failed_attempts = 5, locked_until = now() + interval '10 minutes' WHERE id = ?`, [row!.id]);
+    const rotated = { username: 'sa-rotado99', passwordHash: await bcrypt.hash('Otra-Clave-Larga-456?', 4), pinHash: await bcrypt.hash('ZZZZ22223333', 4) };
+    expect(await syncSuperadmin(db, rotated)).toBe('updated');
+    expect(await db.one(`SELECT id, username, failed_attempts AS "failedAttempts", locked_until AS "lockedUntil" FROM users WHERE role = 'superadmin'`)).toEqual({
+      id: row!.id,
+      username: 'sa-rotado99',
+      failedAttempts: 0,
+      lockedUntil: null,
+    });
+    const s = setup();
+    await login(s, SA).expect(401);
+    await login(s, { username: 'sa-rotado99', password: 'Otra-Clave-Larga-456?', pin: 'zzzz22223333' }).expect(200);
+  });
+
+  it('rotar la contraseña o el PIN cierra sus sesiones; reiniciar sin cambios no', async () => {
+    const s = await superadminSession();
+    // Reinicio con las mismas credenciales: la sesión sigue viva.
+    expect(await syncSuperadmin(db, saCreds)).toBe('updated');
+    await s.agent.get('/api/auth/me').expect(200);
+    // Solo cambia el PIN: la sesión anterior deja de valer.
+    const newPin = 'ZZZZ22223333';
+    expect(await syncSuperadmin(db, { ...saCreds, pinHash: await bcrypt.hash(newPin, 4) })).toBe('updated');
+    await s.agent.get('/api/auth/me').expect(401);
+    const fresh = setup();
+    await login(fresh, { ...SA, pin: newPin }).expect(200);
+    await fresh.agent.get('/api/auth/me').expect(200);
+    expect(await db.one(`SELECT credentials_version AS v FROM users WHERE role = 'superadmin'`)).toEqual({ v: 1 });
+  });
+
+  it('su sesión caduca a las 12 horas', async () => {
+    await syncSuperadmin(db, saCreds);
+    const res = await login(setup(), SA).expect(200);
+    const cookie = String(res.headers['set-cookie']);
+    const token = /ocryon_session=([^;]+)/.exec(cookie)![1];
+    const payload = jwt.decode(token) as jwt.JwtPayload;
+    expect(payload.exp! - payload.iat!).toBe(12 * 60 * 60);
+    expect(payload.v).toBe(0);
+    expect(cookie).toMatch(/Max-Age=43200/);
+  });
+
+  it('si una cuenta normal ya usa el correo reservado, arranca sin superadministrador y no la toca', async () => {
+    const hash = await bcrypt.hash('secreto123', 4);
+    await db.run(`INSERT INTO users (email, name, password_hash) VALUES (?, 'Ana', ?)`, [SUPERADMIN_EMAIL, hash]);
+    const before = await db.one(`SELECT * FROM users WHERE email = ?`, [SUPERADMIN_EMAIL]);
+    const errors: unknown[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => errors.push(args.join(' '));
+    try {
+      expect(await syncSuperadmin(db, saCreds)).toBe('conflict');
+    } finally {
+      console.error = original;
+    }
+    expect(String(errors[0])).toMatch(/no se sincroniza el superadministrador/);
+    expect(await db.one(`SELECT * FROM users WHERE email = ?`, [SUPERADMIN_EMAIL])).toEqual(before);
+    expect(await db.one(`SELECT COUNT(*) AS n FROM users WHERE role = 'superadmin'`)).toEqual({ n: 0 });
+    // La app sigue sirviendo a los usuarios normales.
+    await setup().post('/api/auth/login', { email: SUPERADMIN_EMAIL, password: 'secreto123' }).expect(200);
+    await login(setup(), SA).expect(401);
+  });
+
+  it('valida las variables de entorno', () => {
+    expect(parseSuperadminEnv({})).toBeUndefined();
+    expect(parseSuperadminEnv({ SUPERADMIN_USERNAME: SA.username, SUPERADMIN_PASSWORD_HASH: ` ${saCreds.passwordHash} `, SUPERADMIN_PIN_HASH: `'${saCreds.pinHash}'` })).toEqual(saCreds);
+    expect(() => parseSuperadminEnv({ SUPERADMIN_USERNAME: SA.username })).toThrow(/juntas/);
+    expect(() => parseSuperadminEnv({ SUPERADMIN_USERNAME: 'A!', SUPERADMIN_PASSWORD_HASH: saCreds.passwordHash, SUPERADMIN_PIN_HASH: saCreds.pinHash })).toThrow(/SUPERADMIN_USERNAME/);
+    expect(() => parseSuperadminEnv({ SUPERADMIN_USERNAME: SA.username, SUPERADMIN_PASSWORD_HASH: 'texto-plano', SUPERADMIN_PIN_HASH: saCreds.pinHash })).toThrow(/SUPERADMIN_PASSWORD_HASH/);
+  });
+
+  it('entra con usuario, contraseña y PIN correctos, y el PIN no distingue mayúsculas', async () => {
+    await syncSuperadmin(db, saCreds);
+    const s = setup();
+    const res = await login(s, { ...SA, username: SA.username.toUpperCase(), pin: SA.pin.toLowerCase() }).expect(200);
+    expect(res.body.user).toEqual({ id: expect.any(Number), email: SUPERADMIN_EMAIL, name: 'Superadministrador', role: 'superadmin' });
+    expect(JSON.stringify(res.body)).not.toMatch(/hash|failed|pin/i);
+    expect((await s.agent.get('/api/auth/me').expect(200)).body.user.role).toBe('superadmin');
+    // Cuenta como administrador en todo el panel.
+    await s.agent.get('/api/admin/stats').expect(200);
+    const users = (await s.agent.get('/api/admin/users').expect(200)).body;
+    expect(JSON.stringify(users)).not.toMatch(/hash|failed_attempts|locked|username/i);
+    expect(await db.one(`SELECT last_login_at IS NOT NULL AS ok FROM users WHERE role = 'superadmin'`)).toEqual({ ok: true });
+  });
+
+  it('responde el mismo error genérico con contraseña, PIN o usuario incorrectos', async () => {
+    await syncSuperadmin(db, saCreds);
+    const s = setup();
+    const attempts = [
+      { ...SA, password: 'otra-clave' },
+      { ...SA, pin: 'ABCDEFGH9999' },
+      { ...SA, username: 'sa-noexiste' },
+      { ...SA, pin: 'corto' },
+    ];
+    for (const body of attempts) {
+      const res = await login(s, body).expect(401);
+      expect(res.body).toEqual({ error: 'Credenciales no válidas', code: 'invalid_credentials' });
+    }
+    // Solo cuentan los fallos con el usuario correcto y un PIN con formato válido.
+    expect(await db.one(`SELECT failed_attempts AS n FROM users WHERE role = 'superadmin'`)).toEqual({ n: 2 });
+    await login(s, SA).expect(200);
+    expect(await db.one(`SELECT failed_attempts AS n FROM users WHERE role = 'superadmin'`)).toEqual({ n: 0 });
+  });
+
+  it('bloquea la cuenta 15 minutos tras 5 fallos seguidos, aunque después acierte', async () => {
+    await syncSuperadmin(db, saCreds);
+    const s = setup();
+    for (let i = 0; i < 5; i++) await login(s, { ...SA, password: `mala-${i}` }).expect(401);
+    // Bloqueada responde el mismo 401 genérico: no confirma que el usuario exista.
+    const locked = await login(s, SA).expect(401);
+    expect(locked.body).toEqual({ error: 'Credenciales no válidas', code: 'invalid_credentials' });
+    const row = await db.one<{ minutes: number }>(`SELECT round(extract(epoch FROM locked_until - now()) / 60) AS minutes FROM users WHERE role = 'superadmin'`);
+    expect(Number(row!.minutes)).toBe(15);
+    expect(await db.one(`SELECT last_login_at AS t FROM users WHERE role = 'superadmin'`)).toEqual({ t: null });
+
+    // Vencido el bloqueo, vuelve a entrar y el contador se reinicia.
+    await db.run(`UPDATE users SET locked_until = now() - interval '1 second' WHERE role = 'superadmin'`);
+    await login(s, SA).expect(200);
+    expect(await db.one(`SELECT failed_attempts AS n, locked_until AS l FROM users WHERE role = 'superadmin'`)).toEqual({ n: 0, l: null });
+  });
+
+  it('intentos fallidos simultáneos se cuentan uno a uno y bloquean la cuenta', async () => {
+    await syncSuperadmin(db, saCreds);
+    const results = await Promise.all(Array.from({ length: 8 }, (_, i) => login(setup(), { ...SA, password: `mala-${i}` })));
+    expect(results.map((r) => r.status)).toEqual(Array(8).fill(401));
+    const row = await db.one<{ n: number; locked: boolean }>(
+      `SELECT failed_attempts AS n, locked_until > now() AS locked FROM users WHERE role = 'superadmin'`,
+    );
+    // Los 5 primeros cuentan y bloquean; los demás llegan con la cuenta ya bloqueada y no suman.
+    expect(row).toEqual({ n: 5, locked: true });
+    // Con la cuenta bloqueada, ni las credenciales correctas (ni en paralelo) abren sesión.
+    const correct = await Promise.all([login(setup(), SA), login(setup(), SA)]);
+    expect(correct.map((r) => r.status)).toEqual([401, 401]);
+    expect(await db.one(`SELECT last_login_at AS t FROM users WHERE role = 'superadmin'`)).toEqual({ t: null });
+  });
+
+  it('el login normal rechaza al superadministrador y no puede cambiar su contraseña', async () => {
+    await syncSuperadmin(db, saCreds);
+    const s = setup();
+    const normal = await s.post('/api/auth/login', { email: SUPERADMIN_EMAIL, password: SA.password }).expect(401);
+    expect(normal.body.code).toBe('invalid_credentials');
+    await login(s, SA).expect(200);
+    const res = await s.post('/api/auth/change-password', { currentPassword: SA.password, newPassword: 'nueva-clave-123' }).expect(403);
+    expect(res.body.error).toMatch(/servidor/);
+    expect(await bcrypt.compare(SA.password, (await db.one<{ h: string }>(`SELECT password_hash AS h FROM users WHERE role = 'superadmin'`))!.h)).toBe(true);
+  });
+
+  it('rechaza registrar correos del dominio reservado .invalid', async () => {
+    const s = setup();
+    for (const email of [SUPERADMIN_EMAIL, 'ana@algo.invalid', 'ANA@INVALID']) {
+      await s.post('/api/auth/register', { name: 'Ana', email, password: 'secreto123' }).expect(400);
+    }
+    expect(isReservedEmail('ana@invalid.example.com')).toBe(false);
+  });
+
+  it('solo puede existir un superadministrador', async () => {
+    await syncSuperadmin(db, saCreds);
+    await expect(db.run(`INSERT INTO users (email, name, password_hash, role) VALUES ('otro@example.com', 'Otro', 'x', 'superadmin')`)).rejects.toThrow();
+    await expect(db.run(`INSERT INTO users (email, name, password_hash, role) VALUES ('raro@example.com', 'Raro', 'x', 'root')`)).rejects.toThrow();
+    expect(await db.one(`SELECT COUNT(*) AS n FROM users WHERE role = 'superadmin'`)).toEqual({ n: 1 });
   });
 });

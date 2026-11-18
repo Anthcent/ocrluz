@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseSuperadminEnv } from './lib/superadmin.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === 'production';
@@ -27,13 +28,19 @@ export const config = {
   jwtSecret: secret('JWT_SECRET'),
   encryptionKey: secret('ENCRYPTION_KEY'),
   sessionDays: 7,
+  /** Las sesiones del superadministrador duran menos: caducan a las 12 horas. */
+  superadminSessionHours: 12,
   /** Intentos de login/registro permitidos por IP cada 15 minutos. */
   authRateLimit: Number(process.env.AUTH_RATE_LIMIT ?? 20),
+  /** Intentos de acceso del superadministrador por IP cada 15 minutos (más estricto que el login normal). */
+  superadminRateLimit: Number(process.env.SUPERADMIN_RATE_LIMIT ?? 10),
   /** Claves globales opcionales; cada usuario puede configurar las suyas desde Ajustes. */
   fallbackKeys: {
     ocrspace: process.env.OCRSPACE_API_KEY ?? '',
     gemini: process.env.GEMINI_API_KEY ?? '',
   },
+  /** Credenciales del superadministrador (hashes bcrypt). Sin ellas no se sincroniza ninguno. */
+  superadmin: parseSuperadminEnv(process.env),
   webDist: process.env.WEB_DIST ?? path.resolve(here, '../../web/dist'),
   maxImageBytes: 8 * 1024 * 1024,
 };

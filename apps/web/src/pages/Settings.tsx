@@ -1,12 +1,13 @@
-import { CircleCheck, Settings as SettingsIcon, ExternalLink, KeyRound, LogOut, Palette, ShieldCheck, SlidersHorizontal, Trash2, UserRound } from 'lucide-react';
+import { ArrowRight, CircleCheck, Settings as SettingsIcon, ExternalLink, KeyRound, LogOut, Palette, ShieldCheck, SlidersHorizontal, Trash2, UserRound, UsersRound } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { PageHeader } from '../components/PageHeader';
 import { Badge, Button, Field, Input, Segmented, Select, Toggle } from '../components/ui';
 import { api } from '../lib/api';
 import { CLOUD_OCR, ENGINES, LANGUAGES } from '../lib/constants';
-import type { Engine, KeyStatus } from '../lib/types';
+import { isAdminRole, type Engine, type KeyStatus } from '../lib/types';
 import { useSettings } from '../settings/SettingsContext';
 import { THEME_LABEL, THEMES, useTheme, type ThemeName } from '../theme/ThemeContext';
 
@@ -109,9 +110,30 @@ export function SettingsPage() {
           </Section>
         </div>
         <div className="space-y-5 xl:sticky xl:top-24">
-          <Section icon={<ShieldCheck />} title="Seguridad" subtitle="Cambia tu contraseña.">
-            <ChangePassword />
-          </Section>
+          {user?.role === 'superadmin' ? (
+            <Section icon={<ShieldCheck />} title="Seguridad" subtitle="Credenciales del superadministrador.">
+              <p className="max-w-[65ch] text-sm text-wolf" data-testid="superadmin-credentials-note">
+                El usuario, la contraseña y el PIN del superadministrador se gestionan en el servidor y no se pueden cambiar desde aquí. Para
+                cambiarlos, genera unas credenciales nuevas, actualiza las variables de entorno y reinicia el servidor.
+              </p>
+            </Section>
+          ) : (
+            <Section icon={<ShieldCheck />} title="Seguridad" subtitle="Cambia tu contraseña.">
+              <ChangePassword />
+            </Section>
+          )}
+
+          {isAdminRole(user?.role) && (
+            <Section icon={<UsersRound />} title="Administración" subtitle="Usuarios, roles y actividad de escaneo de toda la aplicación.">
+              <Link
+                to="/admin"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-eel px-5 text-sm font-bold text-white transition-[transform,background-color] duration-200 hover:bg-eel-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-macaw/35 active:scale-[0.98]"
+              >
+                Abrir administración
+                <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            </Section>
+          )}
 
           <Section icon={<UserRound />} title="Cuenta" subtitle={user?.email ?? ''}>
             <Button variant="plain" icon={<LogOut className="size-5" />} onClick={logout}>

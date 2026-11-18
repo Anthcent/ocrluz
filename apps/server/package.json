@@ -9,7 +9,8 @@
     "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=../../.env dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "import:sqlite": "tsx --disable-warning=ExperimentalWarning --env-file-if-exists=../../.env src/scripts/import-sqlite.ts"
+    "import:sqlite": "tsx --disable-warning=ExperimentalWarning --env-file-if-exists=../../.env src/scripts/import-sqlite.ts",
+    "superadmin:credentials": "tsx --disable-warning=ExperimentalWarning src/scripts/superadmin-credentials.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

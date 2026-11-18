@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { FeedbackProvider } from './components/feedback';
 import { Layout } from './components/Layout';
 import { PageLoader } from './components/ui';
+import { AdminPage } from './pages/Admin';
+import { AdminUserPage } from './pages/AdminUser';
 import { AuthPage } from './pages/Auth';
 import { CatalogPage } from './pages/Catalog';
 import { DocumentDetailPage } from './pages/DocumentDetail';
@@ -16,7 +18,9 @@ import { HomePage } from './pages/Home';
 import { ScanDetailPage } from './pages/ScanDetail';
 import { ScannerPage } from './pages/Scanner';
 import { SearchPage } from './pages/Search';
+import { SuperadminLoginPage } from './pages/SuperadminLogin';
 import { SettingsPage } from './pages/Settings';
+import { isAdminRole } from './lib/types';
 import { ScanSessionProvider } from './scan/ScanSession';
 import { SettingsProvider, useSettings } from './settings/SettingsContext';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -46,6 +50,12 @@ function LegacyArchiveRedirect() {
   return <Navigate to={`${id ? `/archivo/carpeta/${id}` : '/archivo'}${qs ? `?${qs}` : ''}`} replace />;
 }
 
+/** Admin-only routes; everyone else goes back home (the API also answers 403). */
+function AdminOnly() {
+  const { user } = useAuth();
+  return isAdminRole(user?.role) ? <Outlet /> : <Navigate to="/" replace />;
+}
+
 function PrivateApp() {
   return (
     <SettingsProvider>
@@ -68,6 +78,10 @@ function PrivateApp() {
             <Route path="resumenes/:id" element={<FinalSummaryEditorPage />} />
             <Route path="buscar" element={<SearchPage />} />
             <Route path="ajustes" element={<SettingsPage />} />
+            <Route element={<AdminOnly />}>
+              <Route path="admin" element={<AdminPage />} />
+              <Route path="admin/usuarios/:id" element={<AdminUserPage key="admin-user" />} />
+            </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
@@ -85,6 +99,7 @@ function Root() {
       <Routes>
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/registro" element={<AuthPage mode="register" />} />
+        <Route path="/superadmin" element={<SuperadminLoginPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -94,6 +109,8 @@ function Root() {
     <Routes>
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="/registro" element={<Navigate to="/" replace />} />
+      {/* Right after the superadmin signs in, this route still matches: go straight to the panel. */}
+      <Route path="/superadmin" element={<Navigate to={isAdminRole(user.role) ? '/admin' : '/'} replace />} />
       <Route path="/*" element={<PrivateApp />} />
     </Routes>
   );

@@ -91,6 +91,13 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
               {isLogin ? 'Regístrate' : 'Inicia sesión'}
             </Link>
           </p>
+          {isLogin && (
+            <p className="mt-6 border-t border-swan pt-4 text-center">
+              <Link to="/superadmin" className="inline-flex min-h-10 items-center text-xs font-semibold text-wolf transition-colors hover:text-eel">
+                Acceso de superadministrador
+              </Link>
+            </p>
+          )}
         </div>
       </main>
     </div>

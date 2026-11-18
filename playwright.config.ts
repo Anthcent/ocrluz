@@ -40,6 +40,12 @@ export default defineConfig({
         DATA_DIR: path.join(os.tmpdir(), `ocryon-e2e-${Date.now()}`),
         OCRSPACE_ENDPOINT: `http://localhost:${MOCK_PORT}/parse/image`,
         GEMINI_API_BASE: `http://localhost:${MOCK_PORT}/v1beta`,
+        // Superadministrador SOLO de pruebas (ver e2e/admin.spec.ts). Hashes bcrypt de coste 4 de
+        // credenciales fijas de prueba; nunca uses estos valores fuera de las pruebas.
+        SUPERADMIN_USERNAME: 'sa-e2etest',
+        SUPERADMIN_PASSWORD_HASH: '$2b$04$QV7AkiXQIN8TG9T7mSXz6ufBhRyqFXLfzzUjhnoQ7mUdqpdsIc17.',
+        SUPERADMIN_PIN_HASH: '$2b$04$VanE6zRLkwwk3YnY9FN.relUVliWoDV0LnbAZD77sBjQv17pjv6kK',
+        SUPERADMIN_RATE_LIMIT: '10000',
       },
     },
     {
