@@ -171,7 +171,7 @@ export function Segmented<T extends string>({
   );
 }
 
-export function Badge({ children, tone = 'gray', className }: { children: ReactNode; tone?: 'gray' | 'green' | 'blue' | 'red' | 'yellow' | 'purple'; className?: string }) {
+export function Badge({ children, tone = 'gray', className }: { children: ReactNode; tone?: 'gray' | 'green' | 'blue' | 'red' | 'yellow' | 'purple' | 'ink'; className?: string }) {
   return (
     <span
       className={clsx(
@@ -182,6 +182,7 @@ export function Badge({ children, tone = 'gray', className }: { children: ReactN
         tone === 'red' && 'bg-cardinal-light text-cardinal-dark',
         tone === 'yellow' && 'bg-bee-light text-bee-dark',
         tone === 'purple' && 'bg-beetle-light text-beetle-dark',
+        tone === 'ink' && 'bg-eel text-white',
         className,
       )}
     >

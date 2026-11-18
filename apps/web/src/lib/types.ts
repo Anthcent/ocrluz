@@ -2,10 +2,16 @@ export type Engine = 'ocrspace' | 'gemini' | 'tesseract';
 export type ScanEngine = Engine | 'manual';
 export type GroupColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'yellow';
 
+export type UserRole = 'user' | 'admin' | 'superadmin';
+
+/** The superadmin counts as an admin everywhere in the panel. */
+export const isAdminRole = (role: UserRole | undefined) => role === 'admin' || role === 'superadmin';
+
 export interface User {
   id: number;
   email: string;
   name: string;
+  role: UserRole;
 }
 
 export interface KeyStatus {
@@ -202,4 +208,107 @@ export interface FinalSummaryListItem {
   students: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// --- Administration panel ---
+
+export interface Paged {
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface DayCount {
+  day: string;
+  count: number;
+}
+
+export interface AdminUser extends User {
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface AdminUserListItem extends AdminUser {
+  scanCount: number;
+  wordCount: number;
+  lastScanAt: string | null;
+}
+
+export interface AdminActivity {
+  id: number;
+  title: string;
+  engine: ScanEngine;
+  createdAt: string;
+  userId: number;
+  userName: string;
+  userEmail: string;
+}
+
+export interface AdminStats {
+  totals: { users: number; admins: number; scans: number; words: number; groups: number; documents: number };
+  perDay: DayCount[];
+  topUsers: { id: number; name: string; email: string; scans: number; words: number }[];
+  recentScans: AdminActivity[];
+}
+
+export interface AdminUserDetail {
+  user: AdminUser;
+  stats: {
+    scans: number;
+    words: number;
+    lastScanAt: string | null;
+    groups: number;
+    documents: number;
+    finalSummaries: number;
+    byEngine: { engine: ScanEngine; count: number; words: number }[];
+    perDay: DayCount[];
+  };
+}
+
+export interface AdminUserScan {
+  id: number;
+  title: string;
+  engine: ScanEngine;
+  language: string;
+  wordCount: number;
+  createdAt: string;
+  groupId: number | null;
+  groupTitle: string | null;
+  preview: string;
+}
+
+export interface AdminScan {
+  id: number;
+  title: string;
+  text: string;
+  /** OCR text before the first edit in the workspace; null when never edited there. */
+  originalText: string | null;
+  engine: ScanEngine;
+  language: string;
+  wordCount: number;
+  pageLabel: string;
+  createdAt: string;
+  updatedAt: string;
+  groupId: number | null;
+  groupTitle: string | null;
+  userId: number;
+  userName: string;
+  userEmail: string;
+}
+
+export type AuditAction = 'view_scan' | 'change_role' | 'delete_user' | 'create_admin';
+
+/** One row of the admin audit log. Emails are snapshots: they survive the deletion of either account. */
+export interface AuditEntry {
+  id: number;
+  action: AuditAction;
+  actorId: number | null;
+  actorEmail: string;
+  targetUserId: number | null;
+  targetEmail: string | null;
+  targetScanId: number | null;
+  /** Whether the target account still exists (so it can be linked). */
+  targetExists: boolean;
+  details: { title?: string; from?: UserRole; to?: UserRole; role?: UserRole; name?: string };
+  createdAt: string;
 }

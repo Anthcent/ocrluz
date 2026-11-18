@@ -1,11 +1,11 @@
 import clsx from 'clsx';
-import { Archive, Eye, FileScan, FileSpreadsheet, FolderOpen, House, Layers, LogOut, Plus, ScanLine, Search, Settings } from 'lucide-react';
+import { Archive, Eye, FileScan, FileSpreadsheet, FolderOpen, House, Layers, LogOut, Plus, ScanLine, Search, Settings, ShieldCheck } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../lib/api';
 import { GROUP_STYLES } from '../lib/constants';
-import type { Stats } from '../lib/types';
+import { isAdminRole, type Stats } from '../lib/types';
 import { useScanSession } from '../scan/ScanSession';
 import { SidebarTotals } from './ArchiveTotals';
 import { Logo } from './Logo';
@@ -21,6 +21,9 @@ const NAV = [
 ];
 
 const MOBILE_NAV = ['/', '/archivo', '/escanear', '/documentos', '/buscar'].map((to) => NAV.find((item) => item.to === to)!);
+
+/** Desktop-only entry for admins; on mobile the panel is reached from Settings so the 5-item dock stays intact. */
+const ADMIN_NAV = { to: '/admin', label: 'Administración', icon: ShieldCheck, end: false };
 
 function useStats() {
   const location = useLocation();
@@ -44,7 +47,7 @@ export function Layout() {
       <aside className="fixed inset-y-4 left-4 z-40 hidden w-60 flex-col overflow-hidden rounded-[24px] bg-brand p-3 text-white shadow-floating lg:flex">
         <Logo className="px-2.5 pb-2 pt-2.5 text-white" />
         <nav aria-label="Principal" className="mt-4 flex flex-col gap-0.5">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {(isAdminRole(user?.role) ? [...NAV, ADMIN_NAV] : NAV).map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
