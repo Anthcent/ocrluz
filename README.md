@@ -94,11 +94,66 @@ Variables de entorno (se configuran en el panel del servidor, nunca en Git):
 | `ENCRYPTION_KEY` | Recomendada | Cifra las API keys guardadas. Mínimo 16 caracteres. Si falta, se genera y se guarda en la base de datos (más seguro definirla aparte). **No la cambies después**: las claves ya guardadas dejarían de poder leerse. |
 | `OCRSPACE_API_KEY`, `GEMINI_API_KEY` | No | Claves globales para los usuarios que no pongan las suyas. |
 | `AUTH_RATE_LIMIT` | No | Intentos de login/registro por IP cada 15 min (20 por defecto). |
+| `SUPERADMIN_USERNAME`, `SUPERADMIN_PASSWORD_HASH`, `SUPERADMIN_PIN_HASH` | Recomendadas | Credenciales del superadministrador (los dos últimos, hashes bcrypt). Se definen las tres o ninguna. Ver «Superadministrador». |
+| `SUPERADMIN_RATE_LIMIT` | No | Intentos de acceso del superadministrador por IP cada 15 min (10 por defecto). |
 
 La imagen escucha siempre en `0.0.0.0:8080` (`LISTEN_PORT=8080`), aunque la plataforma inyecte otro `PORT`. Si PostgreSQL tarda en arrancar, la app reintenta la conexión durante unos dos minutos.
 
 > **HTTPS obligatorio:** en producción la cookie de sesión es `Secure`, así que la app debe
 > abrirse por `https://` (el dominio del proxy). Por `http://` no se podrá iniciar sesión.
+
+### Administración
+
+Los usuarios tienen rol `user`, `admin` o `superadmin`. Los administradores ven el panel **Administración**
+(`/admin`: en escritorio en el menú lateral; en el móvil, desde **Ajustes**) con estadísticas globales, la
+lista de usuarios y la actividad de escaneo de cada uno (incluido el texto completo de sus escaneos), y pueden
+eliminar cuentas de usuario (con todos sus datos). Todo queda en el registro de auditoría.
+
+### Superadministrador
+
+Hay **un único superadministrador** (lo garantiza un índice único en la base). Es el único que puede crear
+administradores, promover usuarios a administrador o quitarles el rol, y eliminar a otro administrador.
+Nadie, ni él mismo, puede modificarlo ni eliminarlo desde la API.
+
+Sus credenciales viven en el **entorno del servidor**, no en la base de datos: al arrancar, el servidor crea la
+cuenta o le aplica el usuario, la contraseña y el PIN del entorno (y levanta cualquier bloqueo). Así sobrevive a
+la pérdida de la base y solo puede recuperarla quien controla el servidor. Sin estas variables el servidor
+arranca igual (desarrollo y pruebas) y lo avisa en el log.
+
+1. Genera las credenciales (en tu equipo, desde la raíz del repositorio):
+
+   ```bash
+   npm run superadmin:credentials
+   npm run superadmin:credentials -- --username ana.sa   # usuario propio
+   ```
+
+   Muestra **una sola vez** el usuario (`sa-` + 8 caracteres), una contraseña de 24 caracteres y un PIN de 12
+   (mayúsculas y números, sin 0/O/1/I/L), y las tres líneas para el entorno. Con `SUPERADMIN_PASSWORD` y
+   `SUPERADMIN_PIN` definidas, solo calcula sus hashes (y avisa si el PIN parece débil).
+2. Pega las tres líneas en el entorno del servidor. **Los hashes bcrypt contienen `$`: escríbelos entre comillas
+   simples** para que ni la shell ni Docker Compose los interpreten como variables:
+
+   ```dotenv
+   SUPERADMIN_USERNAME=sa-xxxxxxxx
+   SUPERADMIN_PASSWORD_HASH='$2b$12$...'
+   SUPERADMIN_PIN_HASH='$2b$12$...'
+   ```
+
+   Node (`--env-file`) no expande `$` con o sin comillas; Docker Compose sí lo haría sin comillas simples. Si una
+   herramienta pasa las comillas tal cual (por ejemplo `docker run --env-file`), el servidor las quita.
+3. Reinicia el servidor y entra en `/superadmin` (enlace «Acceso de superadministrador» al pie del login).
+
+El acceso pide usuario, contraseña y PIN, y responde siempre «Credenciales no válidas» sin decir qué falló
+(tampoco si la cuenta está bloqueada). Tras 5 fallos seguidos la cuenta se bloquea 15 minutos. Su sesión dura
+12 horas (la de los demás usuarios, 7 días). Si al reiniciar cambian la contraseña o el PIN del entorno, se
+cierran todas sus sesiones abiertas; un reinicio sin cambios no cierra ninguna. Cambiar la contraseña desde
+Ajustes también cierra las demás sesiones de esa cuenta (la actual sigue abierta). El login normal rechaza esta cuenta y su contraseña
+no se puede cambiar desde la app: para **rotar** las credenciales, genera unas nuevas, cambia el entorno y
+reinicia. Los correos del dominio reservado `.invalid` no se pueden registrar (la cuenta usa
+`superadmin@ocrluz.invalid`). Si una cuenta normal ya usa ese correo o el usuario configurado, el servidor no la
+toca: lo registra como error y arranca sin superadministrador hasta que se resuelva el conflicto.
+
+> Los administradores que ya existían conservan su rol. `ADMIN_EMAILS` ya no existe.
 
 ### Tests
 

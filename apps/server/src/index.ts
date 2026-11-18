@@ -3,10 +3,18 @@ import { config } from './config.js';
 import { openDatabase } from './db/index.js';
 import { createCipher } from './lib/crypto.js';
 import { resolveSecret } from './lib/secrets.js';
+import { syncSuperadmin } from './lib/superadmin.js';
 
 // Aplica las migraciones pendientes antes de aceptar tráfico.
 const db = await openDatabase({ url: config.databaseUrl, dataDir: config.dataDir });
 console.log(config.databaseUrl ? 'Base de datos: PostgreSQL (DATABASE_URL)' : `Base de datos: PGlite en ${config.dataDir}`);
+// El entorno manda: crea el superadministrador o le aplica las credenciales actuales (nunca se registran los hashes).
+if (config.superadmin) {
+  // Ante un choque con una cuenta normal, syncSuperadmin ya lo registra como error y la app arranca sin él.
+  if ((await syncSuperadmin(db, config.superadmin)) !== 'conflict') console.log('Superadministrador sincronizado');
+} else {
+  console.warn('Aviso: SUPERADMIN_USERNAME / SUPERADMIN_PASSWORD_HASH / SUPERADMIN_PIN_HASH no están definidas; no se sincroniza el superadministrador.');
+}
 const app = createApp(
   {
     db,

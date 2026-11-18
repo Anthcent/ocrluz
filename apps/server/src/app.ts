@@ -4,9 +4,10 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import helmet from 'helmet';
 import type { AppContext } from './context.js';
-import { requireAuth } from './middleware/auth.js';
+import { requireAdmin, requireAuth } from './middleware/auth.js';
 import { requireCustomHeader } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error.js';
+import { adminRouter } from './routes/admin.js';
 import { analysesRouter } from './routes/analyses.js';
 import { authRouter } from './routes/auth.js';
 import { documentsRouter } from './routes/documents.js';
@@ -59,6 +60,7 @@ export function createApp(ctx: AppContext, options: { webDist?: string } = {}) {
   api.use('/analyses', analysesRouter(ctx));
   api.use('/documents', documentsRouter(ctx));
   api.use('/final-summaries', finalSummariesRouter(ctx));
+  api.use('/admin', requireAdmin, adminRouter(ctx));
   api.use((_req, res) => res.status(404).json({ error: 'Ruta no encontrada', code: 'not_found' }));
   app.use('/api', api);
 

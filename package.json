@@ -12,7 +12,8 @@
     "start": "npm run start -w @ocryon/server",
     "typecheck": "npm run typecheck --workspaces",
     "test": "npm run test --workspaces --if-present",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "superadmin:credentials": "npm run superadmin:credentials -w @ocryon/server --"
   },
   "engines": {
     "node": ">=22.13"
