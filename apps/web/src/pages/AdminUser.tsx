@@ -1,28 +1,28 @@
-import { FileScan, FileSpreadsheet, FileText, FolderOpen, ShieldCheck, ShieldOff, Trash2, Type, UserRoundX } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Ban, FileScan, FileSpreadsheet, FileText, FolderOpen, Search, Type, UserRoundX } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { AuditLog } from '../components/AuditLog';
-import { DailyChart, Pagination, Panel, RoleBadge, StatGrid, UserAvatar } from '../components/admin';
-import { errorMessage, useFeedback } from '../components/feedback';
+import { DailyChart, dayToIso, filterInputClass, FilterField, Pagination, Panel, RoleBadge, StatGrid, StatusBadge, useDebounced, usePaged, UserAvatar } from '../components/admin';
+import { errorMessage } from '../components/feedback';
 import { BackLink, HeaderChip, PageHeader } from '../components/PageHeader';
-import { Button, EmptyState, Field, Input, Modal, PageLoader, Segmented, Spinner } from '../components/ui';
+import { ENGINE_OPTIONS } from '../components/ScanActivity';
+import { ScanTextModal } from '../components/ScanTextModal';
+import { Button, EmptyState, Input, PageLoader, Spinner, Toggle } from '../components/ui';
+import { UserActions } from '../components/UserActions';
 import { api, ApiError } from '../lib/api';
 import { ENGINE_LABEL } from '../lib/constants';
 import { formatDate, formatNumber, timeAgo } from '../lib/format';
-import type { AdminScan, AdminUserDetail, AdminUserScan, Paged } from '../lib/types';
-
-const PAGE_SIZE = 10;
+import type { AdminUserDetail, AdminUserScan, ScanEngine } from '../lib/types';
 
 export function AdminUserPage() {
   const id = Number(useParams().id);
   const { user: me } = useAuth();
-  const { toast, confirm } = useFeedback();
   const navigate = useNavigate();
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [error, setError] = useState<{ message: string; notFound: boolean } | null>(null);
-  const [savingRole, setSavingRole] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  // Bumped after an action on the account so its audit section reloads.
+  const [version, setVersion] = useState(0);
 
   const load = useCallback(() => {
     setError(null);
@@ -48,31 +48,7 @@ export function AdminUserPage() {
 
   const { user, stats } = detail;
   const isSelf = me?.id === user.id;
-  const isAdmin = user.role === 'admin';
   const iAmSuperadmin = me?.role === 'superadmin';
-  // Only the superadmin changes roles or deletes admins; nobody can touch the superadmin account.
-  const canChangeRole = iAmSuperadmin && user.role !== 'superadmin';
-  const canDelete = !isSelf && user.role !== 'superadmin' && (user.role === 'user' || iAmSuperadmin);
-
-  const changeRole = async () => {
-    const next = isAdmin ? 'user' : 'admin';
-    const ok = await confirm(
-      isAdmin
-        ? { title: 'Quitar rol de administrador', message: `${user.name} dejará de tener acceso a la administración.`, confirmLabel: 'Quitar rol', danger: true }
-        : { title: 'Hacer administrador', message: `${user.name} podrá ver la actividad de todos los usuarios y eliminar cuentas de usuario.`, confirmLabel: 'Hacer administrador' },
-    );
-    if (!ok) return;
-    setSavingRole(true);
-    try {
-      const { user: updated } = await api.admin.setRole(user.id, next);
-      setDetail({ ...detail, user: updated });
-      toast(next === 'admin' ? `${user.name} ahora es administrador` : `${user.name} ya no es administrador`);
-    } catch (err) {
-      toast(errorMessage(err), 'error');
-    } finally {
-      setSavingRole(false);
-    }
-  };
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -85,35 +61,43 @@ export function AdminUserPage() {
         meta={
           <>
             <RoleBadge role={user.role} />
+            <StatusBadge disabledAt={user.disabledAt} />
             {isSelf && <HeaderChip tone="violet">Tu cuenta</HeaderChip>}
             <HeaderChip>Alta: {formatDate(user.createdAt)}</HeaderChip>
             <HeaderChip>{user.lastLoginAt ? `Último acceso ${timeAgo(user.lastLoginAt)}` : 'Sin accesos registrados'}</HeaderChip>
           </>
         }
         actions={
-          canChangeRole || canDelete ? (
-            <>
-              {canChangeRole && (
-                <Button variant="ghost" icon={isAdmin ? <ShieldOff className="size-5" /> : <ShieldCheck className="size-5" />} onClick={changeRole} loading={savingRole}>
-                  {isAdmin ? 'Quitar rol de administrador' : 'Hacer administrador'}
-                </Button>
-              )}
-              {canDelete && (
-                <Button variant="danger" icon={<Trash2 className="size-5" />} onClick={() => setDeleting(true)}>
-                  Eliminar cuenta
-                </Button>
-              )}
-            </>
-          ) : undefined
+          <UserActions
+            user={user}
+            variant="buttons"
+            onUpdated={(updated) => {
+              setDetail({ ...detail, user: updated });
+              setVersion((v) => v + 1);
+              // The response of a role change has no «disabledByEmail»: reload to keep the notice accurate.
+              load();
+            }}
+            onDeleted={() => navigate('/admin', { replace: true })}
+          />
         }
       />
+      {user.disabledAt && (
+        <div role="note" className="-mt-2 mb-5 flex items-start gap-3 rounded-2xl bg-cardinal-light p-4 text-sm text-cardinal-dark">
+          <Ban className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+          <p>
+            <strong className="font-bold">Cuenta desactivada</strong> {timeAgo(user.disabledAt)}
+            {user.disabledByEmail ? ` por ${user.disabledByEmail}` : ''}. No puede iniciar sesión; sus datos se conservan.
+            {user.disabledReason ? ` Motivo: «${user.disabledReason}».` : ''}
+          </p>
+        </div>
+      )}
       {user.role === 'superadmin' ? (
         <p className="-mt-2 mb-5 text-sm text-wolf">La cuenta del superadministrador se gestiona en el servidor y no se puede modificar ni eliminar.</p>
       ) : isSelf ? (
         <p className="-mt-2 mb-5 text-sm text-wolf">Para cambiar tu rol o eliminar tu cuenta, pide ayuda al superadministrador.</p>
       ) : (
-        isAdmin &&
-        !iAmSuperadmin && <p className="-mt-2 mb-5 text-sm text-wolf">Solo el superadministrador puede cambiar el rol o eliminar la cuenta de un administrador.</p>
+        user.role === 'admin' &&
+        !iAmSuperadmin && <p className="-mt-2 mb-5 text-sm text-wolf">Solo el superadministrador puede cambiar el rol, desactivar o eliminar la cuenta de un administrador.</p>
       )}
 
       <StatGrid
@@ -151,52 +135,116 @@ export function AdminUserPage() {
 
       <UserScans userId={user.id} />
 
-      {/* Remounts after a role change so the new entry shows up. */}
-      <AuditLog key={user.role} targetUserId={user.id} title="Acciones sobre esta cuenta" />
-
-      <DeleteUserModal
-        open={deleting}
-        name={user.name}
-        email={user.email}
-        onClose={() => setDeleting(false)}
-        onDeleted={() => {
-          toast(`Cuenta de ${user.name} eliminada`);
-          navigate('/admin', { replace: true });
-        }}
-        remove={() => api.admin.removeUser(user.id)}
-      />
+      <AuditLog key={version} targetUserId={user.id} title="Acciones sobre esta cuenta" />
     </div>
   );
 }
 
-function UserScans({ userId }: { userId: number }) {
-  const [page, setPage] = useState(1);
-  const [data, setData] = useState<(Paged & { scans: AdminUserScan[] }) | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [openScanId, setOpenScanId] = useState<number | null>(null);
+/** Groups consecutive scans of the same folder (the list comes sorted by folder when grouping is on). */
+function groupByFolder(scans: AdminUserScan[]) {
+  const groups: { key: string; title: string; items: { scan: AdminUserScan; index: number }[] }[] = [];
+  scans.forEach((scan, index) => {
+    const key = scan.groupId === null ? 'loose' : String(scan.groupId);
+    const last = groups.at(-1);
+    if (last?.key === key) last.items.push({ scan, index });
+    else groups.push({ key, title: scan.groupTitle ? `Carpeta: ${scan.groupTitle}` : 'Hojas sueltas', items: [{ scan, index }] });
+  });
+  return groups;
+}
 
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError(null);
-    api.admin
-      .userScans(userId, { page, pageSize: PAGE_SIZE })
-      .then((r) => active && setData(r))
-      .catch((err) => active && setError(errorMessage(err)))
-      .finally(() => active && setLoading(false));
-    return () => {
-      active = false;
+function UserScans({ userId }: { userId: number }) {
+  const [query, setQuery] = useState('');
+  const q = useDebounced(query.trim());
+  const [engine, setEngine] = useState<ScanEngine | ''>('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [grouped, setGrouped] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [open, setOpen] = useState<number | null>(null);
+  const [lastQ, setLastQ] = useState(q);
+  if (q !== lastQ) {
+    setLastQ(q);
+    setPage(1);
+  }
+
+  const { data, error, loading } = usePaged(
+    () =>
+      api.admin.userScans(userId, {
+        q,
+        engine: engine || undefined,
+        from: dayToIso(from),
+        to: dayToIso(to, true),
+        sort: grouped ? 'group' : 'recent',
+        page,
+        pageSize,
+      }),
+    [userId, q, engine, from, to, grouped, page, pageSize],
+  );
+  const resetPage =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      set(v);
+      setPage(1);
     };
-  }, [userId, page]);
+  const filtered = !!(q || engine || from || to);
+
+  const renderScan = ({ scan: s, index }: { scan: AdminUserScan; index: number }) => (
+    <li key={s.id} className="py-3 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <button
+          type="button"
+          onClick={() => setOpen(index)}
+          className="min-w-0 truncate rounded-md text-left font-semibold text-eel underline-offset-2 hover:text-macaw-dark hover:underline focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-macaw/35"
+          aria-label={`Leer el texto completo de ${s.title || 'Sin título'}`}
+        >
+          {s.title || 'Sin título'}
+        </button>
+        <time dateTime={s.createdAt} className="shrink-0 text-xs font-semibold text-wolf">
+          {new Date(s.createdAt).toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' })}
+        </time>
+      </div>
+      <div className="mt-0.5 text-sm text-wolf">
+        {!grouped && <>{s.groupTitle ? `Carpeta: ${s.groupTitle}` : 'Hoja suelta'} · </>}
+        {ENGINE_LABEL[s.engine] ?? s.engine} · {formatNumber(s.wordCount)} {s.wordCount === 1 ? 'palabra' : 'palabras'}
+      </div>
+      {s.preview && <p className="mt-1 line-clamp-2 max-w-[70ch] text-sm text-wolf">{s.preview}</p>}
+    </li>
+  );
 
   return (
     <Panel
       className="mb-5"
       title="Escaneos"
-      subtitle={data ? `${formatNumber(data.total)} en total. Abre un escaneo para leer su texto completo.` : undefined}
+      subtitle={data ? `${formatNumber(data.total)} ${filtered ? 'encontrados' : 'en total'}. Abre un escaneo para leer su texto completo (queda registrado).` : undefined}
       actions={loading && data ? <Spinner className="size-5" /> : undefined}
     >
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="relative col-span-2 sm:col-span-4">
+          <Search aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-wolf" />
+          <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar en el título o el texto" aria-label="Buscar en los escaneos de este usuario" className="pl-12" />
+        </div>
+        <FilterField label="Motor">
+          <select className={filterInputClass} value={engine} onChange={(e) => resetPage(setEngine)(e.target.value as ScanEngine | '')}>
+            {ENGINE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </FilterField>
+        <div className="flex items-end justify-between gap-3 rounded-xl px-1 pb-1.5 sm:justify-start">
+          <span className="text-sm font-semibold text-eel">Agrupar por carpeta</span>
+          <Toggle checked={grouped} onChange={resetPage(setGrouped)} label="Agrupar por carpeta" />
+        </div>
+        <FilterField label="Desde">
+          <input type="date" className={filterInputClass} value={from} max={to || undefined} onChange={(e) => resetPage(setFrom)(e.target.value)} />
+        </FilterField>
+        <FilterField label="Hasta">
+          <input type="date" className={filterInputClass} value={to} min={from || undefined} onChange={(e) => resetPage(setTo)(e.target.value)} />
+        </FilterField>
+      </div>
+
       {error ? (
         <p role="alert" className="text-sm font-semibold text-cardinal-dark">
           {error}
@@ -204,161 +252,36 @@ function UserScans({ userId }: { userId: number }) {
       ) : !data ? (
         <PageLoader />
       ) : data.scans.length === 0 ? (
-        <p className="py-6 text-center text-sm text-wolf">Este usuario todavía no ha guardado escaneos.</p>
-      ) : (
-        <ul className="divide-y divide-swan">
-          {data.scans.map((s) => (
-            <li key={s.id} className="py-3 first:pt-0 last:pb-0">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <button
-                  type="button"
-                  onClick={() => setOpenScanId(s.id)}
-                  className="min-w-0 truncate rounded-md text-left font-semibold text-eel underline-offset-2 hover:text-macaw-dark hover:underline focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-macaw/35"
-                  aria-label={`Leer el texto completo de ${s.title || 'Sin título'}`}
-                >
-                  {s.title || 'Sin título'}
-                </button>
-                <time dateTime={s.createdAt} className="shrink-0 text-xs font-semibold text-wolf">
-                  {new Date(s.createdAt).toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' })}
-                </time>
-              </div>
-              <div className="mt-0.5 text-sm text-wolf">
-                {s.groupTitle ? `Carpeta: ${s.groupTitle}` : 'Hoja suelta'} · {ENGINE_LABEL[s.engine] ?? s.engine} · {formatNumber(s.wordCount)}{' '}
-                {s.wordCount === 1 ? 'palabra' : 'palabras'}
-              </div>
-              {s.preview && <p className="mt-1 line-clamp-2 max-w-[70ch] text-sm text-wolf">{s.preview}</p>}
-            </li>
-          ))}
-        </ul>
-      )}
-      {data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={setPage} />}
-      <ScanTextModal scanId={openScanId} onClose={() => setOpenScanId(null)} />
-    </Panel>
-  );
-}
-
-/** Full text of one scan (read-only), loaded on demand so the list stays light. */
-function ScanTextModal({ scanId, onClose }: { scanId: number | null; onClose: () => void }) {
-  const [scan, setScan] = useState<AdminScan | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [showOriginal, setShowOriginal] = useState(false);
-
-  useEffect(() => {
-    if (scanId === null) return;
-    let active = true;
-    setScan(null);
-    setError(null);
-    setShowOriginal(false);
-    api.admin
-      .scan(scanId)
-      .then((r) => active && setScan(r.scan))
-      .catch((err) => active && setError(errorMessage(err)));
-    return () => {
-      active = false;
-    };
-  }, [scanId]);
-
-  const hasOriginal = !!scan?.originalText && scan.originalText !== scan.text;
-  const text = scan ? (showOriginal && scan.originalText ? scan.originalText : scan.text) : '';
-
-  return (
-    <Modal open={scanId !== null} onClose={onClose} title={scan?.title || 'Escaneo'} wide>
-      {error ? (
-        <p role="alert" className="text-sm font-semibold text-cardinal-dark">
-          {error}
-        </p>
-      ) : !scan ? (
-        <PageLoader />
-      ) : (
+        <p className="py-6 text-center text-sm text-wolf">{filtered ? 'Ningún escaneo coincide con los filtros.' : 'Este usuario todavía no ha guardado escaneos.'}</p>
+      ) : grouped ? (
         <div className="space-y-4">
-          <p className="text-sm text-wolf">
-            {scan.userName} · {scan.groupTitle ? `Carpeta: ${scan.groupTitle}` : 'Hoja suelta'} · {ENGINE_LABEL[scan.engine] ?? scan.engine} ·{' '}
-            {new Date(scan.createdAt).toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' })} · {formatNumber(scan.wordCount)}{' '}
-            {scan.wordCount === 1 ? 'palabra' : 'palabras'}
-          </p>
-          {hasOriginal && (
-            <Segmented<'current' | 'original'>
-              value={showOriginal ? 'original' : 'current'}
-              onChange={(v) => setShowOriginal(v === 'original')}
-              options={[
-                { value: 'current', label: 'Texto actual' },
-                { value: 'original', label: 'Texto original del OCR' },
-              ]}
-            />
-          )}
-          {text ? (
-            <div className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-polar p-4 text-[0.9375rem] leading-relaxed text-eel" tabIndex={0} aria-label="Texto del escaneo">
-              {text}
-            </div>
-          ) : (
-            <p className="text-sm text-wolf">Este escaneo no tiene texto.</p>
-          )}
+          {groupByFolder(data.scans).map((group) => (
+            <section key={group.key} aria-label={group.title}>
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-eel">
+                <FolderOpen className="size-4 text-wolf" aria-hidden="true" />
+                {group.title}
+                <span className="font-semibold text-wolf">({group.items.length})</span>
+              </h3>
+              <ul className="divide-y divide-swan rounded-xl border border-swan px-3 py-2">{group.items.map(renderScan)}</ul>
+            </section>
+          ))}
         </div>
+      ) : (
+        <ul className="divide-y divide-swan">{data.scans.map((scan, index) => renderScan({ scan, index }))}</ul>
       )}
-    </Modal>
-  );
-}
-
-/** Deleting an account is irreversible, so the admin must type the account's email to confirm. */
-function DeleteUserModal({
-  open,
-  name,
-  email,
-  onClose,
-  onDeleted,
-  remove,
-}: {
-  open: boolean;
-  name: string;
-  email: string;
-  onClose: () => void;
-  onDeleted: () => void;
-  remove: () => Promise<void>;
-}) {
-  const { toast } = useFeedback();
-  const [typed, setTyped] = useState('');
-  const [busy, setBusy] = useState(false);
-  const matches = typed.trim().toLowerCase() === email.toLowerCase();
-
-  const close = () => {
-    if (busy) return;
-    setTyped('');
-    onClose();
-  };
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!matches) return;
-    setBusy(true);
-    try {
-      await remove();
-      setTyped('');
-      onDeleted();
-    } catch (err) {
-      toast(errorMessage(err), 'error');
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal open={open} onClose={close} title="Eliminar cuenta">
-      <form onSubmit={submit} className="space-y-4">
-        <p className="text-wolf">
-          Se eliminarán la cuenta de <strong className="text-eel">{name}</strong> y todos sus datos: escaneos, carpetas, documentos y resúmenes finales. Esta acción no se
-          puede deshacer.
-        </p>
-        <Field label={`Escribe ${email} para confirmar`}>
-          <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" autoCapitalize="none" spellCheck={false} autoFocus />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Button variant="plain" onClick={close} disabled={busy}>
-            Cancelar
-          </Button>
-          <Button type="submit" variant="danger" loading={busy} disabled={!matches}>
-            Eliminar
-          </Button>
-        </div>
-      </form>
-    </Modal>
+      {data && (
+        <Pagination
+          page={data.page}
+          pageSize={data.pageSize}
+          total={data.total}
+          onChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
+      )}
+      <ScanTextModal ids={data?.scans.map((s) => s.id) ?? []} index={open} onIndexChange={setOpen} onClose={() => setOpen(null)} />
+    </Panel>
   );
 }

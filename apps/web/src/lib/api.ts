@@ -1,5 +1,6 @@
 import type {
   AdminScan,
+  AdminScanActivity,
   AdminStats,
   AdminUser,
   AdminUserDetail,
@@ -25,6 +26,8 @@ import type {
   Stats,
   User,
   UserRole,
+  UserSort,
+  UserStatus,
 } from './types';
 
 export class ApiError extends Error {
@@ -88,6 +91,21 @@ function uploadWithProgress<T>(path: string, body: FormData, onUpload?: (fractio
     xhr.send(body);
   });
 }
+
+interface PageParams {
+  page?: number;
+  pageSize?: number;
+}
+/** Dates go as ISO strings; `to` is exclusive on the server. */
+interface DateRangeParams {
+  from?: string;
+  to?: string;
+}
+export type UserListParams = PageParams & { q?: string; role?: UserRole; status?: UserStatus; sort?: UserSort };
+export type UserScanParams = PageParams & DateRangeParams & { q?: string; engine?: ScanEngine; sort?: 'recent' | 'group' };
+export type ActivityParams = PageParams & DateRangeParams & { userId?: number; user?: string; engine?: ScanEngine };
+export type AuditParams = PageParams &
+  DateRangeParams & { action?: AuditAction; actorId?: number; targetUserId?: number; actor?: string; target?: string };
 
 const qs = (params: Record<string, string | number | undefined>) => {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== '') as [string, string][];
@@ -190,21 +208,26 @@ export const api = {
     remove: (id: number) => request<void>(`/final-summaries/${id}`, { method: 'DELETE' }),
     xlsxUrl: (id: number) => `/api/final-summaries/${id}/xlsx`,
   },
-  /** Administration panel (admins only; the server answers 403 to everyone else). */
+  /**
+   * Administration panel. Operators may only call `users` (partial rows), `deactivate` and `reactivate`;
+   * the rest is for admins. The server enforces it and answers 403 to everyone else.
+   */
   admin: {
     stats: (days = 14) => request<AdminStats>(`/admin/stats${qs({ tz: -new Date().getTimezoneOffset(), days })}`),
-    users: (params: { q?: string; role?: UserRole; page?: number; pageSize?: number } = {}) =>
-      request<Paged & { users: AdminUserListItem[] }>(`/admin/users${qs(params)}`),
+    users: <T = AdminUserListItem>(params: UserListParams = {}) => request<Paged & { users: T[] }>(`/admin/users${qs({ ...params })}`),
     user: (id: number, days = 14) => request<AdminUserDetail>(`/admin/users/${id}${qs({ tz: -new Date().getTimezoneOffset(), days })}`),
-    userScans: (id: number, params: { page?: number; pageSize?: number } = {}) =>
-      request<Paged & { scans: AdminUserScan[] }>(`/admin/users/${id}/scans${qs(params)}`),
+    userScans: (id: number, params: UserScanParams = {}) => request<Paged & { scans: AdminUserScan[] }>(`/admin/users/${id}/scans${qs({ ...params })}`),
+    activity: (params: ActivityParams = {}) => request<Paged & { scans: AdminScanActivity[] }>(`/admin/scans${qs({ ...params })}`),
     scan: (id: number) => request<{ scan: AdminScan }>(`/admin/scans/${id}`),
-    setRole: (id: number, role: UserRole) => request<{ user: AdminUser }>(`/admin/users/${id}/role`, { method: 'PATCH', json: { role } }),
+    setRole: (id: number, role: Exclude<UserRole, 'superadmin'>) => request<{ user: AdminUser }>(`/admin/users/${id}/role`, { method: 'PATCH', json: { role } }),
+    /** The response is the partial row for operators and the full account for admins. */
+    deactivate: <T = AdminUser>(id: number, reason?: string) =>
+      request<{ user: T }>(`/admin/users/${id}/deactivate`, { method: 'POST', json: reason ? { reason } : {} }),
+    reactivate: <T = AdminUser>(id: number) => request<{ user: T }>(`/admin/users/${id}/reactivate`, { method: 'POST', json: {} }),
     removeUser: (id: number) => request<void>(`/admin/users/${id}`, { method: 'DELETE' }),
     /** Superadmin only: creates an admin account with a temporary password. */
     createAdmin: (data: { name: string; email: string; password: string }) => request<{ user: AdminUser }>('/admin/admins', { method: 'POST', json: data }),
     /** Read-only audit log, newest first. */
-    audit: (params: { action?: AuditAction; actorId?: number; targetUserId?: number; page?: number; pageSize?: number } = {}) =>
-      request<Paged & { entries: AuditEntry[] }>(`/admin/audit${qs(params)}`),
+    audit: (params: AuditParams = {}) => request<Paged & { entries: AuditEntry[] }>(`/admin/audit${qs({ ...params })}`),
   },
 };

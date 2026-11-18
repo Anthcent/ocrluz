@@ -20,7 +20,7 @@ import { ScannerPage } from './pages/Scanner';
 import { SearchPage } from './pages/Search';
 import { SuperadminLoginPage } from './pages/SuperadminLogin';
 import { SettingsPage } from './pages/Settings';
-import { isAdminRole } from './lib/types';
+import { isAdminRole, isStaffRole } from './lib/types';
 import { ScanSessionProvider } from './scan/ScanSession';
 import { SettingsProvider, useSettings } from './settings/SettingsContext';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -50,10 +50,16 @@ function LegacyArchiveRedirect() {
   return <Navigate to={`${id ? `/archivo/carpeta/${id}` : '/archivo'}${qs ? `?${qs}` : ''}`} replace />;
 }
 
-/** Admin-only routes; everyone else goes back home (the API also answers 403). */
+/** Staff routes (operators included); everyone else goes back home (the API also answers 403). */
+function StaffOnly() {
+  const { user } = useAuth();
+  return isStaffRole(user?.role) ? <Outlet /> : <Navigate to="/" replace />;
+}
+
+/** Admin-only routes; operators go back to their user management page. */
 function AdminOnly() {
   const { user } = useAuth();
-  return isAdminRole(user?.role) ? <Outlet /> : <Navigate to="/" replace />;
+  return isAdminRole(user?.role) ? <Outlet /> : <Navigate to={isStaffRole(user?.role) ? '/admin' : '/'} replace />;
 }
 
 function PrivateApp() {
@@ -78,8 +84,10 @@ function PrivateApp() {
             <Route path="resumenes/:id" element={<FinalSummaryEditorPage />} />
             <Route path="buscar" element={<SearchPage />} />
             <Route path="ajustes" element={<SettingsPage />} />
-            <Route element={<AdminOnly />}>
+            <Route element={<StaffOnly />}>
               <Route path="admin" element={<AdminPage />} />
+            </Route>
+            <Route element={<AdminOnly />}>
               <Route path="admin/usuarios/:id" element={<AdminUserPage key="admin-user" />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

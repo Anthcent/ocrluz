@@ -2,10 +2,13 @@ export type Engine = 'ocrspace' | 'gemini' | 'tesseract';
 export type ScanEngine = Engine | 'manual';
 export type GroupColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'yellow';
 
-export type UserRole = 'user' | 'admin' | 'superadmin';
+export type UserRole = 'user' | 'operator' | 'admin' | 'superadmin';
 
 /** The superadmin counts as an admin everywhere in the panel. */
 export const isAdminRole = (role: UserRole | undefined) => role === 'admin' || role === 'superadmin';
+
+/** Staff: operators (limited user management), admins and the superadmin. */
+export const isStaffRole = (role: UserRole | undefined) => role === 'operator' || isAdminRole(role);
 
 export interface User {
   id: number;
@@ -226,6 +229,11 @@ export interface DayCount {
 export interface AdminUser extends User {
   createdAt: string;
   lastLoginAt: string | null;
+  /** Set while the account is deactivated (it keeps its data but cannot sign in). */
+  disabledAt: string | null;
+  disabledReason: string | null;
+  /** Only in the detail endpoint. */
+  disabledByEmail?: string | null;
 }
 
 export interface AdminUserListItem extends AdminUser {
@@ -233,6 +241,21 @@ export interface AdminUserListItem extends AdminUser {
   wordCount: number;
   lastScanAt: string | null;
 }
+
+/** What an operator sees of each account: no role, no words, nothing about the scans' content. */
+export interface OperatorUserListItem {
+  id: number;
+  name: string;
+  email: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+  disabledAt: string | null;
+  scanCount: number;
+  lastScanAt: string | null;
+}
+
+export type UserSort = 'recent' | 'scans' | 'activity';
+export type UserStatus = 'active' | 'disabled';
 
 export interface AdminActivity {
   id: number;
@@ -263,6 +286,11 @@ export interface AdminUserDetail {
     byEngine: { engine: ScanEngine; count: number; words: number }[];
     perDay: DayCount[];
   };
+}
+
+export interface AdminScanActivity extends AdminActivity {
+  language: string;
+  wordCount: number;
 }
 
 export interface AdminUserScan {
@@ -296,7 +324,7 @@ export interface AdminScan {
   userEmail: string;
 }
 
-export type AuditAction = 'view_scan' | 'change_role' | 'delete_user' | 'create_admin';
+export type AuditAction = 'view_scan' | 'change_role' | 'delete_user' | 'create_admin' | 'deactivate_user' | 'reactivate_user';
 
 /** One row of the admin audit log. Emails are snapshots: they survive the deletion of either account. */
 export interface AuditEntry {
@@ -309,6 +337,6 @@ export interface AuditEntry {
   targetScanId: number | null;
   /** Whether the target account still exists (so it can be linked). */
   targetExists: boolean;
-  details: { title?: string; from?: UserRole; to?: UserRole; role?: UserRole; name?: string };
+  details: { title?: string; from?: UserRole; to?: UserRole; role?: UserRole; name?: string; reason?: string };
   createdAt: string;
 }

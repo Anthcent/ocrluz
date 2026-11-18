@@ -157,4 +157,73 @@ test.describe('Administración', () => {
     await expect(page.getByRole('button', { name: 'Eliminar cuenta' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Hacer administrador' })).toHaveCount(0);
   });
+
+  test('el superadministrador hace operadora a una usuaria, que desactiva a otro usuario y este ya no puede entrar', async ({ page, browser }) => {
+    // Dos cuentas normales: la futura operadora y el usuario que se desactivará.
+    const accounts = await browser.newContext();
+    const olga = await signUp(await accounts.newPage(), 'Olga Operadora');
+    const victor = await signUp(await accounts.newPage(), 'Victor Desactivable');
+    await accounts.close();
+
+    // El superadministrador la promueve a operadora desde su ficha.
+    expect((await page.request.post('/api/auth/superadmin/login', { headers: HEADERS, data: SUPERADMIN })).status()).toBe(200);
+    await page.goto('/admin?tab=usuarios');
+    await page.getByRole('searchbox', { name: 'Buscar usuarios por nombre o correo' }).fill(olga.email);
+    await expect(page.getByTestId('admin-users').getByRole('link')).toHaveCount(1);
+    await page.getByTestId('admin-users').getByRole('link', { name: /Olga Operadora/ }).click();
+    await expect(page.getByRole('heading', { name: 'Olga Operadora', level: 1 })).toBeVisible();
+    await page.getByRole('button', { name: 'Cambiar rol' }).click();
+    await page.getByRole('menuitem', { name: 'Hacer operador' }).click();
+    await page.getByRole('dialog', { name: 'Hacer operador' }).getByRole('button', { name: 'Hacer operador' }).click();
+    await expectToast(page, 'Olga Operadora ahora es operador');
+    await expect(page.getByText('Operador', { exact: true })).toBeVisible();
+
+    // La operadora entra con el login normal y llega a su sección.
+    await page.context().clearCookies();
+    await page.goto('/login');
+    await page.getByLabel('Correo electrónico').fill(olga.email);
+    await page.getByLabel('Contraseña').fill(olga.password);
+    await page.getByRole('button', { name: 'Entrar' }).click();
+    await expect(page).not.toHaveURL(/\/login$/);
+    if (isMobile(page)) {
+      await page.goto('/ajustes');
+      await page.getByRole('link', { name: 'Abrir gestión de usuarios' }).click();
+    } else {
+      await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Gestión de usuarios' }).click();
+    }
+    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page.getByRole('heading', { name: 'Gestión de usuarios', level: 1 })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Secciones de administración' })).toHaveCount(0);
+    // El servidor le niega el resto del panel.
+    expect((await page.request.get('/api/admin/stats')).status()).toBe(403);
+    expect((await page.request.get('/api/admin/audit')).status()).toBe(403);
+
+    // Listado parcial: sin enlace al detalle ni rol, y solo la acción de desactivar.
+    await page.getByRole('searchbox', { name: 'Buscar usuarios por nombre o correo' }).fill(victor.email);
+    const users = page.getByTestId('admin-users');
+    await expect(users.getByRole('listitem')).toHaveCount(1);
+    await expect(users).toContainText(victor.email);
+    await expect(users.getByRole('link')).toHaveCount(0);
+    await expect(users).not.toContainText('Usuario');
+    await users.getByRole('button', { name: 'Acciones para Victor Desactivable' }).click();
+    const menu = page.getByRole('menu', { name: 'Acciones para Victor Desactivable' });
+    await expect(menu.getByRole('menuitem')).toHaveText(['Desactivar cuenta']);
+    await menu.getByRole('menuitem', { name: 'Desactivar cuenta' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Desactivar cuenta' });
+    await dialog.getByLabel('Motivo (opcional)').fill('Prueba de desactivación');
+    await dialog.getByRole('button', { name: 'Desactivar', exact: true }).click();
+    await expectToast(page, 'Cuenta de Victor Desactivable desactivada');
+    await expect(users).toContainText('Desactivada');
+
+    // El usuario desactivado ya no puede entrar.
+    const victorContext = await browser.newContext();
+    const victorPage = await victorContext.newPage();
+    await victorPage.goto('/login');
+    await victorPage.getByLabel('Correo electrónico').fill(victor.email);
+    await victorPage.getByLabel('Contraseña').fill(victor.password);
+    await victorPage.getByRole('button', { name: 'Entrar' }).click();
+    await expect(victorPage.getByText('Tu cuenta está desactivada. Contacta con un administrador.')).toBeVisible();
+    await expect(victorPage).toHaveURL(/\/login$/);
+    await victorContext.close();
+  });
 });
