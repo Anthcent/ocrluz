@@ -60,7 +60,8 @@ export function createApp(ctx: AppContext, options: { webDist?: string } = {}) {
   api.use('/analyses', analysesRouter(ctx));
   api.use('/documents', documentsRouter(ctx));
   api.use('/final-summaries', finalSummariesRouter(ctx));
-  // Personal (operador, administrador, superadministrador); cada ruta exige además su propio nivel.
+  // Personal (operador, administrador, superadministrador). Dentro, todo exige administrador salvo
+  // las rutas explícitamente abiertas al operador (ver routes/admin.ts).
   api.use('/admin', requireStaff, adminRouter(ctx));
   api.use((_req, res) => res.status(404).json({ error: 'Ruta no encontrada', code: 'not_found' }));
   app.use('/api', api);

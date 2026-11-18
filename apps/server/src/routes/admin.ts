@@ -11,7 +11,8 @@ import { toTsQuery } from './search.js';
 
 /**
  * Panel de administración: estadísticas globales, usuarios y actividad de escaneo.
- * Se monta detrás de requireAuth + requireStaff (ver app.ts) y cada ruta exige su propio nivel:
+ * Se monta detrás de requireAuth + requireStaff (ver app.ts). Por defecto todo exige administrador:
+ * solo las rutas registradas en `staff` quedan abiertas al operador; cualquier otra pasa por requireAdmin.
  * - Operador: solo el listado de usuarios (datos parciales, sin escaneos) y desactivar/reactivar usuarios normales.
  * - Administrador: todo lo demás, salvo crear administradores y asignar el rol de administrador.
  * - Superadministrador: todo. Nadie puede modificar, desactivar ni eliminar al superadministrador desde la API.
@@ -28,9 +29,19 @@ const pagination = {
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 };
 
+// Fechas acotadas a un rango razonable: JavaScript acepta años que PostgreSQL no puede representar.
+const MIN_DATE = new Date('2000-01-01T00:00:00Z');
+const MAX_DATE = new Date('2100-01-01T00:00:00Z');
+const boundedDate = () =>
+  z.coerce
+    .date('Fecha no válida')
+    .min(MIN_DATE, 'La fecha debe ser posterior al año 2000')
+    .max(MAX_DATE, 'La fecha debe ser anterior al año 2100')
+    .optional();
+
 const dateRange = {
-  from: z.coerce.date('Fecha no válida').optional(),
-  to: z.coerce.date('Fecha no válida').optional(),
+  from: boundedDate(),
+  to: boundedDate(),
 };
 
 // Diferencia del administrador respecto a UTC en minutos, igual que en /api/stats.
@@ -207,6 +218,9 @@ const offsetOf = (page: number, pageSize: number) => (page - 1) * pageSize;
 const forbidden = (message = 'No tienes permiso para acceder a esta sección') => new HttpError(403, message, 'forbidden');
 
 export function adminRouter(ctx: AppContext) {
+  // Rutas abiertas a todo el personal (operador incluido). Añadir aquí solo lo que el operador deba usar.
+  const staff = Router();
+  // Rutas de administrador: el router completo va detrás de requireAdmin (ver el final de la función).
   const router = Router();
 
   const findUser = async (id: number) => {
@@ -226,7 +240,7 @@ export function adminRouter(ctx: AppContext) {
     return user;
   };
 
-  router.get('/stats', requireAdmin, async (req, res) => {
+  router.get('/stats', async (req, res) => {
     const { tz, days } = statsSchema.parse(req.query);
     const totals = (await ctx.db.one<Record<string, number>>(
       `SELECT (SELECT COUNT(*) FROM users) AS users,
@@ -254,7 +268,7 @@ export function adminRouter(ctx: AppContext) {
    * Listado de cuentas, con búsqueda, filtros, orden y paginación. El operador solo ve usuarios normales
    * y con las columnas de OPERATOR_USER_COLUMNS: la proyección se decide aquí, nunca en el cliente.
    */
-  router.get('/users', async (req, res) => {
+  staff.get('/users', async (req, res) => {
     const { q, role, status, sort, page, pageSize } = usersSchema.parse(req.query);
     const actor = currentUser(req);
     const operator = !isAdminRole(actor.role);
@@ -275,7 +289,7 @@ export function adminRouter(ctx: AppContext) {
     res.json({ users, total, page, pageSize });
   });
 
-  router.get('/users/:id', requireAdmin, async (req, res) => {
+  router.get('/users/:id', async (req, res) => {
     const id = idParam.parse(req.params.id);
     const { tz, days } = statsSchema.parse(req.query);
     const user = await findUser(id);
@@ -298,7 +312,7 @@ export function adminRouter(ctx: AppContext) {
   });
 
   // Escaneos de un usuario: búsqueda por título o texto, filtros por motor y fecha (`to` exclusivo), y orden por carpeta.
-  router.get('/users/:id/scans', requireAdmin, async (req, res) => {
+  router.get('/users/:id/scans', async (req, res) => {
     const id = idParam.parse(req.params.id);
     const { q, engine, from, to, sort, page, pageSize } = userScansSchema.parse(req.query);
     await findUser(id);
@@ -323,7 +337,7 @@ export function adminRouter(ctx: AppContext) {
   });
 
   // Registro global de actividad: quién escaneó, cuándo y con qué motor. `to` es exclusivo.
-  router.get('/scans', requireAdmin, async (req, res) => {
+  router.get('/scans', async (req, res) => {
     const { userId, user, engine, from, to, page, pageSize } = scansSchema.parse(req.query);
     const filter = conditions();
     if (userId) filter.add('s.user_id = ?', userId);
@@ -348,7 +362,7 @@ export function adminRouter(ctx: AppContext) {
   });
 
   // Escaneo completo (texto incluido) de cualquier usuario, para revisarlo desde el panel.
-  router.get('/scans/:id', requireAdmin, async (req, res) => {
+  router.get('/scans/:id', async (req, res) => {
     const id = idParam.parse(req.params.id);
     const scan = await ctx.db.one(
       `SELECT s.id, s.title, s.text, s.original_text AS "originalText", s.engine, s.language, s.word_count AS "wordCount",
@@ -398,7 +412,7 @@ export function adminRouter(ctx: AppContext) {
    * Cambios de rol. El superadministrador asigna usuario, operador o administrador; un administrador
    * solo alterna usuario y operador sobre cuentas que no sean de administrador.
    */
-  router.patch('/users/:id/role', requireAdmin, async (req, res) => {
+  router.patch('/users/:id/role', async (req, res) => {
     const id = idParam.parse(req.params.id);
     const { role } = roleSchema.parse(req.body);
     const actorId = currentUser(req).id;
@@ -462,11 +476,11 @@ export function adminRouter(ctx: AppContext) {
       res.json({ user: await userForActor(id, me.role) });
     };
 
-  router.post('/users/:id/deactivate', setStatus(true));
-  router.post('/users/:id/reactivate', setStatus(false));
+  staff.post('/users/:id/deactivate', setStatus(true));
+  staff.post('/users/:id/reactivate', setStatus(false));
 
   // Los administradores eliminan usuarios y operadores; eliminar a otro administrador exige ser superadministrador.
-  router.delete('/users/:id', requireAdmin, async (req, res) => {
+  router.delete('/users/:id', async (req, res) => {
     const id = idParam.parse(req.params.id);
     const actorId = currentUser(req).id;
     await ctx.db.transaction(async (tx) => {
@@ -522,7 +536,7 @@ export function adminRouter(ctx: AppContext) {
   });
 
   // Registro de auditoría, del más reciente al más antiguo. Solo lectura: no hay rutas para editarlo ni borrarlo.
-  router.get('/audit', requireAdmin, async (req, res) => {
+  router.get('/audit', async (req, res) => {
     const { action, actorId, targetUserId, actor, target, from, to, page, pageSize } = auditSchema.parse(req.query);
     const filter = conditions();
     if (action) filter.add('a.action = ?', action);
@@ -546,5 +560,6 @@ export function adminRouter(ctx: AppContext) {
     res.json({ entries, total, page, pageSize });
   });
 
-  return router;
+  // Primero las rutas del personal; todo lo que no coincida (incluidas rutas inexistentes) exige administrador.
+  return Router().use(staff, requireAdmin, router);
 }

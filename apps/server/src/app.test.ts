@@ -1016,6 +1016,57 @@ describe('operadores, roles y desactivación', () => {
     expect(await audit({ target: '100%' })).toBe(0);
     await adm.agent.get('/api/admin/audit').query({ from: 'ayer' }).expect(400);
   });
+
+  it('el panel exige administrador por defecto: el operador solo accede a las rutas abiertas al personal', async () => {
+    const op = await account('op@example.com', 'operator');
+    const adm = await account('adm@example.com', 'admin');
+    const ana = await account('ana@example.com');
+    const saved = await ana.post('/api/scans', { items: [{ text: 'algo', engine: 'manual' }] }).expect(201);
+    const scanId = saved.body.ids[0];
+    const body = { role: 'operator', name: 'Otro', email: 'otro@example.com', password: 'secreto123' };
+
+    const adminOnly = [
+      ['get', '/api/admin/stats'],
+      ['get', '/api/admin/audit'],
+      ['get', '/api/admin/scans'],
+      ['get', `/api/admin/scans/${scanId}`],
+      ['get', `/api/admin/users/${ana.id}`],
+      ['get', `/api/admin/users/${ana.id}/scans`],
+      ['patch', `/api/admin/users/${ana.id}/role`],
+      ['delete', `/api/admin/users/${ana.id}`],
+      ['post', '/api/admin/admins'],
+      // Una ruta inexistente tampoco revela nada al operador: 403, no 404.
+      ['get', '/api/admin/no-existe'],
+    ] as const;
+    for (const [method, url] of adminOnly) {
+      const res = await op.agent[method](url).set(H).send(body);
+      expect(res.status, `${method} ${url}`).toBe(403);
+      expect(res.body.code, `${method} ${url}`).toBe('forbidden');
+    }
+    // Para un administrador la ruta inexistente sigue siendo 404.
+    await adm.agent.get('/api/admin/no-existe').set(H).expect(404);
+
+    await op.agent.get('/api/admin/users').set(H).expect(200);
+    await deactivate(op, ana.id).expect(200);
+    await reactivate(op, ana.id).expect(200);
+    expect(await db.one('SELECT role FROM users WHERE id = ?', [ana.id])).toEqual({ role: 'user' });
+  });
+
+  it('rechaza con 400 fechas fuera del rango razonable en los filtros', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const ana = await account('ana@example.com');
+    const urls = ['/api/admin/scans', '/api/admin/audit', `/api/admin/users/${ana.id}/scans`];
+    const absurd = ['+275000-01-01T00:00:00Z', '1899-12-31', '2100-01-02'];
+    for (const url of urls) {
+      for (const value of absurd) {
+        for (const key of ['from', 'to']) {
+          const res = await adm.agent.get(url).set(H).query({ [key]: value });
+          expect(res.status, `${url} ${key}=${value}`).toBe(400);
+        }
+      }
+      await adm.agent.get(url).set(H).query({ from: '2000-01-01', to: '2100-01-01' }).expect(200);
+    }
+  });
 });
 
 describe('superadministrador', () => {
