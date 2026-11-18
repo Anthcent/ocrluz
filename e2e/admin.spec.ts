@@ -158,6 +158,64 @@ test.describe('Administración', () => {
     await expect(page.getByRole('button', { name: 'Hacer administrador' })).toHaveCount(0);
   });
 
+  test('el administrador restablece la contraseña de un usuario, que entra con la temporal y debe cambiarla', async ({ page, browser }) => {
+    const adminEmail = await createAdminViaApi(browser, 'Admin Reset');
+    const accounts = await browser.newContext();
+    const rosa = await signUp(await accounts.newPage(), 'Rosa Olvidadiza');
+    await accounts.close();
+
+    expect((await page.request.post('/api/auth/login', { headers: HEADERS, data: { email: adminEmail, password: ADMIN_PASSWORD } })).status()).toBe(200);
+    await page.goto('/admin?tab=usuarios');
+    await page.getByRole('searchbox', { name: 'Buscar usuarios por nombre o correo' }).fill(rosa.email);
+    await expect(page.getByTestId('admin-users').getByRole('link')).toHaveCount(1);
+    await page.getByTestId('admin-users').getByRole('link', { name: /Rosa Olvidadiza/ }).click();
+    await expect(page.getByRole('heading', { name: 'Rosa Olvidadiza', level: 1 })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Restablecer contraseña' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Restablecer contraseña' });
+    await expect(confirm).toContainText('Sus sesiones abiertas se cerrarán');
+    await confirm.getByRole('button', { name: 'Restablecer', exact: true }).click();
+
+    const result = page.getByRole('dialog', { name: 'Contraseña temporal' });
+    await expect(result).toContainText('Compártela por un canal seguro; no se volverá a mostrar');
+    const field = result.getByRole('textbox', { name: 'Contraseña temporal' });
+    await expect(field).toHaveValue(/^[A-HJ-NP-Za-km-z2-9]{14}$/);
+    const temporary = await field.inputValue();
+    await result.getByRole('button', { name: 'Listo' }).click();
+    await expect(result).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Acciones sobre esta cuenta' }).getByTestId('admin-audit')).toContainText(
+      `${adminEmail} restableció la contraseña de ${rosa.email}`,
+    );
+
+    // La usuaria entra con la temporal y solo puede cambiarla.
+    const rosaContext = await browser.newContext();
+    const rosaPage = await rosaContext.newPage();
+    await rosaPage.goto('/login');
+    await rosaPage.getByLabel('Correo electrónico').fill(rosa.email);
+    await rosaPage.getByLabel('Contraseña').fill(temporary);
+    await rosaPage.getByRole('button', { name: 'Entrar' }).click();
+    await expect(rosaPage).toHaveURL(/\/cambiar-contrasena$/);
+    await expect(rosaPage.getByRole('heading', { name: 'Cambiar contraseña', level: 1 })).toBeVisible();
+    await rosaPage.goto('/archivo');
+    await expect(rosaPage).toHaveURL(/\/cambiar-contrasena$/);
+    expect((await rosaPage.request.get('/api/scans')).status()).toBe(403);
+
+    // La temporal no sirve como nueva.
+    await rosaPage.getByLabel('Contraseña temporal').fill(temporary);
+    await rosaPage.getByLabel(/^Nueva contraseña/).fill(temporary);
+    await rosaPage.getByLabel('Repite la nueva contraseña').fill(temporary);
+    await rosaPage.getByRole('button', { name: 'Guardar y continuar' }).click();
+    await expect(rosaPage.getByRole('alert')).toHaveText('La nueva contraseña debe ser distinta de la temporal');
+
+    await rosaPage.getByLabel(/^Nueva contraseña/).fill('mi-clave-nueva-123');
+    await rosaPage.getByLabel('Repite la nueva contraseña').fill('mi-clave-nueva-123');
+    await rosaPage.getByRole('button', { name: 'Guardar y continuar' }).click();
+    await expect(rosaPage).toHaveURL(/\/$/);
+    await expect(rosaPage.getByRole('heading', { name: 'Cambiar contraseña', level: 1 })).toHaveCount(0);
+    expect((await rosaPage.request.get('/api/scans')).status()).toBe(200);
+    await rosaContext.close();
+  });
+
   test('el superadministrador hace operadora a una usuaria, que desactiva a otro usuario y este ya no puede entrar', async ({ page, browser }) => {
     // Dos cuentas normales: la futura operadora y el usuario que se desactivará.
     const accounts = await browser.newContext();

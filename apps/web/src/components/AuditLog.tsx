@@ -1,4 +1,4 @@
-import { Eye, ShieldCheck, ShieldOff, UserRoundCheck, UserRoundMinus, UserRoundPlus, UserRoundX, type LucideIcon } from 'lucide-react';
+import { Eye, KeyRound, ShieldCheck, ShieldOff, UserRoundCheck, UserRoundMinus, UserRoundPlus, UserRoundX, type LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { api } from '../lib/api';
@@ -16,6 +16,7 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: 'create_admin', label: 'Altas' },
   { value: 'deactivate_user', label: 'Desactivaciones' },
   { value: 'reactivate_user', label: 'Reactivaciones' },
+  { value: 'reset_password', label: 'Contraseñas' },
   { value: 'delete_user', label: 'Eliminaciones' },
 ];
 
@@ -33,6 +34,8 @@ function iconFor(entry: AuditEntry): { icon: LucideIcon; tile: string } {
       return { icon: UserRoundMinus, tile: 'bg-bee-light text-bee-dark' };
     case 'reactivate_user':
       return { icon: UserRoundCheck, tile: 'bg-feather-light text-feather-dark' };
+    case 'reset_password':
+      return { icon: KeyRound, tile: 'bg-bee-light text-bee-dark' };
     default:
       return entry.details.to === 'user' ? { icon: ShieldOff, tile: 'bg-polar text-eel' } : { icon: ShieldCheck, tile: 'bg-polar text-eel' };
   }
@@ -90,6 +93,12 @@ function Sentence({ entry }: { entry: AuditEntry }) {
       return (
         <>
           {actor} reactivó la cuenta de {target}
+        </>
+      );
+    case 'reset_password':
+      return (
+        <>
+          {actor} restableció la contraseña de {target}
         </>
       );
   }
@@ -155,7 +164,7 @@ export function AuditLog({
       subtitle={
         data
           ? `${formatNumber(data.total)} ${data.total === 1 ? 'acción registrada' : 'acciones registradas'}`
-          : 'Lecturas de escaneos, cambios de rol, altas, desactivaciones y eliminaciones hechas desde la administración'
+          : 'Lecturas de escaneos, cambios de rol, altas, desactivaciones, contraseñas restablecidas y eliminaciones hechas desde la administración'
       }
       actions={loading && data ? <Spinner className="size-5" /> : undefined}
     >

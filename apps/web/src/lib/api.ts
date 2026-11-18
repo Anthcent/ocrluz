@@ -225,6 +225,8 @@ export const api = {
       request<{ user: T }>(`/admin/users/${id}/deactivate`, { method: 'POST', json: reason ? { reason } : {} }),
     reactivate: <T = AdminUser>(id: number) => request<{ user: T }>(`/admin/users/${id}/reactivate`, { method: 'POST', json: {} }),
     removeUser: (id: number) => request<void>(`/admin/users/${id}`, { method: 'DELETE' }),
+    /** Admins only. The temporary password comes back once, in this response; it is never shown again. */
+    resetPassword: (id: number) => request<{ temporaryPassword: string }>(`/admin/users/${id}/reset-password`, { method: 'POST' }),
     /** Superadmin only: creates an admin account with a temporary password. */
     createAdmin: (data: { name: string; email: string; password: string }) => request<{ user: AdminUser }>('/admin/admins', { method: 'POST', json: data }),
     /** Read-only audit log, newest first. */

@@ -9,6 +9,8 @@ interface AuthState {
   superadminLogin: (username: string, password: string, pin: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Changes the password and reloads the session (clears a pending forced change). */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -46,7 +48,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  return <AuthContext.Provider value={{ user, loading, login, superadminLogin, register, logout }}>{children}</AuthContext.Provider>;
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    await api.auth.changePassword(currentPassword, newPassword);
+    // The server re-issued the cookie; /auth/me tells whether a forced change is still pending.
+    setUser((await api.auth.me()).user);
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, loading, login, superadminLogin, register, logout, changePassword }}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

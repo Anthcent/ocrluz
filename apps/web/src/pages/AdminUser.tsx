@@ -97,7 +97,7 @@ export function AdminUserPage() {
         <p className="-mt-2 mb-5 text-sm text-wolf">Para cambiar tu rol o eliminar tu cuenta, pide ayuda al superadministrador.</p>
       ) : (
         user.role === 'admin' &&
-        !iAmSuperadmin && <p className="-mt-2 mb-5 text-sm text-wolf">Solo el superadministrador puede cambiar el rol, desactivar o eliminar la cuenta de un administrador.</p>
+        !iAmSuperadmin && <p className="-mt-2 mb-5 text-sm text-wolf">Solo el superadministrador puede cambiar el rol, desactivar, restablecer la contraseña o eliminar la cuenta de un administrador.</p>
       )}
 
       <StatGrid

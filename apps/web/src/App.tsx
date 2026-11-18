@@ -13,6 +13,7 @@ import { DocumentNewPage } from './pages/DocumentNew';
 import { DocumentsPage } from './pages/Documents';
 import { FinalSummariesPage } from './pages/FinalSummaries';
 import { FinalSummaryEditorPage } from './pages/FinalSummaryEditor';
+import { ForcedPasswordChangePage } from './pages/ForcedPasswordChange';
 import { GroupDetailPage } from './pages/GroupDetail';
 import { HomePage } from './pages/Home';
 import { ScanDetailPage } from './pages/ScanDetail';
@@ -109,6 +110,16 @@ function Root() {
         <Route path="/registro" element={<AuthPage mode="register" />} />
         <Route path="/superadmin" element={<SuperadminLoginPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
+  // A temporary password set by an admin: nothing else is reachable (the API answers 403) until it is changed.
+  if (user.mustChangePassword) {
+    return (
+      <Routes>
+        <Route path="/cambiar-contrasena" element={<ForcedPasswordChangePage />} />
+        <Route path="*" element={<Navigate to="/cambiar-contrasena" replace />} />
       </Routes>
     );
   }
