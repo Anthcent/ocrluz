@@ -79,14 +79,16 @@ export function authRouter(ctx: AppContext) {
 
   router.post('/login', limiter, async (req, res) => {
     const data = loginSchema.parse(req.body);
-    const row = await ctx.db.one<SessionUser & { password_hash: string; credentials_version: number }>(
-      'SELECT id, email, name, role, password_hash, credentials_version FROM users WHERE email = ?',
+    const row = await ctx.db.one<SessionUser & { password_hash: string; credentials_version: number; disabled: boolean }>(
+      'SELECT id, email, name, role, password_hash, credentials_version, disabled_at IS NOT NULL AS disabled FROM users WHERE email = ?',
       [data.email],
     );
     // Comparamos siempre para no revelar por tiempo de respuesta si el correo existe.
     const ok = await bcrypt.compare(data.password, row?.password_hash ?? '$2b$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinv');
     // El superadministrador solo entra por /superadmin/login (con PIN).
     if (!row || !ok || row.role === 'superadmin') throw new HttpError(401, 'Correo o contraseña incorrectos', 'invalid_credentials');
+    // Solo se revela que la cuenta está desactivada a quien ya demostró conocer la contraseña.
+    if (row.disabled) throw new HttpError(403, 'Tu cuenta está desactivada. Contacta con un administrador.', 'account_disabled');
     const user: SessionUser = { id: row.id, email: row.email, name: row.name, role: row.role };
     await ctx.db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [row.id]);
     setSession(res, user, row.credentials_version);

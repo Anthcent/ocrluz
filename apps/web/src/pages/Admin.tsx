@@ -1,24 +1,109 @@
-import { FileScan, FileText, FolderOpen, Search, ShieldCheck, Type, UserRoundPlus, UsersRound, WifiOff } from 'lucide-react';
+import clsx from 'clsx';
+import { Activity, FileScan, FileText, FolderOpen, LayoutDashboard, ScrollText, ShieldCheck, Type, UserRoundPlus, UsersRound, WifiOff } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { AuditLog } from '../components/AuditLog';
-import { DailyChart, Pagination, Panel, RoleBadge, StatGrid, UserAvatar } from '../components/admin';
+import { DailyChart, Panel, StatGrid, UserAvatar } from '../components/admin';
 import { errorMessage, useFeedback } from '../components/feedback';
 import { PageHeader } from '../components/PageHeader';
-import { Button, EmptyState, Field, Input, Modal, PageLoader, Spinner } from '../components/ui';
+import { ScanActivity } from '../components/ScanActivity';
+import { Button, EmptyState, Field, Input, Modal, PageLoader } from '../components/ui';
+import { UserDirectory } from '../components/UserDirectory';
 import { api } from '../lib/api';
 import { ENGINE_LABEL } from '../lib/constants';
 import { formatNumber, timeAgo } from '../lib/format';
-import type { AdminStats, AdminUserListItem, Paged } from '../lib/types';
+import type { AdminStats, AdminUserListItem } from '../lib/types';
 
 const PAGE_SIZE = 20;
 
+type Tab = 'resumen' | 'usuarios' | 'actividad' | 'auditoria' | 'administradores';
+
+const TABS: { value: Tab; label: string; icon: typeof UsersRound; superadminOnly?: boolean }[] = [
+  { value: 'resumen', label: 'Resumen', icon: LayoutDashboard },
+  { value: 'usuarios', label: 'Usuarios', icon: UsersRound },
+  { value: 'actividad', label: 'Actividad', icon: Activity },
+  { value: 'auditoria', label: 'Auditoría', icon: ScrollText },
+  { value: 'administradores', label: 'Administradores', icon: ShieldCheck, superadminOnly: true },
+];
+
+/** `/admin`: operators get their restricted user management; admins the full panel. */
 export function AdminPage() {
+  const { user } = useAuth();
+  return user?.role === 'operator' ? <OperatorPage /> : <AdminPanel />;
+}
+
+/** Operators: the partial accounts list, where they can deactivate and reactivate regular users. */
+function OperatorPage() {
+  return (
+    <div className="mx-auto max-w-6xl">
+      <PageHeader icon={<UsersRound />} tone="ink" title="Gestión de usuarios" subtitle="Consulta las cuentas de usuario y desactiva o reactiva el acceso cuando haga falta." />
+      <UserDirectory mode="operator" title="Usuarios" />
+    </div>
+  );
+}
+
+function AdminPanel() {
   const { user: me } = useAuth();
-  const [stats, setStats] = useState<AdminStats | null>(null);
+  const isSuperadmin = me?.role === 'superadmin';
+  const [params, setParams] = useSearchParams();
+  const requested = params.get('tab') as Tab | null;
+  const tab: Tab = TABS.some((t) => t.value === requested && (!t.superadminOnly || isSuperadmin)) ? requested! : 'resumen';
   // Bumped after creating an admin so the lists reload.
   const [version, setVersion] = useState(0);
+  const [creating, setCreating] = useState(false);
+
+  const created = () => {
+    setVersion((v) => v + 1);
+    if (tab !== 'resumen' && tab !== 'administradores') setParams({ tab: 'administradores' });
+  };
+
+  return (
+    <div className="mx-auto max-w-6xl">
+      <PageHeader icon={<ShieldCheck />} tone="ink" title="Administración" subtitle="Cuentas de la aplicación y actividad de escaneo de todos los usuarios." />
+
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <nav aria-label="Secciones de administración" className="scrollbar-none -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <ul className="flex w-max gap-1 rounded-2xl bg-white p-1 shadow-surface">
+            {TABS.filter((t) => !t.superadminOnly || isSuperadmin).map(({ value, label, icon: Icon }) => (
+              <li key={value}>
+                <Link
+                  to={value === 'resumen' ? '/admin' : `/admin?tab=${value}`}
+                  aria-current={tab === value ? 'page' : undefined}
+                  className={clsx(
+                    'flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-sm font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-macaw/35',
+                    tab === value ? 'bg-eel text-white' : 'text-wolf hover:bg-polar hover:text-eel',
+                  )}
+                >
+                  <Icon className="size-4" aria-hidden="true" />
+                  {label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        {isSuperadmin && (
+          <Button size="sm" variant="secondary" icon={<UserRoundPlus className="size-4" />} onClick={() => setCreating(true)} className="self-start sm:self-auto">
+            Crear administrador
+          </Button>
+        )}
+      </div>
+
+      {tab === 'resumen' && <Overview key={`overview-${version}`} onCreateAdmin={() => setCreating(true)} />}
+      {tab === 'usuarios' && <UserDirectory key={`users-${version}`} mode="admin" />}
+      {tab === 'actividad' && <ScanActivity />}
+      {tab === 'auditoria' && <AuditLog key={`audit-${version}`} title="Auditoría" pageSize={PAGE_SIZE} advanced />}
+      {tab === 'administradores' && isSuperadmin && <AdminList key={`admins-${version}`} onCreate={() => setCreating(true)} />}
+
+      <CreateAdminModal open={creating} onClose={() => setCreating(false)} onCreated={created} />
+    </div>
+  );
+}
+
+/** Default tab: headline numbers, recent activity, and the accounts and audit sections. */
+function Overview({ onCreateAdmin }: { onCreateAdmin: () => void }) {
+  const { user: me } = useAuth();
+  const [stats, setStats] = useState<AdminStats | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
@@ -41,9 +126,7 @@ export function AdminPage() {
 
   const { totals } = stats;
   return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader icon={<ShieldCheck />} tone="ink" title="Administración" subtitle="Cuentas de la aplicación y actividad de escaneo de todos los usuarios." />
-
+    <>
       <StatGrid
         className="mb-5"
         items={[
@@ -78,7 +161,15 @@ export function AdminPage() {
           )}
         </Panel>
 
-        <Panel title="Actividad reciente" subtitle="Últimos escaneos guardados">
+        <Panel
+          title="Actividad reciente"
+          subtitle="Últimos escaneos guardados"
+          actions={
+            <Link to="/admin?tab=actividad" className="inline-flex min-h-11 items-center text-sm font-bold text-macaw-dark hover:text-eel">
+              Ver toda la actividad
+            </Link>
+          }
+        >
           {stats.recentScans.length === 0 ? (
             <p className="text-sm text-wolf">Todavía no hay escaneos.</p>
           ) : (
@@ -104,104 +195,20 @@ export function AdminPage() {
         </Panel>
       </div>
 
-      {me?.role === 'superadmin' && <AdminList key={`admins-${version}`} onCreated={() => {
-            setVersion((v) => v + 1);
-            load();
-          }} />}
+      {me?.role === 'superadmin' && <AdminList onCreate={onCreateAdmin} className="mb-5" />}
 
-      <UserList key={`users-${version}`} />
+      <UserDirectory mode="admin" className="mb-5" />
 
-      <AuditLog key={`audit-${version}`} title="Auditoría" pageSize={PAGE_SIZE} />
-    </div>
-  );
-}
-
-function UserList() {
-  const [query, setQuery] = useState('');
-  const [debounced, setDebounced] = useState('');
-  const [page, setPage] = useState(1);
-  const [data, setData] = useState<(Paged & { users: AdminUserListItem[] }) | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebounced(query.trim());
-      setPage(1);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError(null);
-    api.admin
-      .users({ q: debounced, page, pageSize: PAGE_SIZE })
-      .then((r) => active && setData(r))
-      .catch((err) => active && setError(errorMessage(err)))
-      .finally(() => active && setLoading(false));
-    return () => {
-      active = false;
-    };
-  }, [debounced, page]);
-
-  return (
-    <Panel
-      className="mb-5"
-      title="Usuarios"
-      subtitle={data ? `${formatNumber(data.total)} ${data.total === 1 ? 'cuenta' : 'cuentas'}${debounced ? ' encontradas' : ''}` : undefined}
-      actions={loading && data ? <Spinner className="size-5" /> : undefined}
-    >
-      <div className="relative mb-3">
-        <Search aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-wolf" />
-        <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nombre o correo" aria-label="Buscar usuarios por nombre o correo" className="pl-12" />
-      </div>
-
-      {error ? (
-        <p role="alert" className="text-sm font-semibold text-cardinal-dark">
-          {error}
-        </p>
-      ) : !data ? (
-        <PageLoader />
-      ) : data.users.length === 0 ? (
-        <p className="py-6 text-center text-sm text-wolf">{debounced ? 'Ningún usuario coincide con la búsqueda.' : 'No hay usuarios.'}</p>
-      ) : (
-        <ul className="divide-y divide-swan" data-testid="admin-users">
-          {data.users.map((u) => (
-            <li key={u.id}>
-              <Link to={`/admin/usuarios/${u.id}`} className="-mx-2 flex min-h-14 items-center gap-3 rounded-xl px-2 py-2.5 transition-colors duration-200 hover:bg-polar">
-                <UserAvatar name={u.name} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="truncate font-semibold text-eel">{u.name}</span>
-                    <RoleBadge role={u.role} />
-                  </div>
-                  <div className="truncate text-sm text-wolf">{u.email}</div>
-                </div>
-                <div className="hidden shrink-0 text-right text-sm sm:block">
-                  <div className="font-semibold tabular-nums text-eel">
-                    {formatNumber(u.scanCount)} {u.scanCount === 1 ? 'hoja' : 'hojas'}
-                  </div>
-                  <div className="text-xs text-wolf">{u.lastScanAt ? `Último escaneo ${timeAgo(u.lastScanAt)}` : 'Sin escaneos'}</div>
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={setPage} />}
-    </Panel>
+      <AuditLog title="Auditoría" pageSize={PAGE_SIZE} />
+    </>
   );
 }
 
 /** Superadmin only: the admin accounts and a shortcut to create one. Roles change from each account's page. */
-function AdminList({ onCreated }: { onCreated: () => void }) {
+function AdminList({ onCreate, className }: { onCreate: () => void; className?: string }) {
   const [admins, setAdmins] = useState<AdminUserListItem[] | null>(null);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -220,11 +227,11 @@ function AdminList({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Panel
-      className="mb-5"
+      className={className}
       title="Administradores"
       subtitle={admins ? `${formatNumber(total)} ${total === 1 ? 'administrador' : 'administradores'}. Solo tú puedes crearlos, promoverlos o quitarles el rol.` : undefined}
       actions={
-        <Button size="sm" icon={<UserRoundPlus className="size-4" />} onClick={() => setCreating(true)}>
+        <Button size="sm" icon={<UserRoundPlus className="size-4" />} onClick={onCreate}>
           Crear administrador
         </Button>
       }
@@ -253,7 +260,6 @@ function AdminList({ onCreated }: { onCreated: () => void }) {
           ))}
         </ul>
       )}
-      <CreateAdminModal open={creating} onClose={() => setCreating(false)} onCreated={onCreated} />
     </Panel>
   );
 }

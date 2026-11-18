@@ -7,7 +7,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Badge, Button, Field, Input, Segmented, Select, Toggle } from '../components/ui';
 import { api } from '../lib/api';
 import { CLOUD_OCR, ENGINES, LANGUAGES } from '../lib/constants';
-import { isAdminRole, type Engine, type KeyStatus } from '../lib/types';
+import { isAdminRole, isStaffRole, type Engine, type KeyStatus } from '../lib/types';
 import { useSettings } from '../settings/SettingsContext';
 import { THEME_LABEL, THEMES, useTheme, type ThemeName } from '../theme/ThemeContext';
 
@@ -123,13 +123,17 @@ export function SettingsPage() {
             </Section>
           )}
 
-          {isAdminRole(user?.role) && (
-            <Section icon={<UsersRound />} title="Administración" subtitle="Usuarios, roles y actividad de escaneo de toda la aplicación.">
+          {isStaffRole(user?.role) && (
+            <Section
+              icon={<UsersRound />}
+              title={isAdminRole(user?.role) ? 'Administración' : 'Gestión de usuarios'}
+              subtitle={isAdminRole(user?.role) ? 'Usuarios, roles y actividad de escaneo de toda la aplicación.' : 'Consulta las cuentas de usuario y desactiva o reactiva su acceso.'}
+            >
               <Link
                 to="/admin"
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-eel px-5 text-sm font-bold text-white transition-[transform,background-color] duration-200 hover:bg-eel-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-macaw/35 active:scale-[0.98]"
               >
-                Abrir administración
+                {isAdminRole(user?.role) ? 'Abrir administración' : 'Abrir gestión de usuarios'}
                 <ArrowRight className="size-4" aria-hidden />
               </Link>
             </Section>

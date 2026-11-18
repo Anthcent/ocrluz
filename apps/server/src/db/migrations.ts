@@ -172,4 +172,15 @@ export const migrations: string[] = [
   -- las del superadministrador se incrementa y las sesiones emitidas antes dejan de valer.
   ALTER TABLE users ADD COLUMN credentials_version integer NOT NULL DEFAULT 0;
   `,
+  /* sql */ `
+  -- v10: rol de operador (gestión limitada de usuarios) y desactivación de cuentas sin borrar sus datos.
+  ALTER TABLE users DROP CONSTRAINT users_role_check;
+  ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'operator', 'admin', 'superadmin'));
+  ALTER TABLE users ADD COLUMN disabled_at timestamptz;
+  ALTER TABLE users ADD COLUMN disabled_by integer REFERENCES users(id) ON DELETE SET NULL;
+  ALTER TABLE users ADD COLUMN disabled_reason text;
+  ALTER TABLE admin_audit_log DROP CONSTRAINT admin_audit_log_action_check;
+  ALTER TABLE admin_audit_log ADD CONSTRAINT admin_audit_log_action_check
+    CHECK (action IN ('view_scan', 'change_role', 'delete_user', 'create_admin', 'deactivate_user', 'reactivate_user'));
+  `,
 ];

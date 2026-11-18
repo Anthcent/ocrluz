@@ -5,10 +5,13 @@ import { HttpError } from '../lib/http-error.js';
 
 export const SESSION_COOKIE = 'ocryon_session';
 
-export type UserRole = 'user' | 'admin' | 'superadmin';
+export type UserRole = 'user' | 'operator' | 'admin' | 'superadmin';
 
 /** El superadministrador cuenta como administrador en todo el panel. */
 export const isAdminRole = (role: string | undefined) => role === 'admin' || role === 'superadmin';
+
+/** Personal: operadores (gestión limitada de usuarios), administradores y superadministrador. */
+export const isStaffRole = (role: string | undefined) => role === 'operator' || isAdminRole(role);
 
 export interface SessionUser {
   id: number;
@@ -49,10 +52,11 @@ export function requireAuth(ctx: AppContext) {
       return next(new HttpError(401, 'Tu sesión expiró, vuelve a iniciar sesión', 'unauthenticated'));
     }
     try {
-      const user = await ctx.db.one<SessionUser>('SELECT id, email, name, role FROM users WHERE id = ? AND credentials_version = ?', [
-        userId,
-        version,
-      ]);
+      // Una cuenta desactivada pierde la sesión al instante, aunque el token siga vigente.
+      const user = await ctx.db.one<SessionUser>(
+        'SELECT id, email, name, role FROM users WHERE id = ? AND credentials_version = ? AND disabled_at IS NULL',
+        [userId, version],
+      );
       if (!user) return next(new HttpError(401, 'Tu sesión expiró, vuelve a iniciar sesión', 'unauthenticated'));
       req.user = user;
       next();
@@ -67,6 +71,12 @@ export function requireAuth(ctx: AppContext) {
 export function currentUser(req: Request): SessionUser {
   if (!req.user) throw new HttpError(401, 'No autenticado', 'unauthenticated');
   return req.user;
+}
+
+/** Operadores, administradores y superadministrador (usar detrás de requireAuth). */
+export function requireStaff(req: Request, _res: Response, next: NextFunction) {
+  if (!isStaffRole(req.user?.role)) return next(new HttpError(403, 'No tienes permiso para acceder a esta sección', 'forbidden'));
+  next();
 }
 
 /** Administradores y superadministrador (usar detrás de requireAuth). */
