@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { errorMessage } from '../components/feedback';
+import { SchoolBrand } from '../components/SchoolBrand';
 import { Button, Field, Input } from '../components/ui';
 
 /**
@@ -36,6 +37,7 @@ export function ForcedPasswordChangePage() {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-polar px-4 py-10 sm:px-8">
       <div className="w-full max-w-md rounded-[24px] bg-white p-6 shadow-[0_1px_2px_rgba(41,36,68,0.06)] sm:p-8">
+        <SchoolBrand size="sm" className="mb-6 border-b border-swan pb-5" />
         <span aria-hidden="true" className="mb-6 flex size-12 items-center justify-center rounded-2xl bg-bee-light text-bee-dark">
           <KeyRound className="size-6" />
         </span>

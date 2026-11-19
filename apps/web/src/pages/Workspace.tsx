@@ -15,6 +15,7 @@ import { errorMessage, useFeedback } from '../components/feedback';
 import { BackLink } from '../components/PageHeader';
 import { Button, EmptyState, PageLoader } from '../components/ui';
 import { api } from '../lib/api';
+import { exportFooter, SCHOOL_WATERMARK_URL } from '../lib/branding';
 import { downloadText, formatNumber } from '../lib/format';
 import type { Scan } from '../lib/types';
 import { docToText, textToHtml } from '../lib/workspace';
@@ -386,7 +387,8 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
   return (
     <div className="workspace-page mx-auto max-w-6xl space-y-3 pb-40 lg:space-y-4 lg:pb-0">
       {/* The printed page uses the same paper and margins as the sheet. */}
-      <style>{`@page { size: ${box.width / 96}in ${box.height / 96}in; margin: ${box.margin / 96}in; }`}</style>
+      {/* The export footer goes in the bottom margin box of every printed page. */}
+      <style>{`@page { size: ${box.width / 96}in ${box.height / 96}in; margin: ${box.margin / 96}in; @bottom-center { content: ${JSON.stringify(exportFooter())}; font: 8pt Arial, sans-serif; color: #666b74; } }`}</style>
       <input ref={fileRef} type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => { void addImage(e.target.files?.[0]); e.target.value = ''; }} />
 
       <div className="workspace-chrome flex flex-wrap items-center gap-3">
@@ -424,9 +426,11 @@ function WorkspaceEditor({ scan }: { scan: Scan }) {
             className={paged ? 'workspace-sheet workspace-sheet-paged bg-white' : 'workspace-sheet mx-auto w-full max-w-[816px] bg-white px-5 py-8 shadow-[0_2px_10px_rgba(41,36,68,0.12)] sm:p-[72px]'}
             style={paged ? { width: box.width, minHeight: box.height, padding: box.margin, transform: `scale(${scale})`, transformOrigin: 'top left' } : undefined}
           >
+            {/* Only shown on paper: the crest, faint and behind the text, repeated on every printed page. */}
+            <img src={SCHOOL_WATERMARK_URL} alt="" aria-hidden className="print-watermark" />
             <div
               ref={contentRef}
-              className="relative isolate flex flex-col bg-white"
+              className="workspace-content relative isolate flex flex-col bg-white"
               style={paged ? { minHeight: columnHeight, ['--doc-min' as string]: '0px' } : { ['--doc-min' as string]: '55vh' }}
             >
               <input

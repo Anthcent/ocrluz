@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import { exportFooter } from '../../lib/branding.js';
 import { AREA_COUNT, computeTotals, MAX_STUDENTS, type FinalSummary } from './model.js';
 
 /*
  * Fills the official «Resumen Final» workbook by writing cell values straight into the sheet XML.
  * Every other part of the package (styles, merged cells, letterhead image, print setup) is left untouched,
- * so the result prints exactly like the hand-made files.
+ * so the result prints exactly like the hand-made files. The only addition is the school's export footer,
+ * written into the sheet's print footer (it shows on paper and in print preview, not in the grid).
  */
 
 const TEMPLATE_URL = new URL('../../../assets/resumen-final-plantilla.xlsx', import.meta.url);
@@ -87,7 +89,18 @@ function formatId(id: string) {
   return match ? `${match[1].toUpperCase()} ${match[2]}` : id;
 }
 
-export function buildFinalSummaryXlsx(summary: FinalSummary): Uint8Array {
+/** Puts `text` in the center of the print footer, in 7 pt; the template's empty <headerFooter> is replaced. */
+function withPrintFooter(xml: string, text: string) {
+  // In header/footer codes «&» starts a command, so a literal one is written «&&».
+  const code = `&C&7${text.replace(/&/g, '&&')}`;
+  const footer = `<headerFooter alignWithMargins="0"><oddFooter>${escapeXml(code)}</oddFooter></headerFooter>`;
+  const existing = /<headerFooter\b[^>]*?(?:\/>|>[\s\S]*?<\/headerFooter>)/;
+  if (existing.test(xml)) return xml.replace(existing, footer);
+  // headerFooter goes right after pageSetup (or pageMargins) in the worksheet schema order.
+  return xml.replace(/(<pageSetup\b[^>]*\/>|<pageMargins\b[^>]*\/>)/, `$1${footer}`);
+}
+
+export function buildFinalSummaryXlsx(summary: FinalSummary, exportedAt = new Date()): Uint8Array {
   if (summary.students.length > MAX_STUDENTS) throw new Error(`At most ${MAX_STUDENTS} students fit on one page`);
   const files = unzipSync(loadTemplate());
   const sheet = new SheetWriter(strFromU8(files[SHEET]));
@@ -142,7 +155,7 @@ export function buildFinalSummaryXlsx(summary: FinalSummary): Uint8Array {
   sheet.set('A74', inst.director);
   sheet.set('A76', formatId(inst.directorId));
 
-  files[SHEET] = strToU8(sheet.toString());
+  files[SHEET] = strToU8(withPrintFooter(sheet.toString(), exportFooter(exportedAt)));
   return zipSync(files, { level: 6 });
 }
 

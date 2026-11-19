@@ -448,9 +448,31 @@ mark.hit {
   display: none;
 }
 
+/* School crest watermark: only exists on paper. */
+.print-watermark {
+  display: none;
+}
+
 @media print {
   [data-export-ignore] {
     display: none !important;
+  }
+  /* Fixed elements repeat on every printed page; this one sits behind the (transparent) text column. */
+  .workspace-sheet .print-watermark {
+    display: block;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 60%;
+    max-height: 80%;
+    object-fit: contain;
+    transform: translate(-50%, -50%);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .workspace-sheet .workspace-content {
+    z-index: 1;
+    background: transparent;
   }
   body:has(.workspace-page) * {
     visibility: hidden;

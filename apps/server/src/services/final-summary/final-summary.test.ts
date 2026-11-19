@@ -254,6 +254,20 @@ describe('buildFinalSummaryXlsx', () => {
     expect(files['xl/media/image1.png']).toBeDefined();
   });
 
+  it('prints the school export footer with the export date on every page', () => {
+    const files = unzipSync(buildFinalSummaryXlsx(emptySummary(), new Date('2026-11-18T15:00:00Z')));
+    const xml = strFromU8(files['xl/worksheets/sheet1.xml']);
+
+    expect(xml.match(/<headerFooter\b/g)).toHaveLength(1);
+    const footer = /<oddFooter>([\s\S]*?)<\/oddFooter>/.exec(xml)?.[1];
+    expect(footer).toBe('&amp;C&amp;7Documento exportado por el sistema del Liceo José Antonio Abreu · 18/11/2026');
+    // The footer keeps the schema order: after pageSetup, before the drawings.
+    expect(xml.indexOf('<pageSetup')).toBeLessThan(xml.indexOf('<headerFooter'));
+    expect(xml.indexOf('<headerFooter')).toBeLessThan(xml.indexOf('<drawing '));
+    // Margins and print setup stay as in the template, so the page still fits on one sheet.
+    expect(xml).toContain('<pageSetup paperSize="5" scale="90"');
+  });
+
   it('refuses more students than one page holds', () => {
     const summary = { ...emptySummary(), students: Array(36).fill(STUDENTS[0]) };
     expect(() => buildFinalSummaryXlsx(summary)).toThrow();
