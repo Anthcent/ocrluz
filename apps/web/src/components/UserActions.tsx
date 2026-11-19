@@ -1,10 +1,10 @@
 import clsx from 'clsx';
-import { ChevronDown, Ellipsis, Eye, ShieldCheck, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react';
+import { Check, ChevronDown, Copy, Ellipsis, Eye, KeyRound, ShieldCheck, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../lib/api';
-import { assignableRoles, canChangeStatus, canDeleteUser, ROLE_ACTION, ROLE_LABEL } from '../lib/permissions';
+import { assignableRoles, canChangeStatus, canDeleteUser, canResetPassword, ROLE_ACTION, ROLE_LABEL } from '../lib/permissions';
 import type { UserRole } from '../lib/types';
 import { errorMessage, useFeedback } from './feedback';
 import { Button, Field, Input, Modal, Textarea } from './ui';
@@ -121,8 +121,8 @@ export function ActionMenu({ label, items, trigger, align = 'right' }: { label: 
 }
 
 /**
- * Actions on one account, as allowed for the signed-in staff member: deactivate/reactivate, change role and
- * delete (plus «Ver detalle» for admins in the list). `variant="menu"` renders one «…» menu for list rows;
+ * Actions on one account, as allowed for the signed-in staff member: deactivate/reactivate, change role,
+ * reset the password and delete (plus «Ver detalle» for admins in the list). `variant="menu"` renders one «…» menu for list rows;
  * `variant="buttons"` renders the detail page's header buttons.
  */
 export function UserActions<T extends ManagedUser>({
@@ -141,11 +141,15 @@ export function UserActions<T extends ManagedUser>({
   const [deactivating, setDeactivating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Shown once, right after the reset; dropped from memory when its modal closes.
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const isAdminViewer = me?.role === 'admin' || me?.role === 'superadmin';
   const statusAllowed = canChangeStatus(me, user);
   const roles = user.role ? assignableRoles(me, { id: user.id, role: user.role }) : [];
   const deleteAllowed = !!user.role && canDeleteUser(me, { id: user.id, role: user.role });
+  const resetAllowed = canResetPassword(me, user);
 
   // Operators get back the partial row and admins the full account: merge it over what the caller had.
   const run = async (action: () => Promise<{ user: Partial<ManagedUser> }>, message: string) => {
@@ -173,6 +177,27 @@ export function UserActions<T extends ManagedUser>({
     if (ok) await run(() => api.admin.setRole(user.id, role), `${user.name} ahora es ${ROLE_LABEL[role].toLowerCase()}`);
   };
 
+  const resetPassword = async () => {
+    const ok = await confirm({
+      title: 'Restablecer contraseña',
+      message: `Se generará una contraseña temporal para ${user.name}. Sus sesiones abiertas se cerrarán y tendrá que cambiarla la próxima vez que inicie sesión.`,
+      confirmLabel: 'Restablecer',
+      danger: true,
+    });
+    if (!ok) return;
+    setResetting(true);
+    try {
+      const result = await api.admin.resetPassword(user.id);
+      setTemporaryPassword(result.temporaryPassword);
+      // Lets the caller refresh what depends on the account (e.g. its audit section).
+      onUpdated(user);
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const statusItem: MenuItem | null = statusAllowed
     ? user.disabledAt
       ? { key: 'reactivate', label: 'Reactivar cuenta', icon: <UserRoundCheck className="size-4" />, onSelect: reactivate }
@@ -184,6 +209,9 @@ export function UserActions<T extends ManagedUser>({
     icon: <ShieldCheck className="size-4" />,
     onSelect: () => changeRole(role),
   }));
+  const resetItem: MenuItem | null = resetAllowed
+    ? { key: 'reset-password', label: 'Restablecer contraseña', icon: <KeyRound className="size-4" />, onSelect: resetPassword }
+    : null;
   const deleteItem: MenuItem | null = deleteAllowed
     ? { key: 'delete', label: 'Eliminar cuenta', icon: <Trash2 className="size-4" />, danger: true, onSelect: () => setDeleting(true) }
     : null;
@@ -210,6 +238,7 @@ export function UserActions<T extends ManagedUser>({
           onDeleted();
         }}
       />
+      <TemporaryPasswordModal name={user.name} password={temporaryPassword} onClose={() => setTemporaryPassword(null)} />
     </>
   );
 
@@ -218,6 +247,7 @@ export function UserActions<T extends ManagedUser>({
       ...(isAdminViewer ? [{ key: 'detail', label: 'Ver detalle', icon: <Eye className="size-4" />, to: `/admin/usuarios/${user.id}` }] : []),
       ...(statusItem ? [statusItem] : []),
       ...roleItems,
+      ...(resetItem ? [resetItem] : []),
       ...(deleteItem ? [deleteItem] : []),
     ];
     return (
@@ -228,13 +258,18 @@ export function UserActions<T extends ManagedUser>({
     );
   }
 
-  if (!statusItem && roleItems.length === 0 && !deleteItem) return null;
+  if (!statusItem && roleItems.length === 0 && !resetItem && !deleteItem) return null;
   return (
     <>
       {roleItems.length > 0 && <ActionMenu label={`Cambiar el rol de ${user.name}`} items={roleItems} trigger="Cambiar rol" align="left" />}
       {statusItem && (
         <Button variant="ghost" icon={statusItem.icon} onClick={statusItem.onSelect} loading={busy}>
           {statusItem.label}
+        </Button>
+      )}
+      {resetItem && (
+        <Button variant="ghost" icon={resetItem.icon} onClick={resetItem.onSelect} loading={resetting}>
+          {resetItem.label}
         </Button>
       )}
       {deleteItem && (
@@ -350,6 +385,57 @@ export function DeleteUserModal({
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/** The temporary password, shown only once: copy it and hand it over through a safe channel. */
+function TemporaryPasswordModal({ name, password, onClose }: { name: string; password: string | null; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+
+  const close = () => {
+    setCopied(false);
+    onClose();
+  };
+
+  const copy = async () => {
+    if (!password) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      setCopied(true);
+    } catch {
+      // No clipboard access (e.g. plain HTTP): select it so it can be copied by hand.
+      field.current?.select();
+    }
+  };
+
+  return (
+    <Modal open={password !== null} onClose={close} title="Contraseña temporal">
+      <div className="space-y-4">
+        <p className="text-wolf">
+          Contraseña temporal de <strong className="text-eel">{name}</strong>. Tendrá que cambiarla al iniciar sesión.
+        </p>
+        <div className="flex items-center gap-2">
+          <Input
+            ref={field}
+            readOnly
+            value={password ?? ''}
+            aria-label="Contraseña temporal"
+            className="font-mono text-base tracking-wider"
+            onFocus={(e) => e.target.select()}
+          />
+          <Button variant="ghost" icon={copied ? <Check className="size-4" /> : <Copy className="size-4" />} onClick={copy}>
+            {copied ? 'Copiada' : 'Copiar'}
+          </Button>
+        </div>
+        <p role="note" className="rounded-xl bg-bee-light px-4 py-3 text-sm font-semibold text-bee-dark">
+          Compártela por un canal seguro; no se volverá a mostrar.
+        </p>
+        <Button block onClick={close}>
+          Listo
+        </Button>
+      </div>
     </Modal>
   );
 }

@@ -183,4 +183,12 @@ export const migrations: string[] = [
   ALTER TABLE admin_audit_log ADD CONSTRAINT admin_audit_log_action_check
     CHECK (action IN ('view_scan', 'change_role', 'delete_user', 'create_admin', 'deactivate_user', 'reactivate_user'));
   `,
+  /* sql */ `
+  -- v11: restablecimiento de contraseña por un administrador. La cuenta queda obligada a cambiar la
+  -- contraseña temporal antes de usar la aplicación.
+  ALTER TABLE users ADD COLUMN must_change_password boolean NOT NULL DEFAULT false;
+  ALTER TABLE admin_audit_log DROP CONSTRAINT admin_audit_log_action_check;
+  ALTER TABLE admin_audit_log ADD CONSTRAINT admin_audit_log_action_check
+    CHECK (action IN ('view_scan', 'change_role', 'delete_user', 'create_admin', 'deactivate_user', 'reactivate_user', 'reset_password'));
+  `,
 ];

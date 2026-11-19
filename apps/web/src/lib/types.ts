@@ -15,6 +15,8 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  /** Present (true) after an admin reset the password: the app only allows changing it until then. */
+  mustChangePassword?: boolean;
 }
 
 export interface KeyStatus {
@@ -324,7 +326,7 @@ export interface AdminScan {
   userEmail: string;
 }
 
-export type AuditAction = 'view_scan' | 'change_role' | 'delete_user' | 'create_admin' | 'deactivate_user' | 'reactivate_user';
+export type AuditAction = 'view_scan' | 'change_role' | 'delete_user' | 'create_admin' | 'deactivate_user' | 'reactivate_user' | 'reset_password';
 
 /** One row of the admin audit log. Emails are snapshots: they survive the deletion of either account. */
 export interface AuditEntry {

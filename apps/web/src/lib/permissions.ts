@@ -28,6 +28,16 @@ export function assignableRoles(me: User | null | undefined, target: { id: numbe
   return all.filter((role) => role !== target.role);
 }
 
+const RESET_TARGETS: Partial<Record<UserRole, UserRole[]>> = {
+  admin: ['user', 'operator'],
+  superadmin: ['user', 'operator', 'admin'],
+};
+
+/** Reset another account's password (admins only; only the superadmin resets an admin's). */
+export function canResetPassword(me: User | null | undefined, target: { id: number; role?: UserRole }) {
+  return isOther(me, target) && !!target.role && !!RESET_TARGETS[me!.role]?.includes(target.role);
+}
+
 export function canDeleteUser(me: User | null | undefined, target: { id: number; role: UserRole }) {
   if (!isOther(me, target)) return false;
   if (me!.role === 'superadmin') return true;

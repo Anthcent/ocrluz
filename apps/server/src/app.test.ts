@@ -442,6 +442,7 @@ describe('administración', () => {
       ['patch', `/api/admin/users/${id}/role`],
       ['post', `/api/admin/users/${id}/deactivate`],
       ['post', `/api/admin/users/${id}/reactivate`],
+      ['post', `/api/admin/users/${id}/reset-password`],
       ['delete', `/api/admin/users/${id}`],
       ['post', '/api/admin/admins'],
     ] as const;
@@ -726,7 +727,7 @@ describe('administración', () => {
       const staleSession: Database = {
         ...db,
         one: (sql, params) =>
-          sql.startsWith('SELECT id, email, name, role FROM users')
+          sql.startsWith('SELECT id, email, name, role, must_change_password')
             ? db.one(sql, params).then((u) => (u ? ({ ...u, role: 'admin' } as never) : undefined))
             : db.one(sql, params),
       };
@@ -1035,6 +1036,7 @@ describe('operadores, roles y desactivación', () => {
       ['patch', `/api/admin/users/${ana.id}/role`],
       ['delete', `/api/admin/users/${ana.id}`],
       ['post', '/api/admin/admins'],
+      ['post', `/api/admin/users/${ana.id}/reset-password`],
       // Una ruta inexistente tampoco revela nada al operador: 403, no 404.
       ['get', '/api/admin/no-existe'],
     ] as const;
@@ -1066,6 +1068,143 @@ describe('operadores, roles y desactivación', () => {
       }
       await adm.agent.get(url).set(H).query({ from: '2000-01-01', to: '2100-01-01' }).expect(200);
     }
+  });
+});
+
+describe('restablecimiento de contraseña', () => {
+  const H = { 'X-Requested-With': 'ocryon' };
+  const TEMP_PATTERN = /^[A-HJ-NP-Za-km-z2-9]{14}$/;
+
+  async function account(email: string, role: 'user' | 'operator' | 'admin' = 'user') {
+    const s = setup();
+    const { body } = await s.post('/api/auth/register', { name: email.split('@')[0], email, password: 'secreto123' }).expect(201);
+    if (role !== 'user') await db.run('UPDATE users SET role = ? WHERE id = ?', [role, body.user.id]);
+    return { ...s, id: body.user.id as number, email };
+  }
+  const reset = (s: ReturnType<typeof setup>, id: number) => s.post(`/api/admin/users/${id}/reset-password`);
+  const auditCount = async () => (await db.one<{ n: number }>(`SELECT COUNT(*) AS n FROM admin_audit_log WHERE action = 'reset_password'`))!.n;
+
+  it('el administrador restablece la contraseña de un usuario y de un operador: cierra sus sesiones y la temporal funciona', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    for (const target of [await account('ana@example.com'), await account('op@example.com', 'operator')]) {
+      const res = await reset(adm, target.id).expect(200);
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(Object.keys(res.body)).toEqual(['temporaryPassword']);
+      const temp = res.body.temporaryPassword as string;
+      expect(temp).toMatch(TEMP_PATTERN);
+
+      // Las sesiones abiertas dejan de valer y la contraseña anterior ya no entra.
+      await target.agent.get('/api/auth/me').expect(401);
+      await setup().post('/api/auth/login', { email: target.email, password: 'secreto123' }).expect(401);
+      const login = await setup().post('/api/auth/login', { email: target.email, password: temp }).expect(200);
+      expect(login.body.user).toMatchObject({ id: target.id, mustChangePassword: true });
+    }
+    expect(await auditCount()).toBe(2);
+  });
+
+  it('con la contraseña temporal solo se puede consultar la sesión, cambiarla o salir', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const op = await account('op@example.com', 'operator');
+    const temp = (await reset(adm, op.id).expect(200)).body.temporaryPassword as string;
+    const s = setup();
+    await s.post('/api/auth/login', { email: op.email, password: temp }).expect(200);
+
+    expect((await s.agent.get('/api/auth/me').expect(200)).body.user).toMatchObject({ id: op.id, role: 'operator', mustChangePassword: true });
+    for (const [method, url] of [
+      ['get', '/api/scans'],
+      ['get', '/api/groups'],
+      ['get', '/api/settings'],
+      ['post', '/api/scans'],
+      ['get', '/api/admin/users'],
+      ['get', '/api/no-existe'],
+    ] as const) {
+      const res = await s.agent[method](url).set(H).send({});
+      expect(res.status, `${method} ${url}`).toBe(403);
+      expect(res.body.code, `${method} ${url}`).toBe('password_change_required');
+    }
+
+    // La temporal no vale como nueva, ni sin conocerla.
+    expect((await s.post('/api/auth/change-password', { currentPassword: temp, newPassword: temp }).expect(400)).body.code).toBe('same_password');
+    await s.post('/api/auth/change-password', { currentPassword: 'secreto123', newPassword: 'nueva-clave-123' }).expect(400);
+    await s.post('/api/auth/change-password', { currentPassword: temp, newPassword: 'nueva-clave-123' }).expect(204);
+
+    // La sesión actual sigue (cookie renovada) y ya puede usar la aplicación.
+    const me = (await s.agent.get('/api/auth/me').expect(200)).body.user;
+    expect(me).toEqual({ id: op.id, email: op.email, name: 'op', role: 'operator' });
+    await s.agent.get('/api/scans').expect(200);
+    await s.agent.get('/api/admin/users').expect(200);
+    expect(await db.one('SELECT must_change_password AS m FROM users WHERE id = ?', [op.id])).toEqual({ m: false });
+    await setup().post('/api/auth/login', { email: op.email, password: temp }).expect(401);
+    const fresh = await setup().post('/api/auth/login', { email: op.email, password: 'nueva-clave-123' }).expect(200);
+    expect(fresh.body.user).not.toHaveProperty('mustChangePassword');
+  });
+
+  it('el administrador no restablece a otro administrador, al superadministrador ni a sí mismo; el operador no puede', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const adm2 = await account('adm2@example.com', 'admin');
+    const op = await account('op@example.com', 'operator');
+    const ana = await account('ana@example.com');
+    const sa = await superadminSession(adm.app);
+    const saId = (await sa.agent.get('/api/auth/me')).body.user.id;
+    const hashes = await db.query('SELECT id, password_hash FROM users ORDER BY id');
+
+    expect((await reset(adm, adm2.id).expect(403)).body.code).toBe('forbidden');
+    expect((await reset(adm, saId).expect(403)).body.code).toBe('superadmin_protected');
+    expect((await reset(adm, adm.id).expect(409)).body.code).toBe('self_action');
+    expect((await reset(op, ana.id).expect(403)).body.code).toBe('forbidden');
+    expect((await reset(ana, op.id).expect(403)).body.code).toBe('forbidden');
+    expect((await reset(sa, saId).expect(403)).body.code).toBe('superadmin_protected');
+    await reset(adm, 9999).expect(404);
+    await reset(adm, 0).expect(400);
+
+    expect(await db.query('SELECT id, password_hash FROM users ORDER BY id')).toEqual(hashes);
+    expect(await auditCount()).toBe(0);
+    await adm2.agent.get('/api/auth/me').expect(200);
+
+    // El superadministrador sí restablece a un administrador.
+    const temp = (await reset(sa, adm2.id).expect(200)).body.temporaryPassword;
+    await adm2.agent.get('/api/auth/me').expect(401);
+    await setup().post('/api/auth/login', { email: adm2.email, password: temp }).expect(200);
+    // Five accounts plus several bcrypt (cost 12) hashes exceed vitest's 5 s default on slow machines.
+  }, 30_000);
+
+  it('queda en la auditoría sin la contraseña ni su hash; no reactiva una cuenta desactivada y levanta el bloqueo', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const ana = await account('ana@example.com');
+    await adm.post(`/api/admin/users/${ana.id}/deactivate`, { reason: 'Prueba' }).expect(200);
+    await db.run(`UPDATE users SET failed_attempts = 3, locked_until = now() + interval '5 minutes' WHERE id = ?`, [ana.id]);
+
+    const temp = (await reset(adm, ana.id).expect(200)).body.temporaryPassword as string;
+    const row = (await db.one<Record<string, unknown>>(
+      `SELECT password_hash AS hash, must_change_password AS must, failed_attempts AS failed, locked_until AS locked, disabled_at IS NOT NULL AS disabled
+         FROM users WHERE id = ?`,
+      [ana.id],
+    ))!;
+    expect(row).toMatchObject({ must: true, failed: 0, locked: null, disabled: true });
+    expect(await bcrypt.compare(temp, row.hash as string)).toBe(true);
+    // Sigue desactivada: la temporal no le abre sesión.
+    expect((await setup().post('/api/auth/login', { email: ana.email, password: temp }).expect(403)).body.code).toBe('account_disabled');
+
+    const { body } = await adm.agent.get('/api/admin/audit').query({ action: 'reset_password' }).expect(200);
+    expect(body.total).toBe(1);
+    expect(body.entries[0]).toMatchObject({ action: 'reset_password', actorEmail: 'adm@example.com', targetUserId: ana.id, targetEmail: ana.email, details: { role: 'user' } });
+    const stored = JSON.stringify(await db.query('SELECT * FROM admin_audit_log'));
+    expect(stored).not.toContain(temp);
+    expect(stored).not.toContain(row.hash as string);
+    expect(stored).not.toMatch(/\$2[aby]\$/);
+  });
+
+  it('un restablecimiento cuyo registro falla se deshace entero', async () => {
+    const adm = await account('adm@example.com', 'admin');
+    const ana = await account('ana@example.com');
+    await db.run(`ALTER TABLE admin_audit_log ADD CONSTRAINT audit_test_block CHECK (action <> 'reset_password')`);
+    try {
+      await reset(adm, ana.id).expect(500);
+    } finally {
+      await db.run('ALTER TABLE admin_audit_log DROP CONSTRAINT audit_test_block');
+    }
+    await ana.agent.get('/api/auth/me').expect(200);
+    expect(await db.one('SELECT must_change_password AS m FROM users WHERE id = ?', [ana.id])).toEqual({ m: false });
   });
 });
 

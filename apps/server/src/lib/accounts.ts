@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import type { Queryable } from '../db/index.js';
@@ -24,6 +25,17 @@ export const PASSWORD_COST = 12;
 
 export function hashPassword(password: string) {
   return bcrypt.hash(password, PASSWORD_COST);
+}
+
+/** Sin caracteres que se confunden al dictarlos o copiarlos a mano (0/O, 1/l/I). */
+const TEMPORARY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+const TEMPORARY_LENGTH = 14;
+
+/** Contraseña temporal aleatoria (crypto.randomInt, sin sesgo de módulo) que cumple passwordSchema. */
+export function generateTemporaryPassword() {
+  let password = '';
+  for (let i = 0; i < TEMPORARY_LENGTH; i++) password += TEMPORARY_ALPHABET[randomInt(TEMPORARY_ALPHABET.length)];
+  return passwordSchema.parse(password);
 }
 
 /** Inserta el usuario y su fila de ajustes. Usar dentro de una transacción. */
