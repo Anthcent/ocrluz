@@ -29,13 +29,20 @@ export function assignableRoles(me: User | null | undefined, target: { id: numbe
 }
 
 const RESET_TARGETS: Partial<Record<UserRole, UserRole[]>> = {
+  operator: ['user'],
   admin: ['user', 'operator'],
   superadmin: ['user', 'operator', 'admin'],
 };
 
-/** Reset another account's password (admins only; only the superadmin resets an admin's). */
+/**
+ * Reset another account's password. Operators only reset regular users, whose rows carry no role;
+ * admins' rows always carry it, so a missing role there means "unknown" and hides the action.
+ * Only the superadmin resets an admin's password.
+ */
 export function canResetPassword(me: User | null | undefined, target: { id: number; role?: UserRole }) {
-  return isOther(me, target) && !!target.role && !!RESET_TARGETS[me!.role]?.includes(target.role);
+  if (!isOther(me, target)) return false;
+  const role = target.role ?? (me!.role === 'operator' ? 'user' : undefined);
+  return !!role && !!RESET_TARGETS[me!.role]?.includes(role);
 }
 
 export function canDeleteUser(me: User | null | undefined, target: { id: number; role: UserRole }) {
@@ -56,7 +63,7 @@ export const ROLE_ACTION: Record<AssignableRole, { label: string; message: (name
   user: { label: 'Hacer usuario', message: (name) => `${name} dejará de tener acceso a la gestión y volverá a ser un usuario normal.` },
   operator: {
     label: 'Hacer operador',
-    message: (name) => `${name} podrá ver la lista de usuarios (sin el contenido de sus escaneos) y desactivar o reactivar cuentas de usuario.`,
+    message: (name) => `${name} podrá ver la lista de usuarios (sin el contenido de sus escaneos), desactivar o reactivar cuentas de usuario y restablecer su contraseña.`,
   },
   admin: { label: 'Hacer administrador', message: (name) => `${name} podrá ver la actividad de todos los usuarios y eliminar cuentas de usuario.` },
 };

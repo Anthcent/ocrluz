@@ -216,11 +216,12 @@ test.describe('Administración', () => {
     await rosaContext.close();
   });
 
-  test('el superadministrador hace operadora a una usuaria, que desactiva a otro usuario y este ya no puede entrar', async ({ page, browser }) => {
-    // Dos cuentas normales: la futura operadora y el usuario que se desactivará.
+  test('el superadministrador hace operadora a una usuaria, que desactiva a un usuario y restablece la contraseña de otro', async ({ page, browser }) => {
+    // Tres cuentas normales: la futura operadora, el usuario que se desactivará y el que recibirá una temporal.
     const accounts = await browser.newContext();
     const olga = await signUp(await accounts.newPage(), 'Olga Operadora');
     const victor = await signUp(await accounts.newPage(), 'Victor Desactivable');
+    const pablo = await signUp(await accounts.newPage(), 'Pablo Olvidadizo');
     await accounts.close();
 
     // El superadministrador la promueve a operadora desde su ficha.
@@ -256,7 +257,7 @@ test.describe('Administración', () => {
     expect((await page.request.get('/api/admin/stats')).status()).toBe(403);
     expect((await page.request.get('/api/admin/audit')).status()).toBe(403);
 
-    // Listado parcial: sin enlace al detalle ni rol, y solo la acción de desactivar.
+    // Listado parcial: sin enlace al detalle ni rol; solo desactivar y restablecer la contraseña.
     await page.getByRole('searchbox', { name: 'Buscar usuarios por nombre o correo' }).fill(victor.email);
     const users = page.getByTestId('admin-users');
     await expect(users.getByRole('listitem')).toHaveCount(1);
@@ -265,7 +266,7 @@ test.describe('Administración', () => {
     await expect(users).not.toContainText('Usuario');
     await users.getByRole('button', { name: 'Acciones para Victor Desactivable' }).click();
     const menu = page.getByRole('menu', { name: 'Acciones para Victor Desactivable' });
-    await expect(menu.getByRole('menuitem')).toHaveText(['Desactivar cuenta']);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Desactivar cuenta', 'Restablecer contraseña']);
     await menu.getByRole('menuitem', { name: 'Desactivar cuenta' }).click();
     const dialog = page.getByRole('dialog', { name: 'Desactivar cuenta' });
     await dialog.getByLabel('Motivo (opcional)').fill('Prueba de desactivación');
@@ -283,5 +284,34 @@ test.describe('Administración', () => {
     await expect(victorPage.getByText('Tu cuenta está desactivada. Contacta con un administrador.')).toBeVisible();
     await expect(victorPage).toHaveURL(/\/login$/);
     await victorContext.close();
+
+    // La operadora restablece la contraseña de otro usuario desde el menú.
+    await page.getByRole('searchbox', { name: 'Buscar usuarios por nombre o correo' }).fill(pablo.email);
+    await expect(users).toContainText(pablo.email);
+    await expect(users.getByRole('listitem')).toHaveCount(1);
+    await users.getByRole('button', { name: 'Acciones para Pablo Olvidadizo' }).click();
+    await page.getByRole('menu', { name: 'Acciones para Pablo Olvidadizo' }).getByRole('menuitem', { name: 'Restablecer contraseña' }).click();
+    await page.getByRole('dialog', { name: 'Restablecer contraseña' }).getByRole('button', { name: 'Restablecer', exact: true }).click();
+    const result = page.getByRole('dialog', { name: 'Contraseña temporal' });
+    const field = result.getByRole('textbox', { name: 'Contraseña temporal' });
+    await expect(field).toHaveValue(/^[A-HJ-NP-Za-km-z2-9]{14}$/);
+    const temporary = await field.inputValue();
+    await result.getByRole('button', { name: 'Listo' }).click();
+    await expect(result).toHaveCount(0);
+
+    // Pablo entra con la temporal y debe cambiarla antes de seguir.
+    const pabloContext = await browser.newContext();
+    const pabloPage = await pabloContext.newPage();
+    await pabloPage.goto('/login');
+    await pabloPage.getByLabel('Correo electrónico').fill(pablo.email);
+    await pabloPage.getByLabel('Contraseña').fill(temporary);
+    await pabloPage.getByRole('button', { name: 'Entrar' }).click();
+    await expect(pabloPage).toHaveURL(/\/cambiar-contrasena$/);
+    await pabloPage.getByLabel('Contraseña temporal').fill(temporary);
+    await pabloPage.getByLabel(/^Nueva contraseña/).fill('pablo-clave-nueva-123');
+    await pabloPage.getByLabel('Repite la nueva contraseña').fill('pablo-clave-nueva-123');
+    await pabloPage.getByRole('button', { name: 'Guardar y continuar' }).click();
+    await expect(pabloPage).toHaveURL(/\/$/);
+    await pabloContext.close();
   });
 });
