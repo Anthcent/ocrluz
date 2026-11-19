@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/react';
 import type { IParagraphOptions, IRunOptions, ImageRun, Paragraph, ParagraphChild, Table } from 'docx';
+import { exportFooter, fetchWatermark, SCHOOL_LOGO_ALT, SCHOOL_LOGO_RATIO } from '../lib/branding';
 import { PAPERS, pageBox, type PageSetup } from './page';
 import type { WorkspaceImageAttrs } from './WorkspaceImage';
 
@@ -32,9 +33,12 @@ interface Scope {
   bold?: boolean;
 }
 
-/** Builds a real, editable .docx from the editor document: text formatting, lists, tables, images and page setup. */
+/**
+ * Builds a real, editable .docx from the editor document: text formatting, lists, tables, images and page setup.
+ * Every page carries the school crest as a watermark behind the text (anchored in the header) and the export footer.
+ */
 export async function exportDocx(doc: JSONContent, title: string, setup: PageSetup): Promise<Blob> {
-  const d = await import('docx');
+  const [d, watermark] = await Promise.all([import('docx'), fetchWatermark()]);
   const box = pageBox(setup);
   const ctx: Context = { d, ratios: await imageRatios(doc), lists: [], pending: [] };
 
@@ -83,14 +87,52 @@ export async function exportDocx(doc: JSONContent, title: string, setup: PageSet
               height: paper.height * TWIPS_PER_PX,
               orientation: setup.landscape ? d.PageOrientation.LANDSCAPE : d.PageOrientation.PORTRAIT,
             },
-            margin: { top: margin, right: margin, bottom: margin, left: margin },
+            // Header and footer sit halfway into the margins so they never push the text down.
+            margin: { top: margin, right: margin, bottom: margin, left: margin, header: Math.round(margin / 2), footer: Math.round(margin / 2) },
           },
         },
+        headers: { default: watermarkHeader(d, watermark, box.contentWidth) },
+        footers: { default: footerBlock(d) },
         children,
       },
     ],
   });
   return d.Packer.toBlob(file);
+}
+
+/** Paragraph spacing that takes no room, so the header never grows past its margin. */
+const TINY_LINE = { before: 0, after: 0, line: 20 } as const;
+
+/** Header holding only the crest, floating behind the text in the middle of every page. */
+function watermarkHeader(d: Docx, data: ArrayBuffer | null, contentWidth: number) {
+  if (!data) return new d.Header({ children: [new d.Paragraph({ spacing: { ...TINY_LINE, lineRule: d.LineRuleType.EXACT }, children: [] })] });
+  const width = Math.round(contentWidth * 0.6);
+  const watermark = new d.ImageRun({
+    type: 'png',
+    data,
+    transformation: { width, height: Math.round(width * SCHOOL_LOGO_RATIO) },
+    altText: { name: 'Marca de agua', title: 'Marca de agua', description: SCHOOL_LOGO_ALT },
+    floating: {
+      horizontalPosition: { relative: d.HorizontalPositionRelativeFrom.PAGE, align: d.HorizontalPositionAlign.CENTER },
+      verticalPosition: { relative: d.VerticalPositionRelativeFrom.PAGE, align: d.VerticalPositionAlign.CENTER },
+      wrap: { type: d.TextWrappingType.NONE },
+      behindDocument: true,
+      allowOverlap: true,
+    },
+  });
+  return new d.Header({ children: [new d.Paragraph({ spacing: { ...TINY_LINE, lineRule: d.LineRuleType.EXACT }, children: [watermark] })] });
+}
+
+function footerBlock(d: Docx) {
+  return new d.Footer({
+    children: [
+      new d.Paragraph({
+        alignment: d.AlignmentType.CENTER,
+        spacing: { before: 0, after: 0, line: 240 },
+        children: [new d.TextRun({ text: exportFooter(), size: 16, color: '666B74', font: 'Arial' })],
+      }),
+    ],
+  });
 }
 
 async function imageRatios(doc: JSONContent) {

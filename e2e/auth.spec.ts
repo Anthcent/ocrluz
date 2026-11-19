@@ -6,6 +6,12 @@ test.describe('Autenticación', () => {
     await page.goto('/archivo');
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole('heading', { name: '¡Hola de nuevo!' })).toBeVisible();
+    // El escudo del liceo y su nombre se ven tanto en móvil como en escritorio.
+    const crest = page.getByRole('img', { name: 'Escudo del Liceo José Antonio Abreu' }).filter({ visible: true });
+    await expect(crest).toHaveCount(1);
+    await expect(crest).toHaveJSProperty('complete', true);
+    expect(await crest.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    await expect(page.getByText('Liceo José Antonio Abreu', { exact: true }).filter({ visible: true })).toHaveCount(1);
   });
 
   test('registro, cierre de sesión e inicio de sesión', async ({ page }) => {

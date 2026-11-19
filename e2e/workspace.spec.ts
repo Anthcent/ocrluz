@@ -1,4 +1,6 @@
+import { inflateSync } from 'node:zlib';
 import { expect, test } from '@playwright/test';
+import { strFromU8, unzipSync } from 'fflate';
 import { BAD_IMAGE, createScans, expectToast, isMobile, pageImage, signUp } from './helpers';
 
 test('loose and folder scans open the workspace from a corner button', async ({ page }) => {
@@ -65,6 +67,8 @@ test('workspace autosaves, places images and exports a real PDF', async ({ page 
   await pdf.saveAs(path);
   const { readFileSync } = await import('node:fs');
   expect(readFileSync(path).subarray(0, 5).toString()).toBe('%PDF-');
+  // Every page carries the school's export footer.
+  expect(pdfText(readFileSync(path))).toContain('(Documento exportado por el sistema del Liceo Jos');
 
   await page.goto(`/escaneo/${ids[0]}`);
   await expect(page.getByRole('article', { name: 'Texto escaneado' })).toContainText('Texto del informe editado');
@@ -164,9 +168,32 @@ test('page setup is saved with the document and it exports to Word', async ({ pa
   const { readFileSync } = await import('node:fs');
   // A .docx is a zip archive.
   expect(readFileSync(path).subarray(0, 2).toString()).toBe('PK');
+  // School branding: the crest behind the text (anchored in the header) and the export footer.
+  const parts = unzipSync(readFileSync(path));
+  const header = Object.keys(parts).find((name) => /^word\/header\d*\.xml$/.test(name))!;
+  expect(strFromU8(parts[header])).toContain('behindDoc="1"');
+  expect(strFromU8(parts[header.replace('word/', 'word/_rels/') + '.rels'])).toMatch(/Target="media\/[^"]+\.png"/);
+  const footer = Object.keys(parts).find((name) => /^word\/footer\d*\.xml$/.test(name))!;
+  expect(strFromU8(parts[footer])).toContain('Documento exportado por el sistema del Liceo José Antonio Abreu');
 
   // The text the scan had before being edited here can be brought back.
   await page.getByRole('button', { name: 'Restaurar el texto original del OCR' }).first().click();
   await page.getByRole('button', { name: 'Restaurar', exact: true }).click();
   await expect(doc).toHaveText('Texto original del escaneo');
 });
+
+/** Text drawing operators of a PDF, with its compressed content streams inflated. */
+function pdfText(file: Buffer) {
+  const raw = file.toString('latin1');
+  let text = raw;
+  for (const match of raw.matchAll(/stream\r?\n/g)) {
+    const start = match.index + match[0].length;
+    const end = raw.indexOf('endstream', start);
+    try {
+      text += inflateSync(file.subarray(start, end)).toString('latin1');
+    } catch {
+      // Not a deflated stream (or an image): skip it.
+    }
+  }
+  return text;
+}
