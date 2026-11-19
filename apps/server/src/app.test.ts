@@ -1036,7 +1036,6 @@ describe('operadores, roles y desactivación', () => {
       ['patch', `/api/admin/users/${ana.id}/role`],
       ['delete', `/api/admin/users/${ana.id}`],
       ['post', '/api/admin/admins'],
-      ['post', `/api/admin/users/${ana.id}/reset-password`],
       // Una ruta inexistente tampoco revela nada al operador: 403, no 404.
       ['get', '/api/admin/no-existe'],
     ] as const;
@@ -1051,8 +1050,10 @@ describe('operadores, roles y desactivación', () => {
     await op.agent.get('/api/admin/users').set(H).expect(200);
     await deactivate(op, ana.id).expect(200);
     await reactivate(op, ana.id).expect(200);
+    await op.post(`/api/admin/users/${ana.id}/reset-password`).expect(200);
     expect(await db.one('SELECT role FROM users WHERE id = ?', [ana.id])).toEqual({ role: 'user' });
-  });
+    // bcrypt (cost 12) hashes exceed vitest's 5 s default on slow machines.
+  }, 30_000);
 
   it('rechaza con 400 fechas fuera del rango razonable en los filtros', async () => {
     const adm = await account('adm@example.com', 'admin');
@@ -1139,7 +1140,7 @@ describe('restablecimiento de contraseña', () => {
     expect(fresh.body.user).not.toHaveProperty('mustChangePassword');
   });
 
-  it('el administrador no restablece a otro administrador, al superadministrador ni a sí mismo; el operador no puede', async () => {
+  it('el administrador no restablece a otro administrador, al superadministrador ni a sí mismo; el usuario no puede', async () => {
     const adm = await account('adm@example.com', 'admin');
     const adm2 = await account('adm2@example.com', 'admin');
     const op = await account('op@example.com', 'operator');
@@ -1151,7 +1152,6 @@ describe('restablecimiento de contraseña', () => {
     expect((await reset(adm, adm2.id).expect(403)).body.code).toBe('forbidden');
     expect((await reset(adm, saId).expect(403)).body.code).toBe('superadmin_protected');
     expect((await reset(adm, adm.id).expect(409)).body.code).toBe('self_action');
-    expect((await reset(op, ana.id).expect(403)).body.code).toBe('forbidden');
     expect((await reset(ana, op.id).expect(403)).body.code).toBe('forbidden');
     expect((await reset(sa, saId).expect(403)).body.code).toBe('superadmin_protected');
     await reset(adm, 9999).expect(404);
@@ -1166,6 +1166,47 @@ describe('restablecimiento de contraseña', () => {
     await adm2.agent.get('/api/auth/me').expect(401);
     await setup().post('/api/auth/login', { email: adm2.email, password: temp }).expect(200);
     // Five accounts plus several bcrypt (cost 12) hashes exceed vitest's 5 s default on slow machines.
+  }, 30_000);
+
+  it('el operador restablece la contraseña de un usuario y la temporal obliga a cambiarla', async () => {
+    const op = await account('op@example.com', 'operator');
+    const ana = await account('ana@example.com');
+    const res = await reset(op, ana.id).expect(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    const temp = res.body.temporaryPassword as string;
+    expect(temp).toMatch(TEMP_PATTERN);
+    await ana.agent.get('/api/auth/me').expect(401);
+
+    const s = setup();
+    const login = await s.post('/api/auth/login', { email: ana.email, password: temp }).expect(200);
+    expect(login.body.user).toMatchObject({ id: ana.id, mustChangePassword: true });
+    expect((await s.agent.get('/api/scans').set(H).expect(403)).body.code).toBe('password_change_required');
+    await s.post('/api/auth/change-password', { currentPassword: temp, newPassword: 'nueva-clave-123' }).expect(204);
+    await s.agent.get('/api/scans').expect(200);
+
+    const entry = await db.one('SELECT actor_email AS "actorEmail", target_user_id AS "targetUserId", details FROM admin_audit_log WHERE action = ?', ['reset_password']);
+    expect(entry).toMatchObject({ actorEmail: op.email, targetUserId: ana.id, details: { role: 'user' } });
+  }, 30_000);
+
+  it('el operador solo restablece usuarios: ni operadores, ni administradores, ni al superadministrador, ni a sí mismo', async () => {
+    const op = await account('op@example.com', 'operator');
+    const op2 = await account('op2@example.com', 'operator');
+    const adm = await account('adm@example.com', 'admin');
+    const sa = await superadminSession(adm.app);
+    const saId = (await sa.agent.get('/api/auth/me')).body.user.id;
+    const hashes = await db.query('SELECT id, password_hash FROM users ORDER BY id');
+
+    for (const id of [op2.id, adm.id]) {
+      const res = await reset(op, id).expect(403);
+      expect(res.body.code).toBe('forbidden');
+      expect(res.body.error).toBe('Solo puedes restablecer la contraseña de cuentas de usuario');
+    }
+    expect((await reset(op, saId).expect(403)).body.code).toBe('superadmin_protected');
+    expect((await reset(op, op.id).expect(409)).body.code).toBe('self_action');
+
+    expect(await db.query('SELECT id, password_hash FROM users ORDER BY id')).toEqual(hashes);
+    expect(await auditCount()).toBe(0);
+    await op2.agent.get('/api/auth/me').expect(200);
   }, 30_000);
 
   it('queda en la auditoría sin la contraseña ni su hash; no reactiva una cuenta desactivada y levanta el bloqueo', async () => {

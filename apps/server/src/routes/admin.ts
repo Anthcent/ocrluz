@@ -158,10 +158,11 @@ const STATUS_TARGETS: Partial<Record<UserRole, readonly string[]>> = {
 };
 
 /**
- * Cuentas cuya contraseña puede restablecer cada rol (solo administradores: la ruta no está abierta al operador).
+ * Cuentas cuya contraseña puede restablecer cada rol. El operador solo restablece la de usuarios normales.
  * El superadministrador nunca es afectado: sus credenciales vienen del entorno.
  */
 const RESET_TARGETS: Partial<Record<UserRole, readonly string[]>> = {
+  operator: ['user'],
   admin: ['user', 'operator'],
   superadmin: ['user', 'operator', 'admin'],
 };
@@ -494,17 +495,21 @@ export function adminRouter(ctx: AppContext) {
    * cambiarla en el próximo acceso. No reactiva una cuenta desactivada. La auditoría nunca guarda la
    * contraseña ni su hash. Para la propia cuenta está /auth/change-password.
    */
-  router.post('/users/:id/reset-password', async (req, res) => {
+  staff.post('/users/:id/reset-password', async (req, res) => {
     const id = idParam.parse(req.params.id);
     const me = currentUser(req);
     const temporaryPassword = generateTemporaryPassword();
     // bcrypt fuera de la transacción para no retener los candados de las filas mientras calcula.
     const passwordHash = await hashPassword(temporaryPassword);
     await ctx.db.transaction(async (tx) => {
-      const { actor, target } = await lockActorAndTarget(tx, me.id, id, isAdminRole);
+      const { actor, target } = await lockActorAndTarget(tx, me.id, id, isStaffRole);
       if (id === me.id) throw new HttpError(409, 'Para cambiar tu propia contraseña usa Ajustes', 'self_action');
       if (!RESET_TARGETS[actor.role]?.includes(target.role)) {
-        throw forbidden('Solo el superadministrador puede restablecer la contraseña de un administrador');
+        throw forbidden(
+          actor.role === 'operator'
+            ? 'Solo puedes restablecer la contraseña de cuentas de usuario'
+            : 'Solo el superadministrador puede restablecer la contraseña de un administrador',
+        );
       }
       await tx.run(
         `UPDATE users SET password_hash = ?, must_change_password = true, credentials_version = credentials_version + 1,
