@@ -15,7 +15,7 @@ test.describe('Autenticación', () => {
     await page.getByPlaceholder('tucorreo@ejemplo.com').fill(email);
     await page.getByPlaceholder('••••••••').fill('secreto123');
     await page.getByRole('button', { name: 'Crear cuenta' }).click();
-    await expect(page.getByRole('heading', { name: '¡Hola, Lucía!' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Hola, Lucía', exact: true, level: 1 })).toBeVisible();
 
     // Cerrar sesión desde Ajustes (disponible en móvil y escritorio).
     await page.goto('/ajustes');
@@ -29,11 +29,11 @@ test.describe('Autenticación', () => {
 
     await page.getByPlaceholder('••••••••').fill('secreto123');
     await page.getByRole('button', { name: 'Entrar' }).click();
-    await expect(page.getByRole('heading', { name: '¡Hola, Lucía!' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Hola, Lucía', exact: true, level: 1 })).toBeVisible();
 
     // La sesión sobrevive a una recarga.
     await page.reload();
-    await expect(page.getByRole('heading', { name: '¡Hola, Lucía!' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Hola, Lucía', exact: true, level: 1 })).toBeVisible();
   });
 
   test('no permite registrar un correo repetido', async ({ page, browser }) => {
@@ -67,7 +67,8 @@ test.describe('Autenticación', () => {
       await expect(page.getByRole('heading', { name: 'Tus documentos' })).toBeVisible();
       await expect(sidebar).toBeVisible();
       await expect(bottomNav).toBeHidden();
-      await sidebar.getByRole('link', { name: 'Archivo' }).click();
+      // La barra lateral también tiene el enlace "Empieza tu archivo": se apunta a la navegación principal.
+      await sidebar.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Archivo', exact: true }).click();
     }
     await expect(page.getByRole('heading', { name: 'Tu archivo' })).toBeVisible();
   });

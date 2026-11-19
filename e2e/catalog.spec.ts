@@ -88,7 +88,9 @@ test.describe('Archivo y manejo de lo escaneado', () => {
 
     await page.getByRole('button', { name: 'Copiar' }).click();
     await expectToast(page, 'Texto copiado');
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(exported);
+    // El portapapeles del sistema puede normalizar los saltos de línea (CRLF en Windows).
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied.replace(/\r\n/g, '\n')).toBe(exported);
 
     await page.getByRole('button', { name: 'Hojas', exact: true }).click();
     await page.getByRole('button', { name: 'Borrar hoja' }).last().click();
